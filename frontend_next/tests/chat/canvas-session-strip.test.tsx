@@ -169,17 +169,24 @@ describe("SessionFileTray delete failure paths (review round-5)", () => {
     expect(state?.capabilities).toContain("rag");
   });
 
-  it("does not resurrect an in-flight deleted row from a racing poll", async () => {
+  it("keeps a deleted binding dead even when a poll issued before the delete lands after it", async () => {
     mocks.listWorkspaceSessionMessagesMock.mockResolvedValue({ messages: [] });
+    // Poll 1: the ready row is still server-side (dispatched before delete).
+    // Poll 2+: the binding is gone server-side — returns the row anyway to
+    // emulate a stale GET landing after the delete reconciled.
     let polls = 0;
     listChatSessionFilesMock.mockImplementation(async () => {
       polls += 1;
-      // Poll 2 resolves after the optimistic removal: without the in-flight
-      // guard it would write the deleted row back.
-      return polls <= 1 ? [readyRow()] : [];
+      return [readyRow()];
     });
+    void polls;
+    // DELETE is slow: the window between optimistic removal and delete
+    // completion lets the in-flight poll (poll 2) resolve mid-delete, and the
+    // post-delete reconcile (poll 3) returns the stale row too. With the
+    // old in-flight-only guard (cleared on DELETE success) poll 3 would
+    // resurrect the file.
     deleteChatSessionFileMock.mockImplementation(
-      () => new Promise((resolve) => setTimeout(() => resolve({ status: "deleted" }), 50)),
+      () => new Promise((resolve) => setTimeout(() => resolve({ status: "deleted" }), 80)),
     );
 
     render(
@@ -192,10 +199,19 @@ describe("SessionFileTray delete failure paths (review round-5)", () => {
     const removeButton = await screen.findByRole("button", { name: "移除" });
     await userEvent.click(removeButton);
 
-    // The optimistic removal happens synchronously; the racing poll (already
-    // dispatched with the row still present server-side) must not re-add it.
+    // The optimistic removal is synchronous; the stale poll dispatched
+    // before it must not re-add the row.
     await waitFor(() => {
       expect(screen.queryByText("report.txt")).not.toBeInTheDocument();
     });
+    // Wait past DELETE completion + the follow-up refresh: the tombstone
+    // must hold against the stale GET still returning the row.
+    await waitFor(() => {
+      expect(deleteChatSessionFileMock).toHaveBeenCalled();
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    });
+    expect(screen.queryByText("report.txt")).not.toBeInTheDocument();
   });
 });

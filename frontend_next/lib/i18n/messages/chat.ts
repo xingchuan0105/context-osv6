@@ -113,8 +113,8 @@ export const chatMessages = {
     zh: "工作区资料",
     en: "Workspace material",
   },
-  "chat.fileUploadFailed": {
-    zh: "文件上传失败，请重试。",
-    en: "File upload failed. Please try again.",
+  "chat.fileActionFailed": {
+    zh: "文件操作失败，请重试。",
+    en: "File action failed. Please try again.",
   },
 } satisfies Record<string, UiMessageDescriptor>;

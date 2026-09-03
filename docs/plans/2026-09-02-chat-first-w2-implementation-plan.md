@@ -353,24 +353,41 @@ Standards（P2）：trailing whitespace 清零（`git diff --check` 净）；`li
 
 回归（§14 修改后）：`cargo check --workspace --tests` 零错；billing 65、avrag-billing 65+14 过滤组、app-chat 90、app-core 41+1、app-billing 13、app 20、app-bootstrap 19+1+2、transport-http 88、前端 Vitest **531/2**（含新增 canvas strip 2 例）。
 
-## 15. 第五轮审查修复（2026-09-03，Standards 硬问题清零 + T1 测试全落地）
+## 15. 第五轮审查修复（2026-09-03，部分闭环；残余项见 §16）
 
-第五轮静态审查未发现新的免费调用型 P0；5 项 Standards 硬问题（S1–S5）与 8 项 Spec 问题在本轮全部处理：
+第五轮静态审查未发现新的免费调用型 P0。S2/S4/T1-b 实质闭环；**S1、S3、S5、T1-a、T1-c 当时提交的修复/测试被第六轮审查判定不成立或证据不足**（双 resolver 仍在、tombstone 过早清除、契约测试仍直改内部、并发测试无确定性交错、§15 自身声明越权）。第六轮修复见 §16：
 
 | 项 | 修复 | 实证 |
 |---|---|---|
-| **S1/Spec-1 启动门与运行时价格判定漂移** | `RateRow::canonical_rate_sets(for_startup_gate)` 成为唯一结构真相：tiers 空即 None、孤立 peak/off-peak 返回 None；`billable()` 删除镜像实现改调同一 resolver；`rates_present_in` 改为**首条匹配行**语义（与运行时一致），`[零价行, 正常行]` 启动即拒 | avrag-billing 16 测试：零/负价各形态拒、lone peak / empty tiers 拒、`gate_resolves_first_matching_row_like_runtime`（`[零,正常]→false`、`[正常,零]→true`）、provider-scope 精确匹配 + 错 provider 反例 + 通配 |
+| **S1/Spec-1 启动门与运行时价格判定漂移**（第六轮推翻后重做，见 §16） | 原实现 `canonical_rate_sets(for_startup_gate)` 仍只服务启动门：tiers 空即 None、孤立 peak/off-peak 返回 None；`billable()` 删除镜像实现改调同一 resolver；`rates_present_in` 改为**首条匹配行**语义（与运行时一致），`[零价行, 正常行]` 启动即拒 | 零/负价各形态拒、`[零,正常]→false`、provider 反例当时确有；但混合行（flat+孤立 peak）门/运行时仍分叉 |
 | **S2 qwen3.8 占位价目** | `.env.example` 撤下明确标注的临时复制行；注释说明必须取得供应商确认的 provider-scoped 价格后才允许加行进生产门 | .env.example 注释；无占位行可满足门 |
-| **S3 前端吞 DELETE/refresh 双失败** | tray 删除失败即回滚该行并 `setUploadError` 告警；`removingRef` 在 DELETE 发出前登记，轮询 refresh 过滤在途删除（乐观删除不再被在途轮询复活） | canvas-session-strip Vitest 4 例：DELETE 成功+refresh 失败 strip；manual 保留；DELETE 失败+refresh 失败回滚 + alert + rag 保留；在途删除不被轮询复活 |
+| **S3 前端吞 DELETE/refresh 双失败**（第六轮补齐，见 §16） | tray 删除失败即回滚该行并告警；`removingRef` 在 DELETE 发出前登记、refresh 过滤在途删除 | 回滚 + strip + manual 保留 3 例当时确有；「轮询竞态」例实际只覆盖同步乐观移除（无真实并发窗口） |
 | **S4 环境变量测试锁私有且不恢复** | app-billing 增 crate 级共享 RAII 守卫 `rates_env_guard::set_rates_env`（单一 Mutex + Drop 恢复调用前值），两个模块（billing_context / usage_observer_impl）全部 env 测试改走它 | app-billing 13 测试绿（current_thread runtime 消除 MutexGuard-across-await 死锁） |
-| **S5 测试越界改 MemoryState 内部** | 越界测试删除，迁 app-core `memory_document_store_contract.rs`：仅经 DocumentStorePort 端口方法证明 binding 行契约（create → set_document_status(Completed) 铸 parse version → versions/list/DELETE/GC） | app-core 3 契约测试绿：binding_id ≠ artifact_id、parse-run- 前缀、pending 排除、session 删绑定、workspace 删除级联 + orphan |
-| **T1-a PG 双绑定并发删除** | `concurrent_session_and_workspace_deletion_sweeps_dual_bound_artifact`：`tokio::join!` 并发 `delete_session` × `delete_workspace`，双绑定计数 0、artifact 状态 `deleting`、cleanup 任务落行 | storage-pg（DATABASE_URL live PG）通过 |
+| **S5 测试越界改 MemoryState 内部**（第六轮重写，见 §16） | 模块迁至 app-core，但测试仍直接写 `MemoryState`（插 workspace/session、读内部集合） | 3 测试绿，但「仅经端口」声明与代码不符 |
+| **T1-a PG 双绑定并发删除**（第六轮重做，见 §16） | `tokio::join!` 并发两删除，断言双绑定 0、状态 `deleting`、tasks ≥ 1 | live PG 通过，但无交错控制（串行也过）、无赢家顺序覆盖、tasks 只断言 ≥1 |
 | **T1-b history 错误传播** | `chat_pipeline_propagates_history_read_failure_from_freeze`：`FailingHistoryPersistence` 仅让 `list_messages` 失败，`ChatService::execute` 端到端断言错误携带原始信息上抛、且无 user/assistant 行被写入 | app-chat 测试绿（91 总） |
-| **T1-c 单次冻结同源** | `turn_snapshot_consumes_the_single_frozen_scope_facts`：计数包装 DocumentStorePort，完整轮后断言 `list_session_files` / `completed_workspace_binding_versions` 各恰好 1 次；snapshot 边界=pre-turn 0、双 binding 行带 parse-run- 版本、response.turn_context_snapshot_id = 持久化 snapshot id、evidence segments 为空数组 | app-chat 测试绿 |
-| **P2 memory parse_version 只读** | `set_document_status` → Completed 且此前非 Completed 时铸造 `parse-run-{id}` 写入该 artifact 的两类 binding 行（端口级唯一写通路） | S5 契约测试同一链路验证 |
+| **T1-c 单次冻结同源**（第六轮补强，见 §16） | 计数包装 DocumentStorePort，完整轮后断言两查询各恰好 1 次；snapshot 边界、binding 行、snapshot id 对齐 | 当时用纯 chat 请求 — enforcement 不消费冻结 facts，「同源」只证了一半 |
+| **P2 memory parse_version 只读**（第六轮按 Spec-4 撤销，见 §16） | 当轮改为 Completed 时铸造 `parse-run-{id}` | 无真实 parse-run 记录对应，属伪造 provenance — 已回退为诚实 None |
 | **P2 memory delete_workspace 遗留会话 binding** | 删除 workspace 级联移除其 sessions 的 conversation bindings，并按统一 orphan 规则清扫 session-only artifact → `Deleting` | S5 契约测试第三例验证 |
 | **Spec-8 provider+model 测试名实不符** | `rates_present_in_respects_provider_scope`：provider-scoped 行、**错误 provider 反例**、通配行三例齐备 | avrag-billing 测试绿 |
 
-遗留（非阻断，本轮未处理）：provider_name 仍重复构造 provider config；memory 两条删除路径重复 orphan 判定；binding 行可收拢为数据簇（reviewer 判断项）。
+回归（§15 修改后）：avrag-billing 67、app-billing 13、app-core 45、app-chat 91、storage-pg document_bindings live PG；前端 Vitest 533 passed / 2 skipped（以实际命令输出为准；§15 提交时正文误写 536/2）。
 
-回归（§15 修改后）：avrag-billing 16、app-billing 13、app-core 42（含 3 契约新测）、app-chat 91（含 T1-b/T1-c 新测）、storage-pg document_bindings 含 live PG 并发删除；前端 Vitest 536/2（新增回滚 + 竞态 2 例）；全量验证见 §15 末。
+## 16. 第六轮审查修复（2026-09-03，第五轮残余项重做）
+
+第六轮静态审查确认 S2/S4/T1-b 等已闭环，但推翻了 §15 的 S1/S3/S5/T1-a/T1-c 声明。本轮逐项重做：
+
+| 项 | 修复 | 实证 |
+|---|---|---|
+| **S1/Spec-1 resolver 仍是双实现** | `RateRow::rate_sets()` 成为唯一 shape resolver（tiers 空即 None、孤立 peak/off-peak None、**flat+孤立 peak 混合行也 None**）；`rates()` 运行时定价与 `all_rate_sets()` 启动门校验都从它出发 — `all_rate_sets()` 返回 None 当且仅当 `rates()` 返回 None；删除 `canonical_rate_sets(for_startup_gate)`（Speculative Generality：无运行时调用方、其「运行时分支」返回全部 tiers 并非实际选中的一个） | avrag-billing 69 测试：新增 `hybrid_flat_plus_lone_peak_is_unservable_for_gate_and_runtime`（运行时不可计价 + 门拒绝同一形状）、`gate_and_runtime_agree_on_every_resolvable_row`（零价行两路同拒、billable 行两路同过）；lone peak / empty tiers / `[零,正常]` 语义不变全部保留 |
+| **S3/Spec-2 旧 GET 复活已删文件** | `removingRef`（DELETE 成功即清）改为 `removedRef` **永久 tombstone**：DELETE 成功后不清除，任何晚到的轮询/对账 GET 都被过滤，直到 session 切换才清空 | 竞态测试重写为真实场景：慢 DELETE（80ms）+ 每次 GET 都返回该行，断言删除完成 150ms 后行仍未复活；**临时还原旧实现验证该测试确实失败**（旧 in-flight 守卫下 stale GET 复活行 → 测试红），恢复修复后 4 例全绿。判断项一并处理：`uploadError` 拆为 `actionError`（文案从「文件上传失败」改为「文件操作失败」，删除失败不再误报为上传） |
+| **S5/Spec-5 契约测试仍直接写 MemoryState** | `memory_document_store_contract.rs` 重写为**纯端口**构造与断言：workspace 经 `DocumentStorePort::create_workspace`，conversation 经 `SessionPort::create_session`（与产品管线同一端口，共享同一 MemoryState）；断言走 `list_session_files` / `completed_workspace_binding_versions` / `delete_session_file_binding` / `list_documents` / `get_document_scope_states` 公开契约，零内部集合访问 | app-core 3 契约测试绿；workspace 删除级联例改经 SessionPort::list_sessions 证明 session 级联、经 scope-states 端口证明 artifact Deleting |
+| **Spec-4 memory 伪造 parse-run** | `set_document_status` 铸造 `parse-run-{uuid}` 的写通路**整体删除** — 内存适配器没有对应 parse-run 记录，制造版本号=向 snapshot 写伪造 provenance；binding 行诚实保持 None（PG 语义从 `document_parse_runs.run_id` 派生） | app-chat snapshot 断言改为 `parse_version is_null`（「memory 不得发明 parse-run id」）；app-core 契约测试改验 binding_id ≠ artifact_id 与 pending 排除，不再断言版本前缀 |
+| **Spec-3 PG workspace 删除泄漏 session-only artifact** | `delete_workspace` capture 阶段改为 `workspace_document_bindings` **UNION** 该 workspace 下 sessions 的 `conversation_document_bindings`（同一把双表锁内），session-only artifact 一并进入 orphan sweep | 新增 live-PG 测试 `deleting_workspace_sweeps_session_only_artifacts_of_its_sessions`：session-only artifact → `deleting`、cleanup task 恰 1；workspace-bound 对照 artifact task 恰 1 |
+| **Spec-7/T1-a 并发无确定性 + tasks ≥1** | (1) `concurrent_...` 重写：说明 join! 无屏障的局限，断言改为 **tasks == 1**（幂等键去重并发 sweep）；(2) 新增 `concurrent_deletion_workspace_first_order_...` 覆盖 workspace 先赢锁、级联 session 后 session-delete 落空的赢家顺序 | 12 测试 live PG 通过 ×2 复跑稳定；两种赢家顺序均收敛到零绑定 + `deleting` + 恰 1 cleanup task。变量名 `notebook` → `workspace`（判断项） |
+| **Spec-6/T1-c 纯 chat 不进 enforcement** | T1-c 请求改 `capabilities=["rag"]` + 客户端 doc_scope 带 workspace artifact 与一个不可见 foreign id — enforcement 必须消费冻结 facts（`allowed_ids` 丢弃 foreign id、session artifact 从冻结 session_artifacts 注入）才能通过三门 | 测试绿：两查询恰 1 次 + snapshot 与 enforcement 同源；`invalid_doc_scope` 失败闭合语义隐含验证（foreign id 若未被 frozen allowed set 过滤将触发 validate 失败） |
+| **判断项 memory orphan 判定三份复制** | 抽出 `mark_artifact_if_unbound(state, artifact_id)` 单一判定，workspace 删除 / per-session 级联 / 显式 GC 三个调用点共用 | app-core 契约测试 + app-chat 91 全绿 |
+
+未采纳/另记：wrapper 委托 ~400 行（FailingHistoryPersistence / CountingScopeStore / RecordingChatPersistence）— 评审标注为 Middle Man；因 `ChatPersistencePort` 为六口 supertrait、Rust 无部分实现语法，手写委托是当前最小可行形态；宏方案（delegating each method）待后续独立小波评估。`config_helpers` 两个 env 测试在多线程下偶发互踩（EnvGuard 逐变量恢复、并行 set/remove 同 var）— **先于本波存在**（66dce9ff，2026-08-18），单线程稳定；已登记后续修复。
+
+回归（§16 修改后，实际命令输出）：avrag-billing 69 lib；app-billing 13；app-core 42 lib + 3 契约 + 1（config_helpers 2 例 env 测试多线程偶发互踩为既有问题 66dce9ff，单线程绿）；app-chat 91；storage-pg document_bindings 12（live PG）×2 稳定；前端全量 Vitest 533 passed / 2 skipped（110 文件）、tsc 干净；`scripts/test-l1.sh agent-tools agent-loop app-chat transport-http avrag-storage-pg` → L1 OK。

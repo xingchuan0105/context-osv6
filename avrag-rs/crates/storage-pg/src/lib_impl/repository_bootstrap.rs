@@ -360,12 +360,21 @@ impl BootstrapRepository {
         let mut tx = self.pool.begin(context).await?;
         let owner_user_id = context.user_id().into_uuid();
         // Serialize against concurrent uploads (review P1-4) and capture the
-        // artifacts bound to this workspace before the FK cascade removes
-        // their bindings (W2e orphan sweep).
+        // artifacts bound to this workspace AND to its sessions before the FK
+        // cascade removes those bindings (W2e orphan sweep). Workspace delete
+        // cascades its chat_sessions, whose conversation bindings die with
+        // them — session-only artifacts would otherwise leak as unbound rows
+        // that never enter the cleanup flow (review round-6 Spec-3).
         crate::lib_impl::repository_retrieval_cleanup::lock_binding_tables(tx.inner())
             .await?;
         let bound_artifacts: Vec<Uuid> = sqlx::query(
-            "select artifact_id from workspace_document_bindings where workspace_id = $1 and owner_user_id = $2",
+            r#"
+            select artifact_id from workspace_document_bindings where workspace_id = $1 and owner_user_id = $2
+            union
+            select b.artifact_id from conversation_document_bindings b
+            join chat_sessions s on s.id = b.conversation_id
+            where s.workspace_id = $1 and s.owner_user_id = $2
+            "#,
         )
         .bind(workspace_id)
         .bind(owner_user_id)
@@ -387,7 +396,8 @@ impl BootstrapRepository {
         }
 
         // Artifacts left with zero bindings of either kind enter the async
-        // full-cleanup flow; anything still session-bound survives untouched.
+        // full-cleanup flow; anything still session-bound (outside this
+        // workspace) survives untouched.
         ChunkRepository::sweep_orphaned_artifacts(
             tx.inner(),
             owner_user_id,

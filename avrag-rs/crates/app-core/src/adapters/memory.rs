@@ -59,6 +59,29 @@ impl MemoryDocumentStore {
     }
 }
 
+/// One zero-binding orphan judgment, shared by every deletion path in this
+/// adapter (workspace delete, per-session cascade, explicit unbound GC):
+/// mark the artifact `Deleting` iff no workspace and no conversation binding
+/// remains. Extracted so the three call sites cannot drift (review round-6
+/// judgement note).
+fn mark_artifact_if_unbound(state: &mut MemoryState, artifact_id: &str) {
+    let still_workspace_bound = state
+        .workspace_document_bindings
+        .iter()
+        .any(|row| row.artifact_id == artifact_id);
+    let still_conversation_bound = state
+        .conversation_document_bindings
+        .iter()
+        .any(|row| row.artifact_id == artifact_id);
+    if still_workspace_bound || still_conversation_bound {
+        return;
+    }
+    if let Some(stored) = state.documents.get_mut(artifact_id) {
+        stored.document.status = DocumentStatus::Deleting;
+        stored.document.updated_at = now_rfc3339();
+    }
+}
+
 fn org_matches(auth: &AuthContext, candidate: &str) -> bool {
     candidate == current_owner_user_id(auth)
 }
@@ -182,20 +205,7 @@ impl DocumentStorePort for MemoryDocumentStore {
             .workspace_document_bindings
             .retain(|row| row.workspace_id != key);
         for artifact_id in orphaned {
-            let still_conversation_bound = state
-                .conversation_document_bindings
-                .iter()
-                .any(|row| row.artifact_id == artifact_id);
-            let still_workspace_bound = state
-                .workspace_document_bindings
-                .iter()
-                .any(|row| row.artifact_id == artifact_id);
-            if !still_conversation_bound && !still_workspace_bound {
-                if let Some(stored) = state.documents.get_mut(&artifact_id) {
-                    stored.document.status = DocumentStatus::Deleting;
-                    stored.document.updated_at = now_rfc3339();
-                }
-            }
+            mark_artifact_if_unbound(&mut state, &artifact_id);
         }
         let removed_sessions: Vec<String> = state
             .sessions
@@ -220,21 +230,7 @@ impl DocumentStorePort for MemoryDocumentStore {
                 .conversation_document_bindings
                 .retain(|row| row.conversation_id != *session_id);
             for artifact_id in session_artifacts {
-                let still_workspace_bound = state
-                    .workspace_document_bindings
-                    .iter()
-                    .any(|row| row.artifact_id == artifact_id);
-                let still_conversation_bound = state
-                    .conversation_document_bindings
-                    .iter()
-                    .any(|row| row.artifact_id == artifact_id);
-                if still_workspace_bound || still_conversation_bound {
-                    continue;
-                }
-                if let Some(stored) = state.documents.get_mut(&artifact_id) {
-                    stored.document.status = DocumentStatus::Deleting;
-                    stored.document.updated_at = now_rfc3339();
-                }
+                mark_artifact_if_unbound(&mut state, &artifact_id);
             }
         }
         Ok(true)
@@ -574,33 +570,8 @@ impl DocumentStorePort for MemoryDocumentStore {
         if is_deleting_or_deleted(&stored.document.status) {
             return Ok(false);
         }
-        let was_completed = matches!(stored.document.status, DocumentStatus::Completed);
-        let parse_run = matches!(status, DocumentStatus::Completed)
-            .then(|| format!("parse-run-{}", new_id()));
         stored.document.status = status;
         stored.document.updated_at = now_rfc3339();
-        let artifact_id = stored.document.id.clone();
-        drop(stored);
-        // Parse-version write parity with PG (review round-5): reaching
-        // Completed mints a fresh parse run id on the artifact's bindings.
-        if let Some(parse_run) = parse_run {
-            if !was_completed {
-                for row in state
-                    .workspace_document_bindings
-                    .iter_mut()
-                    .filter(|row| row.artifact_id == artifact_id)
-                {
-                    row.parse_version = Some(parse_run.clone());
-                }
-                for row in state
-                    .conversation_document_bindings
-                    .iter_mut()
-                    .filter(|row| row.artifact_id == artifact_id)
-                {
-                    row.parse_version = Some(parse_run.clone());
-                }
-            }
-        }
         Ok(true)
     }
 

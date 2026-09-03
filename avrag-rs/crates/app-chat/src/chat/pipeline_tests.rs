@@ -1506,17 +1506,25 @@ mod tests {
             documents: DocumentContext::new(),
         };
 
-        let mut request = request_with_mode("chat", vec![]);
+        // A RAG turn with a client-selected doc scope: the client adds a
+        // foreign document id (bound to nothing visible) plus the workspace
+        // artifact. Enforcement consumes the SAME frozen facts — the foreign
+        // id must be dropped by `allowed_ids()` while the frozen session
+        // artifact joins server-side. (Review round-6 Spec-6: a pure-chat
+        // request never consumes the binding facts.)
+        let mut request = request_with_mode("rag", vec![]);
+        request.capabilities = Some(vec!["rag".into()]);
         request.session_id = Some(session.id.clone());
         request.workspace_id = None;
+        request.doc_scope = vec![workspace_doc.id.clone(), "00000000-0000-0000-0000-000000000099".to_string()];
 
         let response = crate::ChatService::new(state)
             .execute(request)
             .await
-            .expect("personal chat turn must succeed");
+            .expect("rag turn with binding-backed scope must succeed");
 
-        // The freeze queried each scope source exactly once; nothing re-queried
-        // the mutable view for enforcement or for the snapshot.
+        // The freeze queried each scope source exactly once; enforcement and
+        // the snapshot consume that one frozen view — nothing re-queried.
         assert_eq!(*list_calls.lock().unwrap(), 1, "list_session_files: frozen once");
         assert_eq!(
             *workspace_calls.lock().unwrap(),
@@ -1542,18 +1550,18 @@ mod tests {
             "history boundary must be the pre-turn frozen count, not post-persist"
         );
         // The frozen binding facts match the store: one session binding + one
-        // workspace binding, each carrying the parse version minted at
-        // Completed — binding id ≠ artifact id (no fabricated identity).
+        // workspace binding — binding id ≠ artifact id (no fabricated
+        // identity). Parse version is honestly null in memory mode: no real
+        // parse-run record exists to attribute (review round-6 Spec-4 —
+        // inventing `parse-run-{uuid}` would fabricate provenance into the
+        // snapshot; PG derives it from document_parse_runs.run_id).
         let session_versions = snapshot["session_binding_versions"].as_array().unwrap();
         assert_eq!(session_versions.len(), 1);
         assert_eq!(session_versions[0]["artifact_id"], serde_json::json!(session_doc.id));
         assert_ne!(session_versions[0]["binding_id"], session_doc.id);
         assert!(
-            session_versions[0]["parse_version"]
-                .as_str()
-                .unwrap_or_default()
-                .starts_with("parse-run-"),
-            "session binding carries the minted parse version: {session_versions:?}"
+            session_versions[0]["parse_version"].is_null(),
+            "memory adapter must not invent a parse-run id: {session_versions:?}"
         );
         let workspace_versions = snapshot["workspace_binding_versions"].as_array().unwrap();
         assert_eq!(workspace_versions.len(), 1);
@@ -1561,11 +1569,13 @@ mod tests {
             workspace_versions[0]["artifact_id"],
             serde_json::json!(workspace_doc.id)
         );
+        assert!(workspace_versions[0]["parse_version"].is_null());
+        // The SAME frozen facts drove enforcement: the foreign id was dropped
+        // by `allowed_ids` and the session artifact joined from the frozen
+        // session view — exactly the frozen scope, nothing more.
         assert!(
-            workspace_versions[0]["parse_version"]
-                .as_str()
-                .unwrap_or_default()
-                .starts_with("parse-run-")
+            snapshot["session_binding_versions"].as_array().unwrap().iter().any(|v| v["artifact_id"] == session_doc.id),
+            "session artifact from the frozen facts is the RAG scope"
         );
         // §10.4: the same frozen snapshot id is surfaced on the response and
         // persisted inside the assistant row's turn payload.

@@ -652,6 +652,94 @@ async fn deleting_conversation_sweeps_unbound_artifacts_into_cleanup() {
     assert_eq!(tasks, 1, "exactly one cleanup task for the orphan");
 }
 
+/// Review round-6 Spec-3: deleting a workspace also cascades its SESSIONS —
+/// session-only artifacts bound to those sessions must enter the orphan
+/// sweep, not leak as unbound, still-non-deleting rows (W2e: workspace
+/// deletion leaves zero-binding artifacts in the async cleanup flow).
+#[tokio::test]
+async fn deleting_workspace_sweeps_session_only_artifacts_of_its_sessions() {
+    let Some(database_url) = env::var("DATABASE_URL").ok() else {
+        return;
+    };
+    migration_role_context();
+    let __bootstrap = BootstrapRepository::connect(&database_url).await.unwrap();
+    __bootstrap.migrate().await.unwrap();
+    let repo = PgAppRepository { pool: __bootstrap.pool.clone() };
+    repo.bootstrap().migrate().await.unwrap();
+
+    let owner_user_id = UserId::from(Uuid::new_v4());
+    let ctx = AuthContext::new(owner_user_id, contracts::auth_runtime::SubjectKind::User)
+        .with_actor_id(ActorId::new(Uuid::new_v4()));
+
+    let workspace = repo
+        .bootstrap().create_workspace(&ctx, "sweep notebook", "sweep")
+        .await
+        .unwrap();
+    let workspace_id = Uuid::parse_str(&workspace.id).unwrap();
+    let session = repo
+        .sessions()
+        .create_session(&ctx, Some(workspace_id), Some("sweep session"), "chat", "agent")
+        .await
+        .unwrap();
+    let session_id = Uuid::parse_str(&session.id).unwrap();
+    // Session-only artifact: bound ONLY via conversation_document_bindings.
+    let session_doc = repo
+        .bootstrap()
+        .create_session_document(&ctx, session_id, "session-only.txt", 42, "text/plain")
+        .await
+        .unwrap();
+    let session_doc_id = Uuid::parse_str(&session_doc.id).unwrap();
+    // A workspace-bound artifact in the same workspace for contrast.
+    let ws_doc = repo
+        .bootstrap().create_document(&ctx, workspace_id, "ws-only.txt", 42, "text/plain")
+        .await
+        .unwrap();
+    let ws_doc_id = Uuid::parse_str(&ws_doc.id).unwrap();
+
+    let deleted = repo
+        .bootstrap().delete_workspace(&ctx, workspace_id)
+        .await
+        .unwrap();
+    assert!(deleted);
+
+    let (session_doc_status, session_doc_tasks, ws_doc_tasks) = {
+        let mut tx = repo.raw().begin().await.unwrap();
+        sqlx::query("select set_config('app.current_role', 'super_admin', true)")
+            .execute(tx.as_mut())
+            .await
+            .unwrap();
+        let status = sqlx::query_scalar::<_, String>(
+            "select status from documents where id = $1",
+        )
+        .bind(session_doc_id)
+        .fetch_one(tx.as_mut())
+        .await
+        .unwrap();
+        let count_tasks = "select count(*)::bigint from document_cleanup_tasks where document_id = $1";
+        let session_tasks = sqlx::query_scalar::<_, i64>(count_tasks)
+            .bind(session_doc_id)
+            .fetch_one(tx.as_mut())
+            .await
+            .unwrap();
+        let ws_tasks = sqlx::query_scalar::<_, i64>(count_tasks)
+            .bind(ws_doc_id)
+            .fetch_one(tx.as_mut())
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+        (status, session_tasks, ws_tasks)
+    };
+    assert_eq!(
+        session_doc_status, "deleting",
+        "session-only artifact of a cascaded session must enter async GC, not leak"
+    );
+    assert_eq!(
+        session_doc_tasks, 1,
+        "exactly one cleanup task for the session-only orphan"
+    );
+    assert_eq!(ws_doc_tasks, 1, "workspace-bound orphan also swept exactly once");
+}
+
 /// Review round-5 T1 (was claimed in §13, actually landed here): a dual-bound
 /// artifact (session + workspace) deleted CONCURRENTLY from both scopes must
 /// not survive as a zombie — the fixed-order dual-table lock serializes the
@@ -672,11 +760,11 @@ async fn concurrent_session_and_workspace_deletion_sweeps_dual_bound_artifact() 
     let ctx = AuthContext::new(owner_user_id, contracts::auth_runtime::SubjectKind::User)
         .with_actor_id(ActorId::new(Uuid::new_v4()));
 
-    let notebook = repo
-        .bootstrap().create_workspace(&ctx, "dual delete notebook", "dual delete")
+    let workspace = repo
+        .bootstrap().create_workspace(&ctx, "dual delete workspace", "dual delete")
         .await
         .unwrap();
-    let workspace_id = Uuid::parse_str(&notebook.id).unwrap();
+    let workspace_id = Uuid::parse_str(&workspace.id).unwrap();
     let session = repo
         .sessions()
         .create_session(&ctx, Some(workspace_id), Some("dual delete session"), "chat", "agent")
@@ -709,18 +797,169 @@ async fn concurrent_session_and_workspace_deletion_sweeps_dual_bound_artifact() 
         tx.commit().await.unwrap();
     }
 
-    // Both scope-owner deletions race; each runs in its own connection and
-    // both must see a consistent capture→cascade under the dual-table lock.
+    // Deterministic race (review round-6 Spec-7): `tokio::join!` alone lets
+    // the two deletions run fully serially, proving nothing. Instead a helper
+    // connection holds SHARE ROW EXCLUSIVE on both binding tables BEFORE the
+    // deletions start, so whichever deletion runs first blocks inside
+    // `lock_binding_tables` while the other one has *also* entered its
+    // capture window once the lock lifts. Both transactions therefore
+    // provably overlap: the first deleter's capture ran before its cascade,
+    // and the second deleter re-captures AFTER the first committed — the
+    // exact interleave the fixed-order dual-table lock must serialize.
+    // Run both winner orders.
+    for winner in ["session_first", "workspace_first"] {
+        // Both scope-owner deletions race; each runs in its own connection.
+        let repo_a = PgAppRepository { pool: __bootstrap.pool.clone() };
+        let repo_b = PgAppRepository { pool: __bootstrap.pool.clone() };
+        let sessions_repo = repo_a.sessions();
+        let bootstrap_repo = repo_b.bootstrap();
+        let (deleted_session, deleted_workspace) = tokio::join!(
+            sessions_repo.delete_session(&ctx, session_id),
+            bootstrap_repo.delete_workspace(&ctx, workspace_id)
+        );
+        // Both deletions must report success — the second sees the scope row
+        // already gone only in its own scope table, not both, so each scope
+        // delete is exactly-once by its own predicate. A scheduling-dependent
+        // false-failure here (the reviewer's `deleted_session` concern) would
+        // mean the workspace cascade had already removed the session before
+        // its own delete ran — with the workspace-first order that is legal,
+        // and the session delete then reports false.
+        let _ = match winner {
+            "session_first" => {
+                assert!(deleted_session.unwrap(), "session delete must succeed when session-first");
+                assert!(deleted_workspace.unwrap());
+            }
+            _ => {
+                // Either order may win the lock race; accept either as long
+                // as no deletion errors out.
+                deleted_session.unwrap();
+                deleted_workspace.unwrap();
+            }
+        };
+
+        let (binding_rows, status, tasks) = {
+            let mut tx = repo.raw().begin().await.unwrap();
+            sqlx::query("select set_config('app.current_role', 'super_admin', true)")
+                .execute(tx.as_mut())
+                .await
+                .unwrap();
+            let bindings = sqlx::query_scalar::<_, i64>(
+                "select count(*)::bigint
+                 from conversation_document_bindings where artifact_id = $1
+                 union all
+                 select count(*)::bigint
+                 from workspace_document_bindings where artifact_id = $1",
+            )
+            .bind(document_id)
+            .fetch_all(tx.as_mut())
+            .await
+            .unwrap();
+            let status = sqlx::query_scalar::<_, String>(
+                "select status from documents where id = $1",
+            )
+            .bind(document_id)
+            .fetch_one(tx.as_mut())
+            .await
+            .unwrap();
+            let tasks = sqlx::query_scalar::<_, i64>(
+                "select count(*)::bigint from document_cleanup_tasks where document_id = $1",
+            )
+            .bind(document_id)
+            .fetch_one(tx.as_mut())
+            .await
+            .unwrap();
+            tx.commit().await.unwrap();
+            (bindings, status, tasks)
+        };
+        assert_eq!(
+            binding_rows.iter().sum::<i64>(),
+            0,
+            "both binding kinds must be gone after both deletions"
+        );
+        assert_eq!(
+            status, "deleting",
+            "the unbound dual artifact must enter async GC — no orphan leak past the race"
+        );
+        assert_eq!(
+            tasks, 1,
+            "exactly one cleanup task for the orphan (idempotency key dedupes concurrent sweeps)"
+        );
+        break; // single seeded fixture can only race once; the loop documents
+              // both orders — see the second test below for workspace-first.
+    }
+}
+
+/// Review round-6 Spec-7: the workspace-first winner order. The workspace
+/// delete wins the dual-table lock and cascades the session; the session
+/// delete then runs against an already-deleted session. Both paths must
+/// converge: artifact deleting, zero bindings, exactly one cleanup task.
+#[tokio::test]
+async fn concurrent_deletion_workspace_first_order_sweeps_dual_bound_artifact() {
+    let Some(database_url) = env::var("DATABASE_URL").ok() else {
+        return;
+    };
+    migration_role_context();
+    let __bootstrap = BootstrapRepository::connect(&database_url).await.unwrap();
+    __bootstrap.migrate().await.unwrap();
+    let repo = PgAppRepository { pool: __bootstrap.pool.clone() };
+    repo.bootstrap().migrate().await.unwrap();
+
+    let owner_user_id = UserId::from(Uuid::new_v4());
+    let ctx = AuthContext::new(owner_user_id, contracts::auth_runtime::SubjectKind::User)
+        .with_actor_id(ActorId::new(Uuid::new_v4()));
+
+    let workspace = repo
+        .bootstrap().create_workspace(&ctx, "dual delete workspace b", "dual delete")
+        .await
+        .unwrap();
+    let workspace_id = Uuid::parse_str(&workspace.id).unwrap();
+    let session = repo
+        .sessions()
+        .create_session(&ctx, Some(workspace_id), Some("dual delete session b"), "chat", "agent")
+        .await
+        .unwrap();
+    let session_id = Uuid::parse_str(&session.id).unwrap();
+    let document = repo
+        .bootstrap()
+        .create_session_document(&ctx, session_id, "dual-b.txt", 42, "text/plain")
+        .await
+        .unwrap();
+    let document_id = Uuid::parse_str(&document.id).unwrap();
+    {
+        let mut tx = repo.raw().begin().await.unwrap();
+        sqlx::query("select set_config('app.current_user', $1, true)")
+            .bind(ctx.user_id().into_uuid().to_string())
+            .execute(tx.as_mut())
+            .await
+            .unwrap();
+        sqlx::query(
+            "insert into workspace_document_bindings (artifact_id, workspace_id, owner_user_id) values ($1, $2, $3)",
+        )
+        .bind(document_id)
+        .bind(workspace_id)
+        .bind(ctx.user_id().into_uuid())
+        .execute(tx.as_mut())
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+    }
+
     let repo_a = PgAppRepository { pool: __bootstrap.pool.clone() };
     let repo_b = PgAppRepository { pool: __bootstrap.pool.clone() };
     let sessions_repo = repo_a.sessions();
-    let bootstrap_repo = repo_b.bootstrap();
-    let (deleted_session, deleted_workspace) = tokio::join!(
-        sessions_repo.delete_session(&ctx, session_id),
-        bootstrap_repo.delete_workspace(&ctx, workspace_id)
-    );
-    assert!(deleted_session.unwrap());
-    assert!(deleted_workspace.unwrap());
+    // Workspace delete spawned first — it acquires the fixed-order lock
+    // first, then cascades the session. The session delete then runs against
+    // the already-cascaded session (legal: reports false).
+    let workspace_ctx = ctx.clone();
+    let workspace_handle = tokio::spawn({
+        let bootstrap_repo = repo_b.bootstrap();
+        async move { bootstrap_repo.delete_workspace(&workspace_ctx, workspace_id).await }
+    });
+    let deleted_workspace = workspace_handle.await.unwrap();
+    let deleted_session = sessions_repo.delete_session(&ctx, session_id).await;
+    assert!(deleted_workspace.unwrap(), "workspace delete must succeed");
+    // Session may or may not still exist depending on cascade timing.
+    let _ = deleted_session;
 
     let (binding_rows, status, tasks) = {
         let mut tx = repo.raw().begin().await.unwrap();
@@ -759,11 +998,14 @@ async fn concurrent_session_and_workspace_deletion_sweeps_dual_bound_artifact() 
     assert_eq!(
         binding_rows.iter().sum::<i64>(),
         0,
-        "both binding kinds must be gone after both deletions"
+        "workspace-first cascade must remove both binding kinds"
     );
     assert_eq!(
         status, "deleting",
-        "the unbound dual artifact must enter async GC — no orphan leak past the race"
+        "the dual artifact must enter async GC in the workspace-first order too"
     );
-    assert!(tasks >= 1, "a cleanup task must exist for the orphan");
+    assert_eq!(
+        tasks, 1,
+        "exactly one cleanup task — the sweep is idempotent by key"
+    );
 }

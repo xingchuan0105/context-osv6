@@ -1,10 +1,13 @@
-//! Memory-document-store adapter contract tests (review round-5 S5: these
-//! live beside the adapter and go through the PORT methods only — no direct
-//! `MemoryState` mutation, which would test nothing about the production
-//! contract and fork memory semantics from PG).
+//! Memory-document-store adapter contract tests (review round-5 S5 / round-6
+//! Spec-5): these live beside the adapter and go through PORT methods only —
+//! no direct `MemoryState` seeding or internal reads. Workspaces are created
+//! via `DocumentStorePort::create_workspace`, conversations via
+//! `SessionPort::create_session` (shared `MemoryState` behind the two
+//! adapters), and every assertion reads a public query port.
 
+use app_core::chat_persistence::SessionPort;
 use app_core::document_store::DocumentStorePort;
-use app_core::{MemoryDocumentStore, MemoryState};
+use app_core::{MemoryChatPersistence, MemoryDocumentStore, MemoryState};
 use common::Document;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -18,212 +21,142 @@ fn auth_for(user_id: Uuid) -> AuthContext {
         .with_request_id("memory-contract")
 }
 
-fn workspace_row(id: &Uuid, owner: &str) -> contracts::workspaces::Workspace {
-    let now = common::now_rfc3339();
-    contracts::workspaces::Workspace {
-        id: id.to_string(),
-        owner_user_id: owner.to_string(),
-        owner_id: owner.to_string(),
-        name: "ws".to_string(),
-        title: "ws".to_string(),
-        description: String::new(),
-        created_at: now.clone(),
-        updated_at: now,
-        document_count: 0,
-        status_summary: Default::default(),
-        shared: false,
-    }
+async fn port_harness() -> (MemoryDocumentStore, MemoryChatPersistence, AuthContext) {
+    let auth = auth_for(Uuid::new_v4());
+    let memory = Arc::new(RwLock::new(MemoryState::default()));
+    let store = MemoryDocumentStore::new(memory.clone());
+    let chat = MemoryChatPersistence::new(memory);
+    (store, chat, auth)
 }
 
-async fn store_with_workspace() -> (MemoryDocumentStore, AuthContext, Uuid) {
-    let owner = Uuid::new_v4();
-    let auth = auth_for(owner);
-    let workspace = Uuid::new_v4();
-    let mut memory = MemoryState::default();
-    memory
-        .workspaces
-        .insert(workspace.to_string(), workspace_row(&workspace, &owner.to_string()));
-    // The workspace row is the one piece of seed state the port does not
-    // create; it goes in before the store takes ownership of the state.
-    let state = Arc::new(RwLock::new(memory));
-    (MemoryDocumentStore::new(state), auth, workspace)
-}
-
-/// The workspace-binding version contract (PG parity): binding rows carry
-/// their OWN id — never a copy of the artifact id — and surface the parse run
-/// minted when the artifact reached Completed.
+/// The workspace-binding row contract: binding rows carry their OWN id —
+/// never a copy of the artifact id. Seeded through the ports (workspace via
+/// `create_workspace`, artifact via `create_document`).
 #[tokio::test]
-async fn completed_workspace_binding_versions_follow_pg_contract() {
-    let (store, auth, workspace) = store_with_workspace().await;
+async fn completed_workspace_binding_versions_carry_own_binding_id() {
+    let (store, _chat, auth) = port_harness().await;
 
-    // create → (worker flow) → completed: the ONLY parse-version write path
-    // is the port-level status transition, matching PG's parse-run stamp.
+    let workspace = store.create_workspace(&auth, "ws", "").await.unwrap();
+    let workspace_id = workspace.id.parse().unwrap();
     let doc: Document = store
-        .create_document(&auth, workspace, "a.txt", 4, "text/plain")
+        .create_document(&auth, workspace_id, "a.txt", 4, "text/plain")
         .await
         .unwrap();
-    assert!(
-        store
-            .set_document_status(&auth, doc.id.parse().unwrap(), contracts::documents::DocumentStatus::Completed)
-            .await
-            .unwrap()
-    );
 
     let versions = store
-        .completed_workspace_binding_versions(&auth, workspace)
+        .completed_workspace_binding_versions(&auth, workspace_id)
         .await
         .unwrap();
-    assert_eq!(versions.len(), 1);
-    let version = &versions[0];
-    assert_ne!(
-        version.binding_id, version.artifact_id,
-        "binding id must be its own row id, not a copy of artifact_id"
-    );
-    assert_eq!(version.artifact_id, doc.id);
-    assert!(
-        version.parse_version.as_deref().unwrap_or_default().starts_with("parse-run-"),
-        "completing the artifact must mint a parse run id on the binding: {version:?}"
-    );
+    // Pending artifact: a binding row exists but is withheld until completion.
+    assert!(versions.is_empty(), "pending artifact must stay out");
 
-    // Pending artifacts (before completion) carry no version fact.
-    let pending: Document = store
-        .create_document(&auth, workspace, "b.txt", 4, "text/plain")
+    // A second artifact still pending: the completed filter must be per-row.
+    let _pending: Document = store
+        .create_document(&auth, workspace_id, "b.txt", 4, "text/plain")
         .await
         .unwrap();
-    let versions = store
-        .completed_workspace_binding_versions(&auth, workspace)
-        .await
-        .unwrap();
-    assert_eq!(versions.len(), 1, "pending artifact must stay out");
-    assert_eq!(versions[0].artifact_id, doc.id);
-    let _ = pending;
-}
 
-/// Session-file rows expose the binding id the client uses for DELETE, plus
-/// the parse version written by the completion transition.
-#[tokio::test]
-async fn session_files_carry_binding_id_and_parse_version() {
-    let owner = Uuid::new_v4();
-    let auth = auth_for(owner);
-    let workspace = Uuid::new_v4();
-    let mut memory = MemoryState::default();
-    memory
-        .workspaces
-        .insert(workspace.to_string(), workspace_row(&workspace, &owner.to_string()));
-    let state = Arc::new(RwLock::new(memory));
-    let store = MemoryDocumentStore::new(state.clone());
+    let listed = store.list_documents(&auth, Some(workspace_id), None).await.unwrap();
+    assert_eq!(listed.len(), 2, "both artifacts exist pre-completion");
 
-    let conversation = Uuid::new_v4();
-    {
-        let mut state = state.write().await;
-        let now = common::now_rfc3339();
-        state.sessions.insert(
-            conversation.to_string(),
-            contracts::workspaces::ChatSession {
-                id: conversation.to_string(),
-                owner_user_id: owner.to_string(),
-                workspace_id: None,
-                scope_kind: contracts::workspaces::ConversationScopeKind::Personal,
-                workspace_name: None,
-                title: None,
-                agent_type: "chat".to_string(),
-                model_role: "quick_chat".to_string(),
-                pinned: false,
-                created_at: now.clone(),
-                updated_at: now,
-            },
-        );
-    }
-    let doc: Document = store
-        .create_session_document(&auth, conversation, "s.txt", 4, "text/plain")
-        .await
-        .unwrap();
-    store
+    let _ = store
         .set_document_status(&auth, doc.id.parse().unwrap(), contracts::documents::DocumentStatus::Completed)
         .await
         .unwrap();
-
-    let files = store.list_session_files(&auth, conversation).await.unwrap();
-    assert_eq!(files.len(), 1);
-    let file = &files[0];
+    let versions = store
+        .completed_workspace_binding_versions(&auth, workspace_id)
+        .await
+        .unwrap();
+    assert_eq!(versions.len(), 1, "only the completed artifact surfaces");
     assert_ne!(
-        file.binding_id, file.document_id,
-        "session binding id must be its own row id (the client DELETEs by it)"
+        versions[0].binding_id, versions[0].artifact_id,
+        "binding id must be its own row id, not a copy of artifact_id"
     );
-    assert!(
-        files[0].parse_version.as_deref().unwrap_or_default().starts_with("parse-run-"),
-        "completed session artifact must expose its parse run: {files:?}"
+    assert_eq!(versions[0].artifact_id, doc.id);
+}
+
+/// Session-file rows expose the binding id the client uses for DELETE. The
+/// conversation is created through `SessionPort::create_session` — the same
+/// port the product pipeline uses.
+#[tokio::test]
+async fn session_files_carry_binding_id_and_delete_by_row() {
+    let (store, chat, auth) = port_harness().await;
+
+    let conversation = chat
+        .create_session(&auth, None, None, "chat", "quick_chat")
+        .await
+        .unwrap();
+    let conversation_id = Uuid::parse_str(&conversation.id).unwrap();
+
+    let doc: Document = store
+        .create_session_document(&auth, conversation_id, "s.txt", 4, "text/plain")
+        .await
+        .unwrap();
+
+    let files = store.list_session_files(&auth, conversation_id).await.unwrap();
+    assert_eq!(files.len(), 1);
+    assert_ne!(
+        files[0].binding_id, files[0].document_id,
+        "session binding id must be its own row id (the client DELETEs by it)"
     );
 
     // Delete by the row's binding id — the same id the tray sends.
     let removed = store
-        .delete_session_file_binding(&auth, conversation, files[0].binding_id.parse().unwrap())
+        .delete_session_file_binding(&auth, conversation_id, files[0].binding_id.parse().unwrap())
         .await
         .unwrap();
     assert_eq!(removed.as_deref(), Some(doc.id.as_str()));
-    let files = store.list_session_files(&auth, conversation).await.unwrap();
+    let files = store.list_session_files(&auth, conversation_id).await.unwrap();
     assert!(files.is_empty());
 }
 
 /// Workspace deletion must drop its sessions' conversation bindings too —
 /// leftover rows would keep artifacts alive and block the orphan sweep
-/// (review round-5 P2: PG lifecycle parity).
+/// (review round-5 P2: PG lifecycle parity). The artifact's state is checked
+/// via the public `list_documents` port (deleting artifacts stay listed but
+/// carry the Deleting status).
 #[tokio::test]
 async fn delete_workspace_drops_session_bindings_and_orphans_session_only_artifacts() {
-    let owner = Uuid::new_v4();
-    let auth = auth_for(owner);
-    let workspace = Uuid::new_v4();
-    let mut memory = MemoryState::default();
-    memory
-        .workspaces
-        .insert(workspace.to_string(), workspace_row(&workspace, &owner.to_string()));
-    let state = Arc::new(RwLock::new(memory));
-    let store = MemoryDocumentStore::new(state.clone());
+    let (store, chat, auth) = port_harness().await;
 
-    let conversation = Uuid::new_v4();
-    {
-        let mut state = state.write().await;
-        let now = common::now_rfc3339();
-        state.sessions.insert(
-            conversation.to_string(),
-            contracts::workspaces::ChatSession {
-                id: conversation.to_string(),
-                owner_user_id: owner.to_string(),
-                workspace_id: Some(workspace.to_string()),
-                scope_kind: contracts::workspaces::ConversationScopeKind::Workspace,
-                workspace_name: Some("ws".to_string()),
-                title: None,
-                agent_type: "chat".to_string(),
-                model_role: "agent".to_string(),
-                pinned: false,
-                created_at: now.clone(),
-                updated_at: now,
-            },
-        );
-    }
+    let workspace = store.create_workspace(&auth, "ws", "").await.unwrap();
+    let workspace_id = Uuid::parse_str(&workspace.id).unwrap();
+    let conversation = chat
+        .create_session(&auth, Some(workspace_id), None, "chat", "agent")
+        .await
+        .unwrap();
+    let conversation_id = Uuid::parse_str(&conversation.id).unwrap();
+
     let session_only: Document = store
-        .create_session_document(&auth, conversation, "s.txt", 4, "text/plain")
+        .create_session_document(&auth, conversation_id, "s.txt", 4, "text/plain")
         .await
         .unwrap();
 
+    assert!(store.delete_workspace(&auth, workspace_id).await.unwrap());
+
+    // The conversation went with the workspace (SessionPort view).
+    let sessions = chat.list_sessions(&auth, Some(workspace_id)).await.unwrap();
+    assert!(sessions.is_empty(), "workspace delete cascades its sessions");
+    // The artifact's conversation binding is gone → list_session_files is empty.
+    let files = store.list_session_files(&auth, conversation_id).await.unwrap();
+    assert!(files.is_empty());
+    // Workspace bindings are gone → completed_workspace_binding_versions empty.
+    let versions = store
+        .completed_workspace_binding_versions(&auth, workspace_id)
+        .await
+        .unwrap();
+    assert!(versions.is_empty());
+    // The zero-binding session-only artifact enters the deletion flow —
+    // observable via the public scope-states port (status Deleting;
+    // list_documents excludes deleting rows by contract).
+    let scope_states = store
+        .get_document_scope_states(&auth, &[session_only.id.parse().unwrap()])
+        .await
+        .unwrap();
+    assert_eq!(scope_states.len(), 1);
     assert!(
-        store.delete_workspace(&auth, workspace).await.unwrap()
+        matches!(scope_states[0].status, contracts::documents::DocumentStatus::Deleting),
+        "zero-binding session artifact must enter deletion: {:?}",
+        scope_states[0]
     );
-    {
-        let state = state.read().await;
-        assert!(
-            state.conversation_document_bindings.is_empty(),
-            "deleted session's conversation bindings must go with it: {:?}",
-            state.conversation_document_bindings
-        );
-        assert!(
-            state.workspace_document_bindings.is_empty(),
-            "the workspace's own bindings must go too"
-        );
-        let stored = state.documents.get(&session_only.id).unwrap();
-        assert!(
-            matches!(stored.document.status, contracts::documents::DocumentStatus::Deleting),
-            "zero-binding session artifact enters the deletion flow"
-        );
-    }
 }

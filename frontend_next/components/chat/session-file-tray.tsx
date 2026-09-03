@@ -63,12 +63,19 @@ export function SessionFileTray({
 }: SessionFileTrayProps) {
   const { locale } = useUiPreferences();
   const [files, setFiles] = useState<SessionFileRow[]>([]);
-  const [uploadError, setUploadError] = useState(false);
+  const [actionError, setActionError] = useState(false);
   const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  /** Bindings with a delete in flight — polls must not resurrect them. */
-  const removingRef = useRef<Set<string>>(new Set());
+  /**
+   * Permanent tombstone: bindings removed from this session. A DELETE that
+   * succeeded must stay dead for the lifetime of the session — any poll or
+   * reconcile GET issued before the deletion can still return afterwards and
+   * would otherwise resurrect the row (review round-6: the previous
+   * in-flight-only guard cleared the tombstone before the last stale GET
+   * landed). Cleared only when the session changes.
+   */
+  const removedRef = useRef<Set<string>>(new Set());
 
   const refresh = useCallback(async () => {
     if (!token || !sessionId) {
@@ -76,10 +83,7 @@ export function SessionFileTray({
     }
     try {
       const next = await listChatSessionFiles(token, sessionId);
-      // A poll that raced an in-flight delete must not resurrect the removed
-      // binding (review round-5: the earlier optimistic filter could be
-      // overwritten by a stale poll result).
-      setFiles(next.filter((row) => !removingRef.current.has(row.binding_id)));
+      setFiles(next.filter((row) => !removedRef.current.has(row.binding_id)));
     } catch {
       // Keep the last known state; the next poll retries.
     }
@@ -87,7 +91,8 @@ export function SessionFileTray({
 
   useEffect(() => {
     setFiles([]);
-    setUploadError(false);
+    setActionError(false);
+    removedRef.current.clear();
   }, [sessionId]);
 
   useEffect(() => {
@@ -148,36 +153,36 @@ export function SessionFileTray({
       if (!picked || picked.length === 0 || disabled || busy) {
         return;
       }
-      setBusy(true);
-      setUploadError(false);
-      try {
-        let activeSessionId = sessionId;
-        for (const file of Array.from(picked)) {
-          activeSessionId = await ensureSession();
-          if (!activeSessionId || !token) {
-            return;
-          }
-          const upload = await createChatSessionFileUpload(token, activeSessionId, {
-            filename: file.name,
-            file_size: file.size,
-            mime_type: file.type || "application/octet-stream",
-          });
-          const putResponse = await fetch(upload.upload_url, {
-            method: "PUT",
-            body: file,
-          });
-          if (!putResponse.ok) {
-            setUploadError(true);
-            return;
-          }
-          await completeChatSessionFileUpload(token, upload.document_id);
+    setBusy(true);
+    setActionError(false);
+    try {
+      let activeSessionId = sessionId;
+      for (const file of Array.from(picked)) {
+        activeSessionId = await ensureSession();
+        if (!activeSessionId || !token) {
+          return;
         }
-        if (activeSessionId) {
-          await refresh();
+        const upload = await createChatSessionFileUpload(token, activeSessionId, {
+          filename: file.name,
+          file_size: file.size,
+          mime_type: file.type || "application/octet-stream",
+        });
+        const putResponse = await fetch(upload.upload_url, {
+          method: "PUT",
+          body: file,
+        });
+        if (!putResponse.ok) {
+          setActionError(true);
+          return;
         }
-      } catch {
-        setUploadError(true);
-      } finally {
+        await completeChatSessionFileUpload(token, upload.document_id);
+      }
+      if (activeSessionId) {
+        await refresh();
+      }
+    } catch {
+      setActionError(true);
+    } finally {
         setBusy(false);
         if (inputRef.current) {
           inputRef.current.value = "";
@@ -203,23 +208,23 @@ export function SessionFileTray({
       if (!token || !sessionId) {
         return;
       }
-      // Optimistic removal + in-flight guard: polls skip this binding so a
-      // stale poll cannot resurrect it. On DELETE failure the row is rolled
-      // back — swallowing the error would fork UI from server truth when the
-      // reconcile refresh also fails (review round-5 S3).
-      removingRef.current.add(file.binding_id);
+      // Permanent tombstone + optimistic removal: every future read filters
+      // this binding, so neither a stale poll nor a late reconcile GET can
+      // resurrect it. On DELETE failure the tombstone is lifted and the row
+      // is rolled back — swallowing the error would fork UI from server
+      // truth when the reconcile refresh also fails (review round-5 S3).
+      removedRef.current.add(file.binding_id);
       setFiles((prev) => prev.filter((row) => row.binding_id !== file.binding_id));
       try {
         await deleteChatSessionFile(token, sessionId, file.binding_id);
       } catch {
-        removingRef.current.delete(file.binding_id);
+        removedRef.current.delete(file.binding_id);
         setFiles((prev) =>
           prev.some((row) => row.binding_id === file.binding_id) ? prev : [file, ...prev],
         );
-        setUploadError(true);
+        setActionError(true);
         return;
       }
-      removingRef.current.delete(file.binding_id);
       await refresh();
     },
     [refresh, sessionId, token],
@@ -252,9 +257,9 @@ export function SessionFileTray({
           </span>
         )}
       </div>
-      {uploadError && (
+      {actionError && (
         <p className={styles.error} role="alert">
-          {formatUiMessage(locale, "chat.fileUploadFailed")}
+          {formatUiMessage(locale, "chat.fileActionFailed")}
         </p>
       )}
       {blocked && <p className={styles.blockedHint}>{formatUiMessage(locale, "chat.fileBlockedHint")}</p>}

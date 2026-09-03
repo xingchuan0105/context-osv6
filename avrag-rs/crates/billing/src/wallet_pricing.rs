@@ -110,17 +110,15 @@ impl RateRow {
         prov_ok && model_lower.contains(&self.model_contains.to_ascii_lowercase())
     }
 
-    /// Canonical rate-set selection shared by EVERY consumer — runtime
-    /// debits and the startup gate must resolve structure identically
-    /// (review round-5: the gate had drifted, accepting lone peak/off-peak
-    /// or empty-tiers shapes that `rates()` cannot serve).
+    /// Rate-set selection — THE single structural truth. Both `rates()` and
+    /// `all_rate_sets()` derive from this one match, so a row shape the
+    /// runtime cannot serve (lone peak/off-peak, empty tiers, a flat rate
+    /// missing alongside a lone peak) is invisible to every consumer alike
+    /// (review round-5 S1: the gate and runtime had drifted on hybrid rows).
     ///
-    /// `for_startup_gate` validates ALL rate sets the row declares (every
-    /// tier, peak AND off-peak) instead of just the one a request would hit.
-    /// Returns `None` when the shape is unservable or any set is non-billable
-    /// (zero/negative input or negative cache/output → `need_fen <= 0` → the
-    /// hold would be skipped → free-ride).
-    fn canonical_rate_sets(&self, for_startup_gate: bool) -> Option<Vec<RateSet>> {
+    /// Returns `None` when the shape is unservable at runtime; `Some` carries
+    /// every rate set the shape declares.
+    fn rate_sets(&self) -> Option<Vec<RateSet>> {
         let mut sets: Vec<RateSet> = Vec::new();
         if let Some(tiers) = &self.tiers {
             if tiers.is_empty() {
@@ -131,19 +129,18 @@ impl RateRow {
                 cache: t.cache,
                 output: t.output,
             }));
-            if !for_startup_gate {
-                // Runtime: only the set a debit can actually resolve.
-                return Some(sets);
-            }
+            return Some(sets);
         }
         match (&self.peak, &self.off_peak) {
             (Some(peak), Some(off_peak)) => {
                 sets.push(*peak);
                 sets.push(*off_peak);
             }
+            // A flat input alongside a lone peak/off-peak is ambiguous — the
+            // runtime would have to pick one arbitrarily, so the shape is
+            // unservable and must resolve like any other broken row.
+            (Some(_), None) | (None, Some(_)) => return None,
             (None, None) => {}
-            // Lone peak or lone off_peak cannot be served by `rates()`.
-            _ => return None,
         }
         if sets.is_empty() {
             // Flat form.
@@ -156,18 +153,31 @@ impl RateRow {
         Some(sets)
     }
 
+    /// Every rate set the row declares — the startup gate validates all of
+    /// them. Returns `None` exactly when `rates()` would return `None`.
+    fn all_rate_sets(&self) -> Option<Vec<RateSet>> {
+        self.rate_sets()
+    }
+
     fn billable_set(set: &RateSet) -> bool {
         set.input.is_finite() && set.input > 0.0 && set.cache >= 0.0 && set.output >= 0.0
     }
 
-    /// Rates for a concrete debit: tier by prompt length, or peak/off-peak by
-    /// time, or the flat set. `None` when the row carries no rate shape.
+    /// Rates for a concrete debit — the ONLY runtime path. It selects a rate
+    /// set from the same shape the gate validated: tier by prompt length, or
+    /// peak/off-peak by time, or the flat set. `None` for unservable shapes.
     fn rates(&self, prompt_tokens: u32, at: DateTime<Utc>) -> Option<OfficialRates> {
-        if let Some(tiers) = &self.tiers {
-            let tier = tiers
-                .iter()
-                .find(|t| prompt_tokens <= t.max_prompt_tokens)
-                .or(tiers.last())?;
+        let sets = self.rate_sets()?;
+        if self.tiers.is_some() {
+            let tier = self
+                .tiers
+                .as_ref()
+                .and_then(|tiers| {
+                    tiers
+                        .iter()
+                        .find(|t| prompt_tokens <= t.max_prompt_tokens)
+                        .or(tiers.last())
+                })?;
             return Some(
                 RateSet {
                     input: tier.input,
@@ -177,17 +187,15 @@ impl RateRow {
                 .into(),
             );
         }
-        if let (Some(peak), Some(off_peak)) = (&self.peak, &self.off_peak) {
-            let set = if is_beijing_peak(at) { peak } else { off_peak };
+        if self.peak.is_some() && self.off_peak.is_some() {
+            let set = if is_beijing_peak(at) {
+                &sets[0]
+            } else {
+                &sets[1]
+            };
             return Some((*set).into());
         }
-        self.input.map(|input| {
-            OfficialRates {
-                input_fen_per_mtok: input,
-                cache_fen_per_mtok: self.cache,
-                output_fen_per_mtok: self.output,
-            }
-        })
+        Some(sets[0].into())
     }
 
     /// Representative rates for whitelist checks: first tier / peak / flat.
@@ -308,8 +316,9 @@ pub fn list_price_fen(
 /// matching `provider` + `model` — the row runtime resolution would pick — is
 /// servable AND billable (every declared rate set has a positive input and
 /// non-negative cache/output; review round-4 P0: `need_fen <= 0` skips the
-/// hold so a non-positive rate free-rides; review round-5: the gate must pick
-/// the SAME row as `resolve_in`, not "any valid row"). Pure — takes the raw
+/// hold so a non-positive rate free-rides; review round-6: gate and runtime
+/// share ONE shape resolver — `all_rate_sets()` returns `None` exactly when
+/// `rates()` does, so hybrid/broken rows cannot boot). Pure — takes the raw
 /// rate JSON so callers can gate without touching the env.
 pub fn rates_present_in(raw: &str, provider: &str, model: &str) -> bool {
     if raw.trim().is_empty() {
@@ -323,7 +332,7 @@ pub fn rates_present_in(raw: &str, provider: &str, model: &str) -> bool {
     rows.iter()
         .filter(|r| r.matches(&p, &m))
         .find_map(|r| {
-            r.canonical_rate_sets(true)
+            r.all_rate_sets()
                 .map(|sets| sets.iter().all(RateRow::billable_set))
         })
         .unwrap_or(false)
@@ -595,6 +604,7 @@ mod tests {
 #[cfg(test)]
 mod price_gate_tests {
     use super::*;
+    use chrono::TimeZone;
 
     /// Review round-3: the missing-price startup gate relies on exact
     /// provider+model matching — cover the pure matcher here.
@@ -688,5 +698,56 @@ mod price_gate_tests {
         // Provider-less row stays a wildcard (existing ops rows rely on it).
         let wildcard = r#"[{"model_contains":"qwen3.8-flash","input":20}]"#;
         assert!(rates_present_in(wildcard, "any-provider", "qwen3.8-flash"));
+    }
+
+    /// Review round-6 S1/Spec-1: gate and runtime share ONE shape resolver —
+    /// a hybrid row (flat input + lone peak) previously priced at runtime via
+    /// the flat rate while the gate skipped it. Both must now treat it as
+    /// unservable: no pricing, no boot.
+    #[test]
+    fn hybrid_flat_plus_lone_peak_is_unservable_for_gate_and_runtime() {
+        let rows: Vec<RateRow> = serde_json::from_str(
+            r#"[{"model_contains":"hybrid","input":20,"output":80,
+                 "peak":{"input":300,"cache":10,"output":900}}]"#,
+        )
+        .unwrap();
+        let at = Utc.with_ymd_and_hms(2026, 8, 17, 2, 0, 0).unwrap();
+        assert_eq!(rows[0].rates(1000, at), None, "runtime cannot price it");
+        assert!(
+            !rates_present_in(
+                r#"[{"model_contains":"hybrid","input":20,"output":80,
+                     "peak":{"input":300,"cache":10,"output":900}}]"#,
+                "any",
+                "hybrid"
+            ),
+            "gate must refuse the same shape"
+        );
+    }
+
+    /// Gate and runtime now consume the SAME shape resolver, so for every
+    /// row that RESOLVES they agree: a billable first row prices at runtime
+    /// and passes the gate; a zero-priced first row fails the gate AND would
+    /// produce a skipped hold at runtime. Shapeless rows (empty tiers) stay
+    /// transparent in both paths (round-4: a shapeless row does not shadow).
+    #[test]
+    fn gate_and_runtime_agree_on_every_resolvable_row() {
+        // Zero-priced row: runtime resolves to need_fen = 0 (hold skipped,
+        // free-ride) → gate must refuse; runtime `price` still returns Some
+        // (the debit layer's billable check owns that refusal).
+        let zero_json = r#"[{"model_contains":"dup","input":0,"output":0}]"#;
+        let rows: Vec<RateRow> = serde_json::from_str(zero_json).unwrap();
+        let at = Utc.with_ymd_and_hms(2026, 8, 17, 2, 0, 0).unwrap();
+        assert!(rows[0].rates(1000, at).is_some(), "zero row still resolves");
+        assert!(!rates_present_in(zero_json, "any", "dup"));
+
+        // Billable row: resolves AND passes the gate — one truth.
+        let good = r#"[{"model_contains":"dup","input":20,"output":80}]"#;
+        let rows: Vec<RateRow> = serde_json::from_str(good).unwrap();
+        assert_eq!(
+            resolve_in(&rows, "any", "dup", 1000, at)
+                .map(|r| price_from_rates(&r, 1000, 1000, 0)),
+            Some(1)
+        );
+        assert!(rates_present_in(good, "any", "dup"));
     }
 }
