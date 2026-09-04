@@ -1,7 +1,7 @@
 use analytics::detect_request_burst;
 use anyhow::Result;
 use chrono::{NaiveDate, Utc};
-use sqlx::{PgPool, Row};
+use sqlx::{PgConnection, PgPool, Row};
 use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
 use tracing::info;
@@ -40,41 +40,62 @@ impl AnalyticsJobRunner {
         {
             return Ok(());
         }
-        if !try_acquire_rollup_lock(&self.pool).await? {
+        // One transaction for lock + work: the session-scoped advisory lock
+        // previously leaked whenever the pool handed lock/unlock to different
+        // connections, silently disabling every later run. xact lock
+        // self-releases at commit/rollback.
+        let mut tx = self.pool.begin().await?;
+        let acquired = sqlx::query_scalar::<_, bool>("select pg_try_advisory_xact_lock($1)")
+            .bind(ANALYTICS_ROLLUP_LOCK_KEY)
+            .fetch_one(&mut *tx)
+            .await?;
+        if !acquired {
+            tx.rollback().await?;
             return Ok(());
         }
+        // Rollups read FORCE-RLS tables (workspaces, share_access_logs,
+        // documents); the migration-established escape hatch grants full reads.
+        sqlx::query("select set_config('app.current_role', 'super_admin', true)")
+            .execute(&mut *tx)
+            .await?;
         self.last_run_at = Some(now);
 
         let target_date = Utc::now().date_naive();
         let result = async {
-            run_daily_jobs(&self.pool, target_date).await?;
+            run_daily_jobs(&mut tx, target_date).await?;
             if let Some(previous_date) = target_date.pred_opt() {
-                run_daily_jobs(&self.pool, previous_date).await?;
+                run_daily_jobs(&mut tx, previous_date).await?;
             }
-            detect_recent_request_bursts(&self.pool).await?;
-            detect_failed_chat_loops(&self.pool, target_date).await?;
+            detect_recent_request_bursts(&mut tx).await?;
+            detect_failed_chat_loops(&mut tx, target_date).await?;
 
             info!(target_date = %target_date, "analytics rollup jobs completed");
             Ok(())
         }
         .await;
-        if let Err(error) = release_rollup_lock(&self.pool).await {
-            info!(error = %error, "failed to release analytics rollup lock");
+        match result {
+            Ok(()) => {
+                tx.commit().await?;
+                Ok(())
+            }
+            Err(error) => {
+                tx.rollback().await?;
+                Err(error)
+            }
         }
-        result
     }
 }
 
-async fn run_daily_jobs(pool: &PgPool, target_date: NaiveDate) -> Result<()> {
-    rollup_product_events(pool, target_date).await?;
-    rollup_public_share_views(pool, target_date).await?;
-    record_storage_snapshots(pool, target_date).await?;
-    rollup_cost_events(pool, target_date).await?;
-    derive_daily_product_metrics(pool, target_date).await?;
+async fn run_daily_jobs(conn: &mut PgConnection, target_date: NaiveDate) -> Result<()> {
+    rollup_product_events(conn, target_date).await?;
+    rollup_public_share_views(conn, target_date).await?;
+    record_storage_snapshots(conn, target_date).await?;
+    rollup_cost_events(conn, target_date).await?;
+    derive_daily_product_metrics(conn, target_date).await?;
     Ok(())
 }
 
-async fn rollup_product_events(pool: &PgPool, target_date: NaiveDate) -> Result<()> {
+async fn rollup_product_events(conn: &mut PgConnection, target_date: NaiveDate) -> Result<()> {
     sqlx::query(
         r#"
         insert into daily_user_metrics (
@@ -133,12 +154,12 @@ async fn rollup_product_events(pool: &PgPool, target_date: NaiveDate) -> Result<
         "#,
     )
     .bind(target_date)
-    .execute(pool)
+    .execute(&mut *conn)
     .await?;
     Ok(())
 }
 
-async fn rollup_public_share_views(pool: &PgPool, target_date: NaiveDate) -> Result<()> {
+async fn rollup_public_share_views(conn: &mut PgConnection, target_date: NaiveDate) -> Result<()> {
     sqlx::query(
         r#"
         insert into daily_user_metrics (
@@ -161,12 +182,12 @@ async fn rollup_public_share_views(pool: &PgPool, target_date: NaiveDate) -> Res
         "#,
     )
     .bind(target_date)
-    .execute(pool)
+    .execute(&mut *conn)
     .await?;
     Ok(())
 }
 
-async fn rollup_cost_events(pool: &PgPool, target_date: NaiveDate) -> Result<()> {
+async fn rollup_cost_events(conn: &mut PgConnection, target_date: NaiveDate) -> Result<()> {
     sqlx::query(
         r#"
         insert into daily_user_metrics (
@@ -201,12 +222,12 @@ async fn rollup_cost_events(pool: &PgPool, target_date: NaiveDate) -> Result<()>
         "#,
     )
     .bind(target_date)
-    .execute(pool)
+    .execute(&mut *conn)
     .await?;
     Ok(())
 }
 
-async fn derive_daily_product_metrics(pool: &PgPool, target_date: NaiveDate) -> Result<()> {
+async fn derive_daily_product_metrics(conn: &mut PgConnection, target_date: NaiveDate) -> Result<()> {
     sqlx::query(
         r#"
         insert into daily_product_metrics (
@@ -276,12 +297,12 @@ async fn derive_daily_product_metrics(pool: &PgPool, target_date: NaiveDate) -> 
         "#,
     )
     .bind(target_date)
-    .execute(pool)
+    .execute(&mut *conn)
     .await?;
     Ok(())
 }
 
-async fn record_storage_snapshots(pool: &PgPool, target_date: NaiveDate) -> Result<()> {
+async fn record_storage_snapshots(conn: &mut PgConnection, target_date: NaiveDate) -> Result<()> {
     if target_date != Utc::now().date_naive() {
         return Ok(());
     }
@@ -344,12 +365,12 @@ async fn record_storage_snapshots(pool: &PgPool, target_date: NaiveDate) -> Resu
         "#,
     )
     .bind(target_date)
-    .execute(pool)
+    .execute(&mut *conn)
     .await?;
     Ok(())
 }
 
-async fn detect_recent_request_bursts(pool: &PgPool) -> Result<()> {
+async fn detect_recent_request_bursts(conn: &mut PgConnection) -> Result<()> {
     let rows = sqlx::query(
         r#"
         select user_id, event_name, extract(epoch from event_time)::bigint as ts
@@ -358,7 +379,7 @@ async fn detect_recent_request_bursts(pool: &PgPool) -> Result<()> {
         order by user_id, event_name, event_time
         "#,
     )
-    .fetch_all(pool)
+    .fetch_all(&mut *conn)
     .await?;
 
     let mut groups: BTreeMap<(Uuid, String), Vec<i64>> = BTreeMap::new();
@@ -372,7 +393,7 @@ async fn detect_recent_request_bursts(pool: &PgPool) -> Result<()> {
     for ((user_id, event_name), timestamps) in groups {
         if detect_request_burst(&timestamps, 20, 60).is_some() {
             insert_anomaly_if_missing(
-                pool,
+                &mut *conn,
                 user_id,
                 "request_burst",
                 "medium",
@@ -391,7 +412,7 @@ async fn detect_recent_request_bursts(pool: &PgPool) -> Result<()> {
     Ok(())
 }
 
-async fn detect_failed_chat_loops(pool: &PgPool, target_date: NaiveDate) -> Result<()> {
+async fn detect_failed_chat_loops(conn: &mut PgConnection, target_date: NaiveDate) -> Result<()> {
     let rows = sqlx::query(
         r#"
         select user_id, count(*)::bigint as failure_count
@@ -403,14 +424,14 @@ async fn detect_failed_chat_loops(pool: &PgPool, target_date: NaiveDate) -> Resu
         "#,
     )
     .bind(target_date)
-    .fetch_all(pool)
+    .fetch_all(&mut *conn)
     .await?;
 
     for row in rows {
         let user_id = row.try_get::<Uuid, _>("user_id")?;
         let failure_count = row.try_get::<i64, _>("failure_count")?;
         insert_anomaly_if_missing(
-            pool,
+            &mut *conn,
             user_id,
             "failed_chat_loop",
             "high",
@@ -428,7 +449,7 @@ async fn detect_failed_chat_loops(pool: &PgPool, target_date: NaiveDate) -> Resu
 }
 
 async fn insert_anomaly_if_missing(
-    pool: &PgPool,
+    conn: &mut PgConnection,
     user_id: Uuid,
     anomaly_kind: &str,
     severity: &str,
@@ -450,24 +471,8 @@ async fn insert_anomaly_if_missing(
     .bind(severity)
     .bind(signature)
     .bind(metadata)
-    .execute(pool)
+    .execute(&mut *conn)
     .await?;
-    Ok(())
-}
-
-async fn try_acquire_rollup_lock(pool: &PgPool) -> Result<bool> {
-    let acquired = sqlx::query_scalar::<_, bool>("select pg_try_advisory_lock($1)")
-        .bind(ANALYTICS_ROLLUP_LOCK_KEY)
-        .fetch_one(pool)
-        .await?;
-    Ok(acquired)
-}
-
-async fn release_rollup_lock(pool: &PgPool) -> Result<()> {
-    let _ = sqlx::query_scalar::<_, bool>("select pg_advisory_unlock($1)")
-        .bind(ANALYTICS_ROLLUP_LOCK_KEY)
-        .fetch_one(pool)
-        .await?;
     Ok(())
 }
 
