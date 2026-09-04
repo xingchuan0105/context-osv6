@@ -44,3 +44,4 @@ lib-features = ["hydrate"]
 lib-default-features = false
 bin-features = ["ssr"]
 bin-default-features = false
+hash-files = true

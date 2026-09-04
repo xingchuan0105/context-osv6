@@ -77,23 +77,6 @@
     margin: 0;
 }
 
-.poc-token {
-    font-size: 0.8125rem;
-    color: var(--cos-text-muted);
-}
-
-.poc-token input {
-    display: block;
-    margin-top: 0.25rem;
-    width: 260px;
-    max-width: 70vw;
-    padding: 0.375rem 0.5rem;
-    border: 1px solid var(--cos-border);
-    border-radius: var(--cos-radius-sm);
-    background: var(--cos-surface);
-    color: var(--cos-text);
-}
-
 .chat-transcript {
     display: flex;
     flex-direction: column;

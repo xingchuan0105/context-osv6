@@ -1,3 +1,4 @@
+use crate::auth::AuthBootstrap;
 use crate::components::chat::ChatCanvasModel;
 use crate::components::chat::chat_page::ChatPage;
 use leptos::prelude::*;
@@ -17,10 +18,10 @@ fn RedirectToChat() -> impl IntoView {
 pub fn App() -> impl IntoView {
     provide_meta_context();
     provide_context(RwSignal::new(ChatCanvasModel::new()));
-    // PoC token（仅内存）：App 级上下文，路由切换不丢失
     provide_context(RwSignal::new(String::new()));
 
     view! {
+        <AuthBootstrap/>
         <Router>
             <Routes fallback=|| {
                 view! {

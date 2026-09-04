@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 contracts = { workspace = true }
+serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 futures-util = { workspace = true }
@@ -26,6 +27,10 @@ web-sys = { workspace = true, features = [
     "RequestInit",
     "RequestMode",
     "Response",
+    "Storage",
+    "Document",
+    "HtmlDocument",
+    "Location",
     "Window",
 ] }
 wasm-streams = { workspace = true }

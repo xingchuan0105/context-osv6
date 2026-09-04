@@ -46,6 +46,7 @@ export default defineConfig({
         ...process.env,
         LEPTOS_SITE_ADDR: `127.0.0.1:${WEB_PORT}`,
         LEPTOS_SITE_ROOT: join(frontendRustRoot, 'target', 'site'),
+        LEPTOS_HASH_FILES: 'true',
       },
       timeout: 30_000,
     },

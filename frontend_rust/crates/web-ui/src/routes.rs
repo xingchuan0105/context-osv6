@@ -1,4 +1,140 @@
-/// Phase 0 极简路由分发（仅收敛于 /chat 最小垂直验证）
+/// 现行 route family 清单。导航权威仍是 Next `nav-config.ts`；
+/// 本表做 parity，并记录 render / auth / noindex。未挂载的 family 不表示页面已实现。
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RenderMode {
+    Ssr,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AuthRequirement {
+    Required,
+    Optional,
+    Public,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RouteFamily {
+    pub id: &'static str,
+    pub href: &'static str,
+    pub render_mode: RenderMode,
+    pub auth: AuthRequirement,
+    pub noindex: bool,
+}
+
+pub const ROUTE_FAMILIES: &[RouteFamily] = &[
+    RouteFamily {
+        id: "chat",
+        href: "/chat",
+        render_mode: RenderMode::Ssr,
+        auth: AuthRequirement::Required,
+        noindex: true,
+    },
+    RouteFamily {
+        id: "dashboard",
+        href: "/dashboard",
+        render_mode: RenderMode::Ssr,
+        auth: AuthRequirement::Required,
+        noindex: true,
+    },
+    RouteFamily {
+        id: "share-traffic",
+        href: "/dashboard/analytics",
+        render_mode: RenderMode::Ssr,
+        auth: AuthRequirement::Required,
+        noindex: true,
+    },
+    RouteFamily {
+        id: "settings",
+        href: "/settings",
+        render_mode: RenderMode::Ssr,
+        auth: AuthRequirement::Required,
+        noindex: true,
+    },
+    RouteFamily {
+        id: "providers",
+        href: "/settings?tab=providers",
+        render_mode: RenderMode::Ssr,
+        auth: AuthRequirement::Required,
+        noindex: true,
+    },
+    RouteFamily {
+        id: "billing",
+        href: "/settings?tab=billing",
+        render_mode: RenderMode::Ssr,
+        auth: AuthRequirement::Required,
+        noindex: true,
+    },
+    RouteFamily {
+        id: "pricing",
+        href: "/pricing",
+        render_mode: RenderMode::Ssr,
+        auth: AuthRequirement::Public,
+        noindex: false,
+    },
+    RouteFamily {
+        id: "topup",
+        href: "/pricing#topup",
+        render_mode: RenderMode::Ssr,
+        auth: AuthRequirement::Public,
+        noindex: false,
+    },
+    RouteFamily {
+        id: "desktop",
+        href: "/desktop",
+        render_mode: RenderMode::Ssr,
+        auth: AuthRequirement::Public,
+        noindex: false,
+    },
+    RouteFamily {
+        id: "help",
+        href: "/help",
+        render_mode: RenderMode::Ssr,
+        auth: AuthRequirement::Optional,
+        noindex: true,
+    },
+    RouteFamily {
+        id: "api-access",
+        href: "/help/api-access",
+        render_mode: RenderMode::Ssr,
+        auth: AuthRequirement::Public,
+        noindex: false,
+    },
+    RouteFamily {
+        id: "legal",
+        href: "/legal",
+        render_mode: RenderMode::Ssr,
+        auth: AuthRequirement::Public,
+        noindex: false,
+    },
+    RouteFamily {
+        id: "legal-terms",
+        href: "/legal/terms",
+        render_mode: RenderMode::Ssr,
+        auth: AuthRequirement::Public,
+        noindex: false,
+    },
+    RouteFamily {
+        id: "legal-privacy",
+        href: "/legal/privacy",
+        render_mode: RenderMode::Ssr,
+        auth: AuthRequirement::Public,
+        noindex: false,
+    },
+    RouteFamily {
+        id: "legal-licenses",
+        href: "/legal/licenses",
+        render_mode: RenderMode::Ssr,
+        auth: AuthRequirement::Public,
+        noindex: false,
+    },
+];
+
+pub fn route_family(id: &str) -> Option<&'static RouteFamily> {
+    ROUTE_FAMILIES.iter().find(|family| family.id == id)
+}
+
+/// Phase 0 已挂载路径（仅 /chat）。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AppRoute {
     Chat { session_id: Option<String> },

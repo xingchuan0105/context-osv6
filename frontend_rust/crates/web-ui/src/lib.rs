@@ -1,7 +1,9 @@
 // release 构建下未擦除组件的 view! 嵌套类型深度会超出默认查询深度上限
 #![recursion_limit = "512"]
 
+pub mod api_base;
 pub mod app;
+pub mod auth;
 pub mod components;
 pub mod reducer;
 pub mod routes;
@@ -10,7 +12,9 @@ pub mod session;
 pub use app::{App, shell};
 pub use components::chat::{ChatCanvasModel, PreparedUserTurn, StreamScope};
 pub use reducer::{ActivityEntry, ChatTurnState, TurnStatus, reduce_chat_event};
-pub use routes::AppRoute;
+pub use routes::{
+    AppRoute, AuthRequirement, ROUTE_FAMILIES, RenderMode, RouteFamily, route_family,
+};
 pub use session::{
     ActiveConversation, ConversationManager, ConversationMessage, MessageRole, messages_from_wire,
 };

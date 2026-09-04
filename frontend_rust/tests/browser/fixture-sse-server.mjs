@@ -140,8 +140,40 @@ const server = http.createServer((req, res) => {
   }
   if (req.method === 'GET') {
     const pathname = url.pathname;
+    if (pathname.endsWith('/api/auth/me')) {
+      const auth = req.headers.authorization || '';
+      if (!auth.startsWith('Bearer ') || auth.length <= 7) {
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, data: null, error: 'unauthorized' }));
+        return;
+      }
+      jsonOk(res, {
+        success: true,
+        data: {
+          token: '',
+          user: { id: 'fixture-user', email: 'poc@example.com', full_name: 'PoC' },
+          reset_ticket: null,
+        },
+        error: null,
+      });
+      return;
+    }
     if (pathname.endsWith('/api/v1/chat/sessions')) {
-      jsonOk(res, { sessions: [] });
+      const authed = Boolean(req.headers.authorization);
+      jsonOk(res, {
+        sessions: authed
+          ? [{
+              id: 'sess-900',
+              owner_user_id: 'fixture-user',
+              scope_kind: 'personal',
+              title: '夹具会话',
+              agent_type: 'chat',
+              model_role: 'quick_chat',
+              created_at: '2026-09-04T00:00:00Z',
+              updated_at: '2026-09-04T00:00:00Z',
+            }]
+          : [],
+      });
       return;
     }
     const messagesMatch = pathname.match(/\/api\/v1\/chat\/sessions\/([^/]+)\/messages$/);

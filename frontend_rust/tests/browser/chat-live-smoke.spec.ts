@@ -1,4 +1,5 @@
 import { test, expect, type APIRequestContext, type Page } from '@playwright/test';
+import { seedNextAuth } from './auth-seed';
 
 const LIVE_ENABLED = process.env.LIVE_BACKEND === '1';
 const API_BASE = (process.env.LIVE_API_BASE || 'http://127.0.0.1:8080').replace(
@@ -98,13 +99,12 @@ test.describe('live backend smoke', () => {
     expect(errors).toEqual([]);
   });
 
-  test('PoC token 框走一轮真实 Quick Chat', async ({ page, request }) => {
+  test('Next 同键存储走一轮真实 Quick Chat', async ({ page, request }) => {
     const errors = collectPageErrors(page);
     const token = await obtainLiveJwt(request);
+    await seedNextAuth(page, token);
     await gotoChat(page, API_BASE);
 
-    await page.locator('.poc-token summary').click();
-    await page.getByTestId('poc-token-input').fill(token);
     await page.getByTestId('composer-input').fill('只回答：pong');
     await page.getByTestId('send-button').click();
 

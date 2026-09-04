@@ -1,6 +1,7 @@
 import { expect, type CDPSession, type Page } from "@playwright/test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
+import { seedNextAuth } from "./auth-seed";
 
 export const FIXTURE_MARKER = "退化成早已演练过的常规操作。";
 export const COLD_N = Number(process.env.GATE0_COLD_N || 5);
@@ -188,16 +189,12 @@ export function streamSampleIssue(sample: StreamSample): string | null {
 }
 
 export async function rustGotoChat(page: Page, apiBase: string, path = "/chat") {
+  await seedNextAuth(page, "gate0-fixture-token");
   await page.addInitScript((base) => {
     (window as unknown as { __POC_CHAT_API_BASE__: string }).__POC_CHAT_API_BASE__ = base;
   }, apiBase);
   await page.goto(path, { waitUntil: "domcontentloaded" });
   await expect(page.getByTestId("chat-canvas")).toBeVisible();
-  const token = page.getByTestId("poc-token-input");
-  if (await token.count()) {
-    await page.locator(".poc-token summary").click();
-    await token.fill("gate0-fixture-token");
-  }
   await rustAwaitIdle(page);
 }
 

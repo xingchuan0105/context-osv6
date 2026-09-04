@@ -1,3 +1,4 @@
+use crate::api_base::poc_api_base;
 use crate::components::chat::{ChatCanvasModel, PreparedUserTurn};
 use crate::reducer::{ActivityEntry, TurnStatus};
 use crate::session::{ConversationMessage, MessageRole, messages_from_wire};
@@ -19,7 +20,6 @@ struct ChatParams {
 #[component]
 pub fn ChatPage() -> impl IntoView {
     let model = expect_context::<RwSignal<ChatCanvasModel>>();
-    // PoC token 信号放在 App 级上下文：路由切换重建页面后值仍保留（仅内存）。
     let token = expect_context::<RwSignal<String>>();
     let params = use_params::<ChatParams>();
     let navigate = use_navigate();
@@ -248,7 +248,7 @@ pub fn ChatPage() -> impl IntoView {
                     "新对话"
                 </button>
                 <Show when=move || token.with(|value| value.is_empty())>
-                    <p class="chat-sessions-hint">"填写访问令牌后加载会话"</p>
+                    <p class="chat-sessions-hint" data-testid="session-auth-hint">"登录后即可加载会话"</p>
                 </Show>
                 <ul class="chat-session-items">
                     <For
@@ -297,19 +297,6 @@ pub fn ChatPage() -> impl IntoView {
             <main class="chat-canvas" aria-label="对话画布" data-testid="chat-canvas">
                 <header class="chat-header">
                     <h1 class="chat-title">"Context-OS 对话"</h1>
-                    <details class="poc-token">
-                        <summary>"PoC 访问令牌（仅内存，不持久化）"</summary>
-                        <label for="poc-token-input">"访问令牌"</label>
-                        <input
-                            id="poc-token-input"
-                            data-testid="poc-token-input"
-                            type="password"
-                            autocomplete="off"
-                            placeholder="留空则不携带 Authorization"
-                            prop:value=move || token.get()
-                            on:input=move |ev| token.set(event_target_value(&ev))
-                        />
-                    </details>
                 </header>
 
                 <section class="chat-transcript" aria-label="消息列表" data-testid="chat-transcript">
@@ -673,23 +660,4 @@ fn current_path() -> Option<String> {
 #[cfg(not(target_arch = "wasm32"))]
 fn current_path() -> Option<String> {
     None
-}
-
-/// 测试缝：隔离测试用显式 base URL；默认为空字符串（同源 /api/v1/chat）。
-/// 仅浏览器端读取内存态全局变量，不读取/持久化任何凭据。
-#[cfg(target_arch = "wasm32")]
-fn poc_api_base() -> String {
-    web_sys::window()
-        .and_then(|window| {
-            js_sys::Reflect::get(&window, &wasm_bindgen::JsValue::from_str("__POC_CHAT_API_BASE__"))
-                .ok()
-        })
-        .and_then(|value| value.as_string())
-        .map(|base| base.trim_end_matches('/').to_string())
-        .unwrap_or_default()
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-fn poc_api_base() -> String {
-    String::new()
 }

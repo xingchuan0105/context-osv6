@@ -11,6 +11,10 @@ leptos = { version = "0.8", features = ["ssr"] }
 leptos_axum = "0.8"
 leptos_config = "0.8"
 web-ui = { path = "../web-ui" }
+tower = { version = "0.5", features = ["util"] }
+tower-http = { version = "0.6", features = ["fs", "set-header"] }
+flate2 = "1"
+brotli = "8"
 
 [features]
 default = ["ssr"]

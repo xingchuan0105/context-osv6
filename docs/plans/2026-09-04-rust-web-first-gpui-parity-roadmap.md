@@ -85,9 +85,9 @@ contracts + web-sdk（SseDecoder / reducer / 会话 REST；无 DOM、无 GPUI、
 
 | 做 | 验证门 |
 |---|---|
-| 浏览器凭据 adapter：与 `frontend_next/lib/auth/client.ts` 同一 token / session 存储与 auth-hint 可观察行为，替换 PoC「访问令牌」输入框 | Playwright：Next 登录后打开 Rust `/chat` 直接有会话列表 |
-| `web-server` 静态：预压缩 `.br/.gz`、`application/wasm`、hash 文件名 + 长缓存 | gate0 harness `encoded_transfer_bytes` 复采（观察） |
-| route manifest：`routes.rs` 扩成 route family 表（render mode / auth / noindex）；测试对 `frontend_next/lib/navigation/nav-config.ts` 做 parity 检查 | `cargo test -p web-ui` |
+| 浏览器凭据 adapter：与 Next `avrag.auth.v1` / `avrag.auth.session` / `avrag.auth.persisted` 同键；bootstrap `GET /api/auth/me`（3s）；去掉 PoC token 框 | Playwright：同键存储水合后 `/chat` 出现会话列表（`chat-journey` W1） |
+| `web-server` 静态：启动时预压缩 `.br/.gz`、`/pkg` 长缓存；`hash-files = true` | gate0 harness `encoded_transfer_bytes` 复采（观察，另跑） |
+| route manifest：`ROUTE_FAMILIES`（render / auth / noindex）；`nav_parity_tests` 对 `nav-config.ts` | `cargo test -p web-ui` |
 | cos-tokens 同步已进 `sync.sh`；`style_baseline_guard.rs` 守卫保持 | 已有 |
 
 ### W2 完整 Chat-first 垂直切片（设计 §7 十二条不变量）

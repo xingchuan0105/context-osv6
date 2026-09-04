@@ -1,10 +1,14 @@
 import { test, expect, type Page } from '@playwright/test';
+import { seedNextAuth } from './auth-seed';
 
 const WEB_BASE = `http://127.0.0.1:${Number(process.env.POC_WEB_PORT || 3200)}`;
 const FIXTURE_BASE = `http://127.0.0.1:${Number(process.env.POC_FIXTURE_PORT || 3201)}`;
 
 // 每个用例独立注入测试用 API base（内存态全局变量，非 URL token、非持久化）。
-async function gotoChat(page: Page, apiBase: string, path = '/chat') {
+async function gotoChat(page: Page, apiBase: string, path = '/chat', token?: string) {
+  if (token) {
+    await seedNextAuth(page, token);
+  }
   await page.addInitScript((base) => {
     (window as unknown as { __POC_CHAT_API_BASE__: string }).__POC_CHAT_API_BASE__ = base;
   }, apiBase);
@@ -49,7 +53,9 @@ test.describe('SSR smoke（Gate D）', () => {
       expect(html).toContain('重试');
       // 不再是占位壳，且带 hydration 接线
       expect(html).not.toContain('Context-OS Chat PoC');
-      expect(html).toContain('/pkg/web_ui.js');
+      expect(html).toMatch(/\/pkg\/web_ui[^"']*\.js/);
+      expect(html).not.toContain('poc-token-input');
+      expect(html).not.toContain('访问令牌');
     }
     const healthz = await request.get(`${WEB_BASE}/healthz`);
     expect(await healthz.text()).toBe('ok');
@@ -67,6 +73,16 @@ test.describe('hydration（Gate D）', () => {
   });
 });
 
+test.describe('浏览器凭据（W1）', () => {
+  test('Next 同键存储水合后出现会话列表，且无 PoC token 框', async ({ page }) => {
+    await gotoChat(page, FIXTURE_BASE, '/chat', 'poc-test-token');
+    await expect(page.getByTestId('poc-token-input')).toHaveCount(0);
+    await expect(page.getByTestId('session-item')).toHaveCount(1);
+    await expect(page.getByTestId('session-item')).toContainText('夹具会话');
+    await expect(page.getByTestId('session-auth-hint')).toHaveCount(0);
+  });
+});
+
 test.describe('浏览器聊天旅程（Gate C/D）', () => {
   test.beforeEach(async ({ request }) => {
     await request.post(`${FIXTURE_BASE}/admin/reset`);
@@ -78,11 +94,8 @@ test.describe('浏览器聊天旅程（Gate C/D）', () => {
   }) => {
     const errors = collectPageErrors(page);
     // split=bytes&n=113：响应体被切成与 UTF-8 字符边界不对齐的网络包
-    await gotoChat(page, `${FIXTURE_BASE}/bytes/113`);
+    await gotoChat(page, `${FIXTURE_BASE}/bytes/113`, '/chat', 'poc-test-token');
 
-    // token 输入在折叠的 details 内，先展开再填（内存态非秘密值）
-    await page.locator('.poc-token summary').click();
-    await page.getByTestId('poc-token-input').fill('poc-test-token');
     await page.getByTestId('composer-input').fill('写一篇 3000 字以上的流式系统说明');
     await page.getByTestId('send-button').click();
 
