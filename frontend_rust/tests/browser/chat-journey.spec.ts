@@ -83,6 +83,74 @@ test.describe('浏览器凭据（W1）', () => {
   });
 });
 
+test.describe('助手 Markdown（W2）', () => {
+  test('标题与列表渲染，恶意 script / javascript: 不进 DOM', async ({ page }) => {
+    const errors = collectPageErrors(page);
+    await gotoChat(page, `${FIXTURE_BASE}/case/markdown`);
+    await page.getByTestId('composer-input').fill('markdown 清洗');
+    await page.getByTestId('send-button').click();
+
+    const live = page.getByTestId('live-answer');
+    await expect(page.getByTestId('status-line')).toHaveText('已完成', { timeout: 15_000 });
+    await expect(live.locator('h1')).toHaveText('标题');
+    await expect(live.locator('li')).toContainText('一项');
+    await expect(live).toContainText('安全段落');
+    await expect(live.locator('script')).toHaveCount(0);
+    await expect(live.locator('img')).toHaveCount(0);
+    await expect(live.locator('a[href^="javascript"]')).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+});
+
+test.describe('引用 chip 与来源卡（W2）', () => {
+  test('[[1]] 变成 chip，点击后高亮来源卡，脚本不进 DOM', async ({ page }) => {
+    const errors = collectPageErrors(page);
+    await gotoChat(page, `${FIXTURE_BASE}/case/citations`);
+    await page.getByTestId('composer-input').fill('引用清洗');
+    await page.getByTestId('send-button').click();
+
+    await expect(page.getByTestId('status-line')).toHaveText('已完成', { timeout: 15_000 });
+    const live = page.getByTestId('live-answer');
+    await expect(live).not.toContainText('[[1]]');
+    const chip = live.getByTestId('citation-chip');
+    await expect(chip).toHaveText('1');
+    await expect(live.locator('script')).toHaveCount(0);
+
+    const card = page.getByTestId('citations-region').getByTestId('citation-card');
+    await expect(card).toContainText('手册');
+    await expect(card).toContainText('背压与窗口');
+    await chip.click();
+    await expect(card).toHaveClass(/is-active/);
+    expect(errors).toEqual([]);
+  });
+});
+
+test.describe('进度与推理终态折叠（W2）', () => {
+  test('完成后进度收成一行，展开可见步骤；推理摘要默认合上', async ({ page }) => {
+    const errors = collectPageErrors(page);
+    await gotoChat(page, `${FIXTURE_BASE}/case/progress`);
+    await page.getByTestId('composer-input').fill('终态折叠');
+    await page.getByTestId('send-button').click();
+
+    await expect(page.getByTestId('status-line')).toHaveText('已完成', { timeout: 15_000 });
+    const activity = page.getByTestId('activity-region');
+    await expect(activity).toHaveAttribute('data-collapsed', 'true');
+    await expect(page.getByTestId('progress-toggle')).toContainText('思考完成');
+    await expect(page.getByTestId('activity-steps')).toHaveCount(0);
+
+    await page.getByTestId('progress-toggle').click();
+    await expect(activity).toHaveAttribute('data-collapsed', 'false');
+    await expect(page.getByTestId('activity-steps')).toContainText('组织短答');
+
+    const reasoning = page.getByTestId('reasoning-region');
+    await expect(reasoning).toContainText('因果链已对齐');
+    await expect(reasoning).toHaveJSProperty('open', false);
+    await reasoning.locator('summary').click();
+    await expect(reasoning).toHaveJSProperty('open', true);
+    expect(errors).toEqual([]);
+  });
+});
+
 test.describe('浏览器聊天旅程（Gate C/D）', () => {
   test.beforeEach(async ({ request }) => {
     await request.post(`${FIXTURE_BASE}/admin/reset`);
@@ -110,8 +178,9 @@ test.describe('浏览器聊天旅程（Gate C/D）', () => {
     // 完整答案：尾部 marker 出现且总长度 ≥3000 字
     const liveAnswer = page.getByTestId('live-answer');
     await expect(liveAnswer).toContainText('退化成早已演练过的常规操作。', { timeout: 60_000 });
-    const answerLength = await liveAnswer.evaluate((el) => (el.textContent || '').length);
-    expect(answerLength).toBeGreaterThanOrEqual(3000);
+    // Markdown 把源串里的空行收成 <p>，textContent.length 会短一截；完整性看 reducer 源字符数。
+    const sourceChars = Number(await liveAnswer.getAttribute('data-source-chars'));
+    expect(sourceChars).toBeGreaterThanOrEqual(3000);
     // 主气泡只含模型答案：不含 activity/trace 文案
     await expect(liveAnswer).not.toContainText('组织长篇回答');
     await expect(liveAnswer).not.toContainText('plan');

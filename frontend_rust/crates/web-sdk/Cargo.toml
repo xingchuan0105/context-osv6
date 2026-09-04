@@ -13,6 +13,7 @@ futures-util = { workspace = true }
 tokio-util = { workspace = true }
 async-stream = "0.3"
 futures-channel = "0.3"
+pulldown-cmark = { version = "0.13", default-features = false, features = ["html"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = { workspace = true }

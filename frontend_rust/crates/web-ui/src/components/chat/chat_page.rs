@@ -8,7 +8,10 @@ use leptos::prelude::*;
 use leptos_router::NavigateOptions;
 use leptos_router::hooks::{use_navigate, use_params};
 use leptos_router::params::Params;
-use web_sdk::{BrowserHttpTransport, BrowserRestClient, ChatClient};
+use web_sdk::{
+    BrowserHttpTransport, BrowserRestClient, ChatClient, CitationView, SourceCard,
+    activities_for_display, progress_folded, progress_summary_label, render_assistant_answer,
+};
 
 #[derive(Params, PartialEq, Clone, Debug)]
 struct ChatParams {
@@ -29,6 +32,15 @@ pub fn ChatPage() -> impl IntoView {
 
     let composer = RwSignal::new(String::new());
     let composer_ref = NodeRef::<leptos::html::Textarea>::new();
+    let active_cite = RwSignal::new(None::<String>);
+    provide_context(active_cite);
+    let progress_expanded = RwSignal::new(false);
+
+    Effect::new(move |_| {
+        if model.with(|m| matches!(m.live_turn().status, TurnStatus::Streaming)) {
+            progress_expanded.set(false);
+        }
+    });
 
     // 路由参数 → 会话绑定（仅客户端 Effect 执行）。
     // 与 Next use-chat-session 同规则：参数等于当前流刚确立的 session id 时
@@ -319,12 +331,17 @@ pub fn ChatPage() -> impl IntoView {
                     }>
                         <article class="chat-message chat-live" data-role="assistant">
                             <div
-                                class="chat-live-answer"
+                                class="chat-md chat-live-answer"
                                 aria-live="polite"
                                 data-testid="live-answer"
-                            >
-                                {move || model.with(|m| m.live_turn().answer_text.clone())}
-                            </div>
+                                data-source-chars=move || {
+                                    model
+                                        .with(|m| m.live_turn().answer_text.chars().count())
+                                        .to_string()
+                                }
+                                inner_html=move || live_rendered(&model).html
+                                on:click=move |ev| on_citation_chip_click(ev, active_cite)
+                            ></div>
                         </article>
                     </Show>
 
@@ -345,57 +362,130 @@ pub fn ChatPage() -> impl IntoView {
                         <section
                             class="chat-activity"
                             aria-label="进度"
-                            aria-live="polite"
+                            aria-live=move || {
+                                if model.with(|m| progress_folded(&m.live_turn().status)) {
+                                    "off"
+                                } else {
+                                    "polite"
+                                }
+                            }
+                            data-collapsed=move || {
+                                if model.with(|m| progress_folded(&m.live_turn().status))
+                                    && !progress_expanded.get()
+                                {
+                                    "true"
+                                } else {
+                                    "false"
+                                }
+                            }
                             data-testid="activity-region"
                         >
-                            <h2>"进度"</h2>
-                            <ul>
-                                <For
-                                    each=move || model.with(|m| m.live_turn().activities.clone())
-                                    key=|entry: &ActivityEntry| {
-                                        format!("{}:{}", entry.phase, entry.title)
+                            <Show when=move || {
+                                model.with(|m| progress_folded(&m.live_turn().status))
+                            }>
+                                <button
+                                    type="button"
+                                    class="chat-progress-toggle"
+                                    data-testid="progress-toggle"
+                                    aria-expanded=move || progress_expanded.get()
+                                    on:click=move |_| {
+                                        progress_expanded.update(|open| *open = !*open);
                                     }
-                                    children=move |entry| {
-                                        view! {
-                                            <li>
-                                                <span class="chat-activity-phase">{entry.phase}</span>
-                                                <span class="chat-activity-title">{entry.title}</span>
-                                                {entry.detail.map(|detail| view! {
-                                                    <span class="chat-activity-detail">{detail}</span>
-                                                })}
-                                            </li>
+                                >
+                                    <span class="chat-progress-summary">
+                                        {move || {
+                                            model.with(|m| {
+                                                progress_summary_label(&m.live_turn().status)
+                                                    .to_string()
+                                            })
+                                        }}
+                                    </span>
+                                    <span class="chat-progress-chevron" aria-hidden="true">
+                                        {move || {
+                                            if progress_expanded.get() { "▾" } else { "▸" }
+                                        }}
+                                    </span>
+                                </button>
+                            </Show>
+                            <Show when=move || {
+                                !model.with(|m| progress_folded(&m.live_turn().status))
+                            }>
+                                <h2>"进度"</h2>
+                            </Show>
+                            <Show when=move || {
+                                !model.with(|m| progress_folded(&m.live_turn().status))
+                                    || progress_expanded.get()
+                            }>
+                                <ul data-testid="activity-steps">
+                                    <For
+                                        each=move || {
+                                            model.with(|m| {
+                                                activities_for_display(&m.live_turn().activities)
+                                            })
                                         }
-                                    }
-                                />
-                            </ul>
+                                        key=|entry: &ActivityEntry| {
+                                            format!("{}:{}:{}", entry.phase, entry.title, entry.detail.as_deref().unwrap_or(""))
+                                        }
+                                        children=move |entry| {
+                                            view! {
+                                                <li>
+                                                    <span class="chat-activity-phase">{entry.phase}</span>
+                                                    <span class="chat-activity-title">{entry.title}</span>
+                                                    {entry.detail.map(|detail| view! {
+                                                        <span class="chat-activity-detail">{detail}</span>
+                                                    })}
+                                                </li>
+                                            }
+                                        }
+                                    />
+                                </ul>
+                            </Show>
                         </section>
                     </Show>
 
                     <Show when=move || model.with(|m| !m.live_turn().reasoning_summary.is_empty())>
-                        <section
-                            class="chat-reasoning"
-                            aria-label="推理摘要"
-                            data-testid="reasoning-region"
-                        >
-                            <h2>"推理摘要"</h2>
-                            <p>{move || model.with(|m| m.live_turn().reasoning_summary.clone())}</p>
-                        </section>
+                        {move || {
+                            let text = model.with(|m| m.live_turn().reasoning_summary.clone());
+                            if model.with(|m| progress_folded(&m.live_turn().status)) {
+                                view! {
+                                    <details
+                                        class="chat-reasoning"
+                                        aria-label="推理摘要"
+                                        data-testid="reasoning-region"
+                                    >
+                                        <summary>"推理摘要"</summary>
+                                        <p>{text}</p>
+                                    </details>
+                                }
+                                .into_any()
+                            } else {
+                                view! {
+                                    <section
+                                        class="chat-reasoning"
+                                        aria-label="推理摘要"
+                                        data-testid="reasoning-region"
+                                    >
+                                        <h2>"推理摘要"</h2>
+                                        <p>{text}</p>
+                                    </section>
+                                }
+                                .into_any()
+                            }
+                        }}
                     </Show>
 
-                    <Show when=move || model.with(|m| !m.live_turn().citations.is_empty())>
+                    <Show when=move || !live_rendered(&model).cards.is_empty()>
                         <section
                             class="chat-citations"
                             aria-label="引用"
                             data-testid="citations-region"
                         >
                             <h2>"引用"</h2>
-                            <ul>
+                            <ul class="chat-cite-cards">
                                 <For
-                                    each=move || model.with(|m| m.live_turn().citations.clone())
-                                    key=|citation| citation_key(citation)
-                                    children=move |citation| {
-                                        view! { <li>{citation_label(&citation)}</li> }
-                                    }
+                                    each=move || live_rendered(&model).cards
+                                    key=|card| card.key.clone()
+                                    children=move |card| source_card_view(card, active_cite)
                                 />
                             </ul>
                         </section>
@@ -460,6 +550,7 @@ fn session_label(session: &ChatSession) -> String {
 }
 
 fn message_view(message: ConversationMessage) -> impl IntoView {
+    let active_cite = expect_context::<RwSignal<Option<String>>>();
     let role = match message.role {
         MessageRole::User => "user",
         MessageRole::Assistant => "assistant",
@@ -469,22 +560,42 @@ fn message_view(message: ConversationMessage) -> impl IntoView {
         MessageRole::Assistant => "助手",
     };
     let reasoning = message.reasoning.clone();
-    let citations = message.citations.clone();
+    let rendered = if message.role == MessageRole::Assistant {
+        Some(render_message_answer(&message.content, &message.citations))
+    } else {
+        None
+    };
+    let html = rendered.as_ref().map(|value| value.html.clone());
+    let cards = rendered.map(|value| value.cards).unwrap_or_default();
     view! {
         <article class="chat-message" data-role=role data-testid="chat-message">
             <div class="chat-message-role">{role_label}</div>
-            <div class="chat-message-content">{message.content}</div>
+            {if let Some(html) = html {
+                view! {
+                    <div
+                        class="chat-md chat-message-content"
+                        inner_html=html
+                        on:click=move |ev| on_citation_chip_click(ev, active_cite)
+                    ></div>
+                }
+                .into_any()
+            } else {
+                view! {
+                    <div class="chat-message-content">{message.content}</div>
+                }
+                .into_any()
+            }}
             {reasoning.map(|text| view! {
                 <details class="chat-message-reasoning">
                     <summary>"推理摘要"</summary>
                     <p>{text}</p>
                 </details>
             })}
-            {(!citations.is_empty()).then(|| view! {
-                <ul class="chat-message-citations">
-                    {citations
-                        .iter()
-                        .map(|citation| view! { <li>{citation_label(citation)}</li> })
+            {(!cards.is_empty()).then(|| view! {
+                <ul class="chat-cite-cards chat-message-citations">
+                    {cards
+                        .into_iter()
+                        .map(|card| source_card_view(card, active_cite))
                         .collect::<Vec<_>>()}
                 </ul>
             })}
@@ -502,35 +613,92 @@ fn status_line(model: &ChatCanvasModel) -> &'static str {
     }
 }
 
-fn citation_key(citation: &serde_json::Value) -> String {
-    citation
-        .get("citation_id")
-        .and_then(serde_json::Value::as_i64)
-        .map(|id| format!("id:{id}"))
-        .or_else(|| {
-            citation
-                .get("chunk_id")
-                .and_then(serde_json::Value::as_str)
-                .map(|id| format!("chunk:{id}"))
-        })
-        .unwrap_or_else(|| citation_label(citation))
+fn live_rendered(model: &RwSignal<ChatCanvasModel>) -> web_sdk::RenderedAnswer {
+    model.with(|m| render_message_answer(&m.live_turn().answer_text, &m.live_turn().citations))
 }
 
-fn citation_label(citation: &serde_json::Value) -> String {
-    let name = citation
-        .get("doc_name")
-        .or_else(|| citation.get("title"))
-        .and_then(serde_json::Value::as_str)
-        .unwrap_or("来源");
-    let preview = citation
-        .get("preview")
-        .and_then(serde_json::Value::as_str)
-        .filter(|value| !value.is_empty());
-    match preview {
-        Some(preview) => format!("{name} — {preview}"),
-        None => name.to_string(),
+fn render_message_answer(text: &str, citations: &[serde_json::Value]) -> web_sdk::RenderedAnswer {
+    let cites: Vec<CitationView> = citations.iter().map(CitationView::from_value).collect();
+    render_assistant_answer(text, &cites)
+}
+
+fn source_card_view(card: SourceCard, active_cite: RwSignal<Option<String>>) -> impl IntoView {
+    let key = card.key.clone();
+    let key_attr = card.key.clone();
+    let seq = card.seq.to_string();
+    let title = card.title.clone();
+    let preview = card.preview.clone();
+    let href = card.href.clone();
+    let tombstone = card.tombstone;
+    view! {
+        <li
+            class=move || {
+                if active_cite.get().as_deref() == Some(key.as_str()) {
+                    "chat-cite-card is-active"
+                } else {
+                    "chat-cite-card"
+                }
+            }
+            data-cite-card=key_attr
+            data-testid="citation-card"
+        >
+            <span class="chat-cite-card-seq">{seq}</span>
+            <div class="chat-cite-card-body">
+                <div class="chat-cite-card-title">{title}</div>
+                {(!preview.is_empty()).then(|| view! {
+                    <p class="chat-cite-card-preview">{preview}</p>
+                })}
+                {href.map(|href| view! {
+                    <a class="chat-cite-card-link" href=href rel="noopener noreferrer" target="_blank">
+                        "打开来源"
+                    </a>
+                })}
+                {tombstone.then(|| view! {
+                    <p class="chat-cite-card-tombstone">"来源已删除"</p>
+                })}
+            </div>
+        </li>
     }
 }
+
+fn on_citation_chip_click(ev: leptos::ev::MouseEvent, active_cite: RwSignal<Option<String>>) {
+    let Some(key) = citation_key_from_click(&ev) else {
+        return;
+    };
+    active_cite.set(Some(key.clone()));
+    scroll_cite_card(&key);
+}
+
+#[cfg(target_arch = "wasm32")]
+fn citation_key_from_click(ev: &leptos::ev::MouseEvent) -> Option<String> {
+    use wasm_bindgen::JsCast;
+    let target = ev.target()?.dyn_into::<web_sys::Element>().ok()?;
+    let chip = target.closest("[data-cite-key]").ok()??;
+    chip.get_attribute("data-cite-key")
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn citation_key_from_click(_ev: &leptos::ev::MouseEvent) -> Option<String> {
+    None
+}
+
+#[cfg(target_arch = "wasm32")]
+fn scroll_cite_card(key: &str) {
+    let Some(window) = web_sys::window() else {
+        return;
+    };
+    let Some(document) = window.document() else {
+        return;
+    };
+    let escaped = key.replace('\\', "\\\\").replace('"', "\\\"");
+    let Ok(Some(card)) = document.query_selector(&format!("[data-cite-card=\"{escaped}\"]")) else {
+        return;
+    };
+    card.scroll_into_view_with_bool(true);
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn scroll_cite_card(_key: &str) {}
 
 fn focus_composer(composer_ref: NodeRef<leptos::html::Textarea>) {
     if let Some(element) = composer_ref.get() {

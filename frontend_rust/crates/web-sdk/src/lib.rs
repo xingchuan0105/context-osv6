@@ -5,6 +5,9 @@ pub mod browser_transport;
 pub mod client;
 pub mod conversation_api;
 pub mod fixture_transport;
+pub mod citations;
+pub mod markdown;
+pub mod progress;
 pub mod reducer;
 pub mod sse_decoder;
 pub mod transport;
@@ -26,6 +29,9 @@ pub use conversation_api::{
     session_url, sessions_url, trim_base_url,
 };
 pub use fixture_transport::FixtureTransport;
+pub use citations::{CitationView, RenderedAnswer, SourceCard, render_assistant_answer};
+pub use markdown::render_assistant_markdown;
+pub use progress::{activities_for_display, progress_folded, progress_summary_label};
 pub use reducer::{
     ActivityEntry, ChatTurnState, TurnStatus, event_request_id, reduce_chat_event,
 };

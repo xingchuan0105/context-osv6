@@ -4,6 +4,9 @@
 // - POST /case/401/api/v1/chat   → 401 JSON 错误
 // - POST /case/bad-json/api/v1/chat → 200 但第一帧即坏 JSON
 // - POST /case/slow/api/v1/chat  → start 后慢速 token 流，永不主动结束（验证 stop/abort）
+// - POST /case/markdown/api/v1/chat → 含标题/列表/恶意 HTML 的短答案（W2 Markdown）
+// - POST /case/citations/api/v1/chat → 含 [[1]] marker 与 citations 事件（W2 引用）
+// - POST /case/progress/api/v1/chat → 一条 activity + reasoning，短答案（W2 终态折叠）
 // - GET  /admin/state            → { aborted, requests, bytesWritten }
 // - POST /admin/reset            → 重置上述状态
 // CORS 全放行（页面与夹具不同源，Authorization 头触发预检）。
@@ -96,6 +99,187 @@ function streamFixture(req, res, url) {
       writePiece(res, '\n\n');
     }
   }, CHUNK_DELAY_MS);
+}
+
+function streamMarkdown(req, res) {
+  sseHead(res);
+  const body = [
+    '# 标题',
+    '',
+    '- 一项',
+    '',
+    '<script>alert(1)</script>',
+    '<img src=x onerror="alert(1)">',
+    '[xss](javascript:alert(1))',
+    '',
+    '安全段落。',
+  ].join('\n');
+  writePiece(
+    res,
+    `event: start\ndata: ${JSON.stringify({ request_id: 'req-md-1', session_id: 'sess-md-1' })}\n\n`,
+  );
+  writePiece(
+    res,
+    `event: answer_start\ndata: ${JSON.stringify({
+      request_id: 'req-md-1',
+      session_id: 'sess-md-1',
+      message_id: 41,
+      agent_type: 'chat',
+    })}\n\n`,
+  );
+  writePiece(
+    res,
+    `event: token\ndata: ${JSON.stringify({
+      request_id: 'req-md-1',
+      message_id: 41,
+      content: body,
+    })}\n\n`,
+  );
+  // Done 的 answer 会覆盖流式文本；必须带同一份 Markdown，不能写成 "ok"。
+  writePiece(
+    res,
+    `event: done\ndata: ${JSON.stringify({
+      request_id: 'req-md-1',
+      session_id: 'sess-md-1',
+      message_id: 41,
+      payload: {
+        answer: body,
+        answer_blocks: [],
+        session_id: 'sess-md-1',
+        agent_type: 'chat',
+        sources: [],
+        citations: [],
+        trace: { mode: 'chat' },
+        degrade_trace: [],
+      },
+    })}\n\n`,
+  );
+  res.end();
+}
+
+function streamProgress(req, res) {
+  sseHead(res);
+  const body = '短答案。';
+  writePiece(
+    res,
+    `event: start\ndata: ${JSON.stringify({ request_id: 'req-prog-1', session_id: 'sess-prog-1' })}\n\n`,
+  );
+  writePiece(
+    res,
+    `event: answer_start\ndata: ${JSON.stringify({
+      request_id: 'req-prog-1',
+      session_id: 'sess-prog-1',
+      message_id: 61,
+      agent_type: 'chat',
+    })}\n\n`,
+  );
+  writePiece(
+    res,
+    `event: activity\ndata: ${JSON.stringify({
+      request_id: 'req-prog-1',
+      phase: 'compose',
+      title: '组织短答',
+      detail: '先列要点',
+    })}\n\n`,
+  );
+  writePiece(
+    res,
+    `event: reasoning_summary_delta\ndata: ${JSON.stringify({
+      request_id: 'req-prog-1',
+      message_id: 61,
+      content: '因果链已对齐。',
+    })}\n\n`,
+  );
+  writePiece(
+    res,
+    `event: token\ndata: ${JSON.stringify({
+      request_id: 'req-prog-1',
+      message_id: 61,
+      content: body,
+    })}\n\n`,
+  );
+  writePiece(
+    res,
+    `event: done\ndata: ${JSON.stringify({
+      request_id: 'req-prog-1',
+      session_id: 'sess-prog-1',
+      message_id: 61,
+      payload: {
+        answer: body,
+        answer_blocks: [],
+        session_id: 'sess-prog-1',
+        agent_type: 'chat',
+        sources: [],
+        citations: [],
+        trace: { mode: 'chat' },
+        degrade_trace: [],
+      },
+    })}\n\n`,
+  );
+  res.end();
+}
+
+function streamCitations(req, res) {
+  sseHead(res);
+  const body = '结论见 [[1]]。\n\n<script>alert(1)</script>\n\n安全段落。';
+  const citations = [
+    {
+      citation_id: 1,
+      doc_id: 'doc-handbook',
+      chunk_id: 'chunk-a',
+      doc_name: '手册',
+      preview: '背压与窗口',
+      score: 0.6,
+    },
+  ];
+  writePiece(
+    res,
+    `event: start\ndata: ${JSON.stringify({ request_id: 'req-cite-1', session_id: 'sess-cite-1' })}\n\n`,
+  );
+  writePiece(
+    res,
+    `event: answer_start\ndata: ${JSON.stringify({
+      request_id: 'req-cite-1',
+      session_id: 'sess-cite-1',
+      message_id: 51,
+      agent_type: 'chat',
+    })}\n\n`,
+  );
+  writePiece(
+    res,
+    `event: citations\ndata: ${JSON.stringify({
+      request_id: 'req-cite-1',
+      message_id: 51,
+      citations,
+    })}\n\n`,
+  );
+  writePiece(
+    res,
+    `event: token\ndata: ${JSON.stringify({
+      request_id: 'req-cite-1',
+      message_id: 51,
+      content: body,
+    })}\n\n`,
+  );
+  writePiece(
+    res,
+    `event: done\ndata: ${JSON.stringify({
+      request_id: 'req-cite-1',
+      session_id: 'sess-cite-1',
+      message_id: 51,
+      payload: {
+        answer: body,
+        answer_blocks: [],
+        session_id: 'sess-cite-1',
+        agent_type: 'chat',
+        sources: [],
+        citations,
+        trace: { mode: 'chat' },
+        degrade_trace: [],
+      },
+    })}\n\n`,
+  );
+  res.end();
 }
 
 function streamSlow(req, res) {
@@ -225,6 +409,18 @@ const server = http.createServer((req, res) => {
       }
       if (url.pathname === '/case/slow/api/v1/chat') {
         streamSlow(req, res);
+        return;
+      }
+      if (url.pathname === '/case/markdown/api/v1/chat') {
+        streamMarkdown(req, res);
+        return;
+      }
+      if (url.pathname === '/case/citations/api/v1/chat') {
+        streamCitations(req, res);
+        return;
+      }
+      if (url.pathname === '/case/progress/api/v1/chat') {
+        streamProgress(req, res);
         return;
       }
       if (url.pathname === '/api/v1/chat') {
