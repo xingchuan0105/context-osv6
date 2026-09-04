@@ -79,7 +79,7 @@ contracts + web-sdk（SseDecoder / reducer / 会话 REST；无 DOM、无 GPUI、
 
 1. 分两笔本地 commit（§0）。
 2. **已做。** 删 Tauri CSR 死路径（§1.3 第一条）；取消与 native `Unavailable` 覆盖改到 `transport_adapter_tests.rs`。ADR-0011 已注记。
-3. 验证：`cargo test -p web-sdk`、`cargo test -p web-ui`（WSL，约 1–2 min）；`cargo check -p web-ui --target wasm32-unknown-unknown --features hydrate`（约 1 min）；`code-review-graph update`。
+3. **已做。** `cargo test -p web-sdk` 23 绿；`cargo test -p web-ui` 38 绿（含 `transport_adapter_tests` 2）；`cargo check -p web-ui --target wasm32-unknown-unknown --features hydrate` 通过；`code-review-graph update` 已跑。
 
 ### W1 基础平台（只做 W2 需要的）
 

@@ -12,6 +12,7 @@
 - **计费**：B2C 用户级；渠道 **Creem + Alipay**（Stripe 已移除）；**现行商业模式见 ADR-0010**（可分享 Workspace 名额 + 代购储值）；旧 token 滚动套餐 / 桌面买断见已取代 ADR-0004
 - **检索桥**：沙箱↔宿主 fd 管道 RPC（`adr/0009-retrieval-bridge.md`）
 - **代码情报工具**：code-review-graph（graphify 已退役，`agent/code-review-graph.md`）
+- **在线 / 桌面 UI 目标态（2026-09-04）**：在线 Leptos + Axum；桌面 Windows / macOS / Linux 均为 GPUI。见 `adr/0011-rust-web-gpui-desktop.md`（晚间修订：在线优先、GPUI 全量对等）。现网仍是 Next + Tauri WebView，直到对等后删除。下一棒入口：`plans/2026-09-04-rust-web-first-gpui-parity-roadmap.md`。
 
 ## 当前权威文档（living references）
 
@@ -29,6 +30,8 @@
 | `engineering/PROFILE_MEMORY_SCOPE_CHAT_SEARCH.md` | 产品决策：profile memory 仅 Chat+Search |
 | `engineering/DEEPSEEK_STYLE_USAGE_BILLING_DESIGN_2026-07-13.md` | 旧 token 套餐用量语义（frozen）；**主商品已由 ADR-0010 翻转**，事件/计量可复用为钱包流水 |
 | `adr/0010-share-service-business-model.md` | **现行商业模式**：可分享 Workspace 订阅、代购×1.5、邀请码、本地 Publish 上云 |
+| `adr/0011-rust-web-gpui-desktop.md` | **在线 Leptos + 桌面全平台 GPUI**（取代 Tauri CSR 共用 UI；Gate 0 只观察） |
+| `plans/2026-09-04-rust-web-first-gpui-parity-roadmap.md` | **现行下一棒 / 路线图**：审核结论（完成度 / BUG / drift / gap）+ 轨道 W（在线 Leptos，优先）+ 轨道 D（`desktop-core` 抽库 → GPUI 全量对等） |
 | `design/STYLE_BASELINE.md` | 现行视觉基线（Slate × Indigo，Canonical） |
 | `design/PRODUCT_IA.md` | **登录后产品信息架构 v2 · Chat-first**（Jobs / Sitemap / Canonical / Shell；改导航前必读） |
 | `design/PRODUCT_IA_AUDIT.md` | 产品 IA 审计（Path A 历史基线 + Chat-first v2 增补） |
@@ -59,6 +62,7 @@
 
 ## 进行中的计划
 
+- `plans/2026-09-04-rust-web-first-gpui-parity-roadmap.md` — **在线 Rust 优先 + 桌面 GPUI 全量对等路线图**（Step 0 删 Tauri CSR 死路径 → W1/W2 在线 Chat-first → D0 `desktop-core` 抽库 → D1–D6 GPUI）；GPUI 第一刀交接 `plans/2026-09-04-rust-web-gpui-desktop-handoff.md` 转历史
 - `plans/2026-08-18-security-remediation-plan.md` — **AI 产品安全修补**（W0–W5 代码在工作区；P2-14 延期）
 - `plans/2026-08-18-security-review-fixes.md` — **W0–W5 审查修复**（F1–F3 已落地；`--lib` 已过）
 - `plans/2026-08-13-windows-desktop-client-e2e-journey-design.md` — **Windows 桌面客户端打包本机 E2E**（默认套件 shell+ingest；全量旅程锁在产品对齐后；L0 / Windows Playwright+独立 config / L2；`llm-config.json` vs `user_provider_secrets`）。PR-3 交接见 [`plans/2026-08-14-windows-desktop-client-e2e-pr3-handoff.md`](plans/2026-08-14-windows-desktop-client-e2e-pr3-handoff.md)；**产品对齐（PR-4/PR-5）+ 真机验收交接**见 [`plans/2026-08-14-windows-desktop-client-acceptance-handoff.md`](plans/2026-08-14-windows-desktop-client-acceptance-handoff.md)
@@ -76,6 +80,7 @@
 | `adr/0003-router-policy-removal-and-auto-mode-subagents.md` | RouterPolicy 移除 | **部分取代**：删除决定有效；orchestrator+subagents 前瞻方向已被 SaC 单 agent 取代（文首有横幅） |
 | `adr/0004-desktop-hybrid-business-model.md` | （文内题 "ADR 0003"）桌面混合商业模式 | **已被 ADR-0010 取代**（客户端买断 + SaaS token） |
 | `adr/0010-share-service-business-model.md` | 分享服务商业模式 | **现行** Accepted（2026-08-05） |
+| `adr/0011-rust-web-gpui-desktop.md` | 在线 Rust 前端 + 桌面全平台 GPUI | **现行** Accepted（2026-09-04） |
 | `adr/0005-llm-provider-protocol-architecture.md` | （文内题 "ADR 0004"）LLM 四轴协议架构 | **现行**，Accepted（已实施） |
 | `adr/0006-product-architecture-decisions-post-tn.md` | TN 后 13 条产品/架构裁决 | **现行**，最常被引用的决策文档 |
 | `adr/0006-execute-plan-removal-inventory.md` | execute-plan 删除清单 | 已完成快照 |
@@ -88,7 +93,7 @@
 - 存在三个编号 0006 的文件（post-tn / execute-plan / write-heavytail）。
 - `0004-desktop-*.md` 文内标题为 "ADR 0003"、`0005-llm-*.md` 文内标题为 "ADR 0004"：历史编号碰撞，e2e 语料与审计文档引用了 "ADR-0004"，改名会破坏引用，故保留（决策见 `plans/2026-08-02-architecture-deepening-plan.md` §5）。
 - 无 0008。
-- `0010-share-service-business-model.md` 已占用；新增 ADR 请使用 **0011** 起的编号。
+- `0010-share-service-business-model.md` 已占用；`0011` 已用于在线 Rust + GPUI 桌面。新增 ADR 请使用 **0012** 起的编号。
 
 ## 已被取代（文首有 SUPERSEDED 横幅，仅作历史记录）
 
