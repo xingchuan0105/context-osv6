@@ -1,7 +1,7 @@
 use crate::reducer::{ChatTurnState, TurnStatus, reduce_chat_event};
 use crate::session::{ConversationManager, MessageRole};
 use contracts::chat::{ChatEvent, ChatRequest};
-use web_sdk::Cancellation;
+use web_sdk::{Cancellation, TransportError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct StreamScope {
@@ -71,7 +71,7 @@ impl ChatCanvasModel {
                 workspace_id: self.manager.active.workspace_id.clone(),
                 session_id: self.manager.active.session_id.clone(),
                 agent_type: "chat".to_string(),
-                capabilities: None,
+                capabilities: Some(vec![]),
                 client_context: None,
                 client_ip: None,
                 source_type: None,
@@ -193,6 +193,32 @@ impl ChatCanvasModel {
         Some(self.prepare_user_turn(&last_user_query))
     }
 
+    /// Transport 层失败（HTTP 非 2xx、断流、坏帧、取消）进入可恢复终态。
+    /// 与 on_event 相同的 scope 校验：旧流的迟到失败不能改写新 turn；
+    /// 已达终态的 turn 不被覆盖。
+    pub fn on_transport_error(&mut self, stream_scope: StreamScope, error: TransportError) -> bool {
+        if self.active_stream_scope != Some(stream_scope)
+            || stream_scope.conversation_epoch != self.manager.conversation_epoch
+        {
+            return false;
+        }
+        if self.live_turn.status.is_terminal() {
+            return false;
+        }
+
+        if matches!(error, TransportError::Cancelled) {
+            self.live_turn.status = TurnStatus::Cancelled;
+        } else {
+            self.live_turn.status = TurnStatus::Error {
+                code: transport_error_code(&error).to_string(),
+                message: error.to_string(),
+            };
+        }
+        self.cancellation = None;
+        self.active_stream_scope = None;
+        true
+    }
+
     fn invalidate_active_stream(&mut self) {
         if let Some(cancel) = self.cancellation.take() {
             cancel.cancel();
@@ -205,5 +231,23 @@ impl ChatCanvasModel {
 impl Default for ChatCanvasModel {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+fn transport_error_code(error: &TransportError) -> &'static str {
+    match error {
+        TransportError::Network(_) => "network",
+        TransportError::Unauthorized => "unauthorized",
+        TransportError::Forbidden(_) => "forbidden",
+        TransportError::PaymentRequired(_) => "payment_required",
+        TransportError::RateLimited => "rate_limited",
+        TransportError::HttpStatus { .. } => "http_status",
+        TransportError::EmptyBody => "empty_body",
+        TransportError::Interrupted(_) => "interrupted",
+        TransportError::HeartbeatTimeout => "heartbeat_timeout",
+        TransportError::Framing(_) => "framing",
+        TransportError::Serialization(_) => "serialization",
+        TransportError::Cancelled => "cancelled",
+        TransportError::Unavailable(_) => "unavailable",
     }
 }

@@ -7,8 +7,9 @@ license.workspace = true
 [dependencies]
 axum = { version = "0.8", default-features = false, features = ["tokio", "http1"] }
 tokio = { workspace = true }
-tower = "0.5"
-tower-http = { version = "0.6", features = ["fs", "trace"] }
+leptos = { version = "0.8", features = ["ssr"] }
+leptos_axum = "0.8"
+leptos_config = "0.8"
 web-ui = { path = "../web-ui" }
 
 [features]

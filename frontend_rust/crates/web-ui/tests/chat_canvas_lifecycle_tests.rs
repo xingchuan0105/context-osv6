@@ -525,3 +525,89 @@ fn test_workspace_switch_preserves_model_role() {
     canvas.switch_to_workspace("ws-team", Some("sess-ws"));
     assert_eq!(canvas.manager().active.model_role, "agent");
 }
+
+#[test]
+fn test_transport_error_enters_recoverable_error_state() {
+    let mut canvas = ChatCanvasModel::new();
+    let turn = canvas.prepare_user_turn("一次会失败的提问");
+    assert!(canvas.on_transport_error(
+        turn.stream_scope,
+        web_sdk::TransportError::Unauthorized
+    ));
+    match &canvas.live_turn().status {
+        TurnStatus::Error { code, message } => {
+            assert_eq!(code, "unauthorized");
+            assert!(message.contains("401"));
+        }
+        other => panic!("expected Error, got {other:?}"),
+    }
+    // transport 失败后流句柄已清理，可以立即重试
+    let retry = canvas.retry_last().expect("user message retryable");
+    assert!(canvas.is_streaming());
+    assert_ne!(turn.stream_scope, retry.stream_scope);
+}
+
+#[test]
+fn test_late_transport_error_from_old_scope_is_ignored() {
+    let mut canvas = ChatCanvasModel::new();
+    let stale = canvas.prepare_user_turn("第一轮");
+    let current = canvas.prepare_user_turn("第二轮");
+    assert!(!canvas.on_transport_error(
+        stale.stream_scope,
+        web_sdk::TransportError::Network("old connection reset".to_string())
+    ));
+    assert!(canvas.is_streaming());
+    assert!(!matches!(
+        canvas.live_turn().status,
+        TurnStatus::Error { .. }
+    ));
+    assert!(canvas.on_transport_error(
+        current.stream_scope,
+        web_sdk::TransportError::RateLimited
+    ));
+    assert!(matches!(
+        canvas.live_turn().status,
+        TurnStatus::Error { .. }
+    ));
+}
+
+#[test]
+fn test_transport_error_does_not_override_terminal_state() {
+    let mut canvas = ChatCanvasModel::new();
+    let turn = canvas.prepare_user_turn("先完成的提问");
+    canvas.on_event(
+        turn.stream_scope,
+        ChatEvent::Start {
+            request_id: "srv-req-x".to_string(),
+            session_id: "sess-x".to_string(),
+        },
+    );
+    canvas.on_event(
+        turn.stream_scope,
+        ChatEvent::Done {
+            request_id: "srv-req-x".to_string(),
+            session_id: "sess-x".to_string(),
+            message_id: 1,
+            payload: done_payload("已定稿"),
+        },
+    );
+    assert!(!canvas.on_transport_error(
+        turn.stream_scope,
+        web_sdk::TransportError::Interrupted("late abort".to_string())
+    ));
+    assert!(matches!(canvas.live_turn().status, TurnStatus::Done));
+}
+
+#[test]
+fn test_quick_chat_request_contract_shape() {
+    let mut canvas = ChatCanvasModel::new();
+    let turn = canvas.prepare_user_turn("契约形态检查");
+    assert_eq!(turn.request.workspace_id, None);
+    assert_eq!(turn.request.session_id, None);
+    assert_eq!(turn.request.agent_type, "chat");
+    assert_eq!(turn.request.capabilities, Some(vec![]));
+    assert!(turn.request.stream);
+    let json = serde_json::to_value(&turn.request).unwrap();
+    assert!(json.get("model_role").is_none());
+    assert!(json.get("request_id").is_none());
+}

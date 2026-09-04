@@ -2,8 +2,8 @@
 
 | 字段 | 内容 |
 |---|---|
-| 日期 | 2026-09-03 |
-| 状态 | **Phase 0 PoC 骨架；本轮静态修正与代码级验证通过；Gate 0 仍为 NO-GO** |
+| 日期 | 2026-09-03；2026-09-04 更新（浏览器垂直切片完成） |
+| 状态 | **Phase 0 浏览器垂直切片已完成（真实 Fetch/SSE + Leptos SSR/hydration，浏览器证据齐全）；Gate 0 仍为 NO-GO** |
 | 关联权威设计 | [`2026-09-03-frontend-rust-migration-design.md`](2026-09-03-frontend-rust-migration-design.md) |
 | 实施编排计划 | [`2026-09-03-frontend-rust-migration-implementation-plan.md`](2026-09-03-frontend-rust-migration-implementation-plan.md) |
 | 性能实测报告 | [`2026-09-03-phase-0-benchmark-report.md`](2026-09-03-phase-0-benchmark-report.md)（Gate 0 NO-GO） |
@@ -39,7 +39,16 @@
 - `CancellationToken` 当前只支撑本地句柄传播与 fixture/mock 的协作式取消。
 - Browser Fetch/SSE 和真实 Tauri IPC 尚未实现；两个 adapter 在无 fixture 时明确返回 `TransportError::Unavailable`，不再以空流伪装成功，也不宣称已具备真实 I/O abort。
 
-### 2.4 回归用例源码
+### 2.4 浏览器垂直切片（2026-09-04 新增，已完成）
+
+- `web-sdk` 新增平台中立增量 SSE decoder（`sse_decoder.rs`）：UTF-8 跨 chunk、`\n`/`\r\n`、多行 `data:`、keepalive、EOF 无尾空行、缺 `event:`/空 `data:`/未知事件/坏 JSON 全部为 typed error；`events_from_byte_stream` 是浏览器与测试共用的消费回路，坏帧恰好报错一次并终止。
+- `BrowserHttpTransport` wasm32 路径为真实实现：Fetch + ReadableStream 逐块消费、非 2xx 前置映射、`AbortController` 真实取消、drop 释放资源；native 保持 `Unavailable`。流类型按 target 收窄 `Send` 约束，不伪装线程安全。
+- `web-ui` 是真实 Leptos 0.8 应用（SSR + hydration），`/chat` 与 `/chat/:sessionId` 共用 ChatPage；App 级 `ChatCanvasModel` 上下文，session id 落地后 `replace` 导航且不打断流；stop/retry/错误/焦点恢复均有浏览器旅程断言。`capabilities: Some([])` 明确纯 Quick Chat。
+- `web-server` 改为 `leptos_axum` SSR；配置唯一源为 `frontend_rust/Cargo.toml` 的 `[[workspace.metadata.leptos]]`（`Leptos.toml` 已删除）。
+- 新夹具 `stream-long-3000.chunks.json`：脱敏、确定性、3013 字、97 个显式 chunk；decoder→reducer 与 fixture transport→reducer 终态一致（parity 测试锚定）。
+- 详细验证证据见 `2026-09-04-frontend-rust-phase-0-browser-vertical-slice-task.md` §10。
+
+### 2.5 回归用例源码
 
 本轮新增或加强了以下边界用例：旧流 `Start` 抢占、新 turn 自动取消旧 token、切换 Conversation 前置隔离、Error-only、Error 后 cancel、重复 Done、空最终答案、`answer_blocks` 回退、引用正文保留、session_id 跨轮传递与 canonical route。
 
@@ -52,13 +61,19 @@
 - `code-review-graph` clean rebuild：全图 2356 files / 18331 nodes / 197591 edges；直接 `frontend_rust` 子树 19 个源码文件 / 118 个节点；已删除的 `static_assets.rs` 节点计数为 0。
 - `git diff --cached --check`：通过。
 
+### 3.1 浏览器垂直切片验证（2026-09-04）
+
+- `cargo test -p web-sdk`：17 passed / 0 failed；`-p web-ui`：30 passed / 0 failed；`-p web-server`：编译通过。
+- wasm32 hydrate check（`web-sdk` + `web-ui --features hydrate`）：通过。`contracts` `ts-rs` warning 依旧存在，如实保留。
+- `cargo leptos build`（dev）与 `cargo leptos build --release`（含 wasm-opt）：均构建成功；release 产物启动 smoke 通过（SSR 表单语义、`/pkg/*` 产物、`/healthz`）。
+- Playwright（chromium，真实浏览器 + 受控 SSE 测试服务器）：7 passed / 0 failed，覆盖 SSR smoke、hydration、字节级乱序分块完整渲染、真实取消（服务端观测 abort）、401/坏 JSON 错误态、retry 新流隔离。
+- live backend smoke 未执行（本机 8081 未运行后端）。
+
 ## 4. Gate 0 仍为 NO-GO
 
 以下阻断项仍未完成：
 
-- 可运行的 Leptos SSR/hydration/CSR UI；
-- 真实 Browser Fetch/SSE 与 Tauri IPC adapter，包括真实取消；
-- 3000+ 字复杂会话与真实异常网络夹具；
+- 真实 Tauri IPC adapter 与 Tauri CSR 产物（浏览器 Fetch/SSE 已完成）；
 - Headless 浏览器 LCP、绘制延迟、掉帧、Heap 与无障碍数据；
 - 与优化后 Next.js 在同机、同浏览器、同网络条件下的对照记录。
 

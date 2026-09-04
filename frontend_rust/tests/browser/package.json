@@ -1,0 +1,10 @@
+{
+  "name": "frontend-rust-browser-tests",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Phase 0 browser vertical-slice acceptance tests (Playwright)",
+  "devDependencies": {
+    "@playwright/test": "1.53.0"
+  }
+}

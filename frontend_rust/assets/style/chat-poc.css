@@ -1,0 +1,205 @@
+/* Phase 0 浏览器垂直切片的 PoC 布局样式（仅引用 design-tokens.css 的 Token） */
+
+.chat-canvas {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 1.5rem 1rem 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    min-height: 100vh;
+    box-sizing: border-box;
+}
+
+.chat-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.chat-title {
+    font-size: 1.125rem;
+    margin: 0;
+}
+
+.poc-token {
+    font-size: 0.8125rem;
+    color: var(--cos-text-muted);
+}
+
+.poc-token input {
+    display: block;
+    margin-top: 0.25rem;
+    width: 260px;
+    max-width: 70vw;
+    padding: 0.375rem 0.5rem;
+    border: 1px solid var(--cos-border);
+    border-radius: var(--cos-radius-sm);
+    background: var(--cos-surface);
+    color: var(--cos-text);
+}
+
+.chat-transcript {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    flex: 1;
+}
+
+.chat-empty {
+    color: var(--cos-text-muted);
+    text-align: center;
+    padding: 3rem 0;
+}
+
+.chat-message {
+    border: 1px solid var(--cos-border);
+    border-radius: var(--cos-radius-md);
+    padding: 0.625rem 0.875rem;
+    background: var(--cos-surface);
+}
+
+.chat-message[data-role="user"] {
+    background: var(--cos-bg-secondary);
+    align-self: flex-end;
+    max-width: 85%;
+}
+
+.chat-message[data-role="assistant"],
+.chat-live {
+    align-self: stretch;
+}
+
+.chat-message-role {
+    font-size: 0.75rem;
+    color: var(--cos-text-subtle);
+    margin-bottom: 0.25rem;
+}
+
+.chat-message-content,
+.chat-live-answer {
+    white-space: pre-wrap;
+    line-height: 1.65;
+}
+
+.chat-message-reasoning,
+.chat-message-citations {
+    margin-top: 0.5rem;
+    font-size: 0.8125rem;
+    color: var(--cos-text-muted);
+}
+
+.chat-message-citations {
+    padding-left: 1.25rem;
+    margin-bottom: 0;
+}
+
+.chat-error {
+    border: 1px solid var(--cos-border);
+    border-left: 3px solid var(--cos-accent);
+    border-radius: var(--cos-radius-sm);
+    padding: 0.5rem 0.75rem;
+    background: var(--cos-surface);
+    color: var(--cos-text);
+}
+
+.chat-activity,
+.chat-reasoning,
+.chat-citations {
+    border: 1px dashed var(--cos-border);
+    border-radius: var(--cos-radius-sm);
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8125rem;
+    color: var(--cos-text-muted);
+}
+
+.chat-activity h2,
+.chat-reasoning h2,
+.chat-citations h2 {
+    font-size: 0.8125rem;
+    margin: 0 0 0.25rem;
+}
+
+.chat-activity ul,
+.chat-citations ul {
+    margin: 0;
+    padding-left: 1.25rem;
+}
+
+.chat-activity-phase {
+    color: var(--cos-text-subtle);
+    margin-right: 0.375rem;
+}
+
+.chat-activity-detail {
+    margin-left: 0.375rem;
+}
+
+.chat-reasoning p {
+    margin: 0;
+    white-space: pre-wrap;
+}
+
+.chat-status {
+    font-size: 0.75rem;
+    color: var(--cos-text-subtle);
+    min-height: 1em;
+    margin: 0;
+}
+
+.chat-composer {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    border-top: 1px solid var(--cos-border);
+    padding-top: 0.75rem;
+}
+
+.chat-composer label {
+    font-size: 0.8125rem;
+    color: var(--cos-text-muted);
+}
+
+.chat-composer textarea {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--cos-border);
+    border-radius: var(--cos-radius-md);
+    background: var(--cos-surface);
+    color: var(--cos-text);
+    font: inherit;
+    resize: vertical;
+}
+
+.chat-composer-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.chat-composer-actions button {
+    padding: 0.375rem 0.875rem;
+    border: 1px solid var(--cos-border);
+    border-radius: var(--cos-radius-sm);
+    background: var(--cos-cta-bg);
+    color: var(--cos-cta-fg);
+    cursor: pointer;
+}
+
+.chat-composer-actions button[type="button"] {
+    background: var(--cos-surface);
+    color: var(--cos-text);
+}
+
+.chat-composer-actions button:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.chat-not-found {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 3rem 1rem;
+}

@@ -19,3 +19,28 @@ thiserror = "2.0.17"
 futures-util = "0.3"
 tokio = { version = "1.48", features = ["macros", "rt-multi-thread", "sync"] }
 tokio-util = { version = "0.7" }
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+js-sys = "0.3"
+web-sys = "0.3"
+wasm-streams = "0.5"
+
+# cargo-leptos 0.3.x 唯一配置源（构建与运行时共用；运行时由
+# web-server 通过 get_configuration(Some("Cargo.toml")) 读取本节，
+# LEPTOS_* 环境变量可覆盖）。注意：本节必须保持为文件最后一个 section。
+[[workspace.metadata.leptos]]
+name = "web-ui"
+bin-package = "web-server"
+lib-package = "web-ui"
+output-name = "web_ui"
+site-root = "target/site"
+site-pkg-dir = "pkg"
+style-file = "style/design-tokens.css"
+assets-dir = "assets"
+site-addr = "127.0.0.1:3001"
+reload-port = 3002
+browserquery = "defaults"
+lib-features = ["hydrate"]
+lib-default-features = false
+bin-features = ["ssr"]
+bin-default-features = false

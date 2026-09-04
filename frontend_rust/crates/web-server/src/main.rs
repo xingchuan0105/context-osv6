@@ -1,62 +1,38 @@
-use axum::{Router, response::Html, routing::get};
-use std::env;
-use std::net::SocketAddr;
-use std::path::{Path, PathBuf};
-use tower_http::services::ServeDir;
+use axum::{Router, routing::get};
+use leptos_axum::{LeptosRoutes, file_and_error_handler, generate_route_list};
+use leptos_config::get_configuration;
+use web_ui::{App, shell};
 
-fn resolve_asset_dir(sub: &str) -> PathBuf {
-    if let Ok(root) = env::var("ASSET_ROOT") {
-        return PathBuf::from(root).join(sub);
-    }
-
-    for root in [Path::new("."), Path::new("frontend_rust")] {
-        let candidate = root.join(sub);
-        if candidate.exists() {
-            return candidate;
-        }
-    }
-
-    PathBuf::from(sub)
-}
-
-async fn chat_shell() -> Html<&'static str> {
-    Html(
-        "<!DOCTYPE html><html><head><title>Context-OS Chat (Phase 0 PoC)</title><link rel=\"stylesheet\" href=\"/style/design-tokens.css\"></head><body><div id=\"app\">Context-OS Chat PoC</div></body></html>",
-    )
-}
-
-pub fn create_app() -> Router {
-    let style_path = resolve_asset_dir("style");
-    let assets_path = resolve_asset_dir("assets");
-
-    Router::new()
-        .route("/healthz", get(|| async { "ok" }))
-        // Phase 0 /chat 最小验证壳
-        .route("/chat", get(chat_shell))
-        .route("/chat/{session_id}", get(chat_shell))
-        // 静态资源分发
-        .nest_service("/style", ServeDir::new(style_path))
-        .nest_service("/assets", ServeDir::new(assets_path))
+async fn healthz() -> &'static str {
+    "ok"
 }
 
 #[tokio::main]
 async fn main() {
-    let app = create_app();
+    // 配置唯一源是 workspace Cargo.toml 的 [[workspace.metadata.leptos]]；
+    // cargo-leptos 运行/测试时由 LEPTOS_* 环境变量覆盖（site_addr / site_root 等）。
+    let conf = get_configuration(Some("Cargo.toml"))
+        .or_else(|_| get_configuration(None))
+        .expect("failed to load leptos configuration");
+    let leptos_options = conf.leptos_options;
+    let addr = leptos_options.site_addr;
+    let routes = generate_route_list(App);
 
-    let port = env::var("PORT")
-        .ok()
-        .and_then(|p| p.parse::<u16>().ok())
-        .unwrap_or(3001);
-
-    let bind_addr = env::var("BIND_ADDR").unwrap_or_else(|_| format!("127.0.0.1:{}", port));
-    let addr: SocketAddr = bind_addr
-        .parse()
-        .unwrap_or_else(|_| SocketAddr::from(([127, 0, 0, 1], port)));
+    let app = Router::new()
+        .route("/healthz", get(healthz))
+        .leptos_routes(&leptos_options, routes, {
+            let options = leptos_options.clone();
+            move || shell(options.clone())
+        })
+        .fallback(file_and_error_handler(shell))
+        .with_state(leptos_options);
 
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .unwrap_or_else(|e| panic!("Failed to bind to {}: {}", addr, e));
 
-    println!("Web server listening on {}", addr);
-    axum::serve(listener, app).await.expect("Server error");
+    println!("Web server listening on http://{}", addr);
+    axum::serve(listener, app.into_make_service())
+        .await
+        .expect("Server error");
 }

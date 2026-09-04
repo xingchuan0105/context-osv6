@@ -1,0 +1,56 @@
+use crate::components::chat::ChatCanvasModel;
+use crate::components::chat::chat_page::ChatPage;
+use leptos::prelude::*;
+use leptos_config::LeptosOptions;
+use leptos_meta::{MetaTags, Stylesheet, provide_meta_context};
+use leptos_router::components::{Route, Router, Routes};
+use leptos_router::path;
+
+/// 根组件：App 级提供唯一的 ChatCanvasModel 信号上下文。
+/// 客户端导航（/chat → /chat/:id）不重建该模型，保证流不被 URL 落地打断。
+#[component]
+pub fn App() -> impl IntoView {
+    provide_meta_context();
+    provide_context(RwSignal::new(ChatCanvasModel::new()));
+    // PoC token（仅内存）：App 级上下文，路由切换不丢失
+    provide_context(RwSignal::new(String::new()));
+
+    view! {
+        <Router>
+            <Routes fallback=|| {
+                view! {
+                    <main class="chat-not-found">
+                        <p>"页面不存在。"</p>
+                        <a href="/chat">"返回对话"</a>
+                    </main>
+                }
+            }>
+                <Route path=path!("/chat") view=ChatPage/>
+                <Route path=path!("/chat/:session_id") view=ChatPage/>
+            </Routes>
+        </Router>
+    }
+}
+
+/// SSR HTML 外壳：包含可读的页面骨架与表单语义（由 App SSR 输出），
+/// 以及 hydration 脚本与样式链接。
+pub fn shell(options: LeptosOptions) -> impl IntoView {
+    view! {
+        <!DOCTYPE html>
+        <html lang="zh-CN">
+            <head>
+                <meta charset="utf-8"/>
+                <meta name="viewport" content="width=device-width, initial-scale=1"/>
+                <title>"Context-OS Chat"</title>
+                <Stylesheet id="leptos" href="/pkg/web_ui.css"/>
+                <link rel="stylesheet" href="/style/chat-poc.css"/>
+                <AutoReload options=options.clone()/>
+                <HydrationScripts options/>
+                <MetaTags/>
+            </head>
+            <body>
+                <App/>
+            </body>
+        </html>
+    }
+}

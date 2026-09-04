@@ -18,6 +18,10 @@ pub enum TransportError {
     RateLimited,
     #[error("HTTP status {status}: {body}")]
     HttpStatus { status: u16, body: String },
+    #[error("Response body is empty")]
+    EmptyBody,
+    #[error("Stream interrupted mid-way: {0}")]
+    Interrupted(String),
     #[error("Stream heartbeat timeout")]
     HeartbeatTimeout,
     #[error("Invalid event framing: {0}")]
@@ -49,14 +53,34 @@ impl Cancellation {
     pub fn is_cancelled(&self) -> bool {
         self.token.is_cancelled()
     }
+
+    /// 等待取消信号（协作式；浏览器路径用它驱动底层 Fetch abort）
+    pub async fn cancelled(&self) {
+        self.token.cancelled().await;
+    }
 }
 
+/// 事件流类型按目标平台收窄：浏览器 Fetch/ReadableStream 对象是 !Send，
+/// wasm32 下不伪装线程安全（Gate C：不要用无意义 wrapper 假装 Send）。
+#[cfg(not(target_arch = "wasm32"))]
 pub type ChatEventStream = Pin<Box<dyn Stream<Item = Result<ChatEvent, TransportError>> + Send>>;
+#[cfg(target_arch = "wasm32")]
+pub type ChatEventStream = Pin<Box<dyn Stream<Item = Result<ChatEvent, TransportError>>>>;
 
+#[cfg(not(target_arch = "wasm32"))]
 pub trait ChatTransport: Send + Sync {
     fn stream_chat(
         &self,
         request: ChatRequest,
         cancellation: Cancellation,
     ) -> impl std::future::Future<Output = Result<ChatEventStream, TransportError>> + Send;
+}
+
+#[cfg(target_arch = "wasm32")]
+pub trait ChatTransport {
+    fn stream_chat(
+        &self,
+        request: ChatRequest,
+        cancellation: Cancellation,
+    ) -> impl std::future::Future<Output = Result<ChatEventStream, TransportError>>;
 }
