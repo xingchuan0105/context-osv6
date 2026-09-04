@@ -82,7 +82,8 @@ async fn rollup_product_events(pool: &PgPool, target_date: NaiveDate) -> Result<
             user_id,
             is_dau,
             is_new_user,
-            is_activated,
+            is_first_answer,
+            is_cited_activation,
             chat_count,
             search_count,
             upload_count,
@@ -93,9 +94,26 @@ async fn rollup_product_events(pool: &PgPool, target_date: NaiveDate) -> Result<
             pe.user_id,
             true as is_dau,
             bool_or(pe.event_name = 'user_registered') as is_new_user,
-            bool_or(pe.event_name = 'notebook_created')
-                and bool_or(pe.event_name in ('document_upload_completed', 'url_source_added'))
-                and bool_or(pe.event_name = 'chat_completed') as is_activated,
+            bool_or(pe.event_name = 'chat_completed')
+                and not exists (
+                    select 1
+                    from product_events earlier
+                    where earlier.user_id = pe.user_id
+                      and earlier.event_name = 'chat_completed'
+                      and earlier.event_date < $1
+                ) as is_first_answer,
+            bool_or(
+                pe.event_name = 'chat_completed'
+                    and coalesce((pe.metadata->>'citation_count')::int, 0) > 0
+            )
+                and not exists (
+                    select 1
+                    from product_events earlier
+                    where earlier.user_id = pe.user_id
+                      and earlier.event_name = 'chat_completed'
+                      and coalesce((earlier.metadata->>'citation_count')::int, 0) > 0
+                      and earlier.event_date < $1
+                ) as is_cited_activation,
             count(*) filter (where pe.event_name = 'chat_completed')::bigint as chat_count,
             count(*) filter (where pe.event_name = 'search_completed')::bigint as search_count,
             count(*) filter (where pe.event_name in ('document_upload_completed', 'url_source_added'))::bigint as upload_count,
@@ -106,7 +124,8 @@ async fn rollup_product_events(pool: &PgPool, target_date: NaiveDate) -> Result<
         on conflict (event_date, user_id) do update
         set is_dau = excluded.is_dau,
             is_new_user = excluded.is_new_user,
-            is_activated = excluded.is_activated,
+            is_first_answer = excluded.is_first_answer,
+            is_cited_activation = excluded.is_cited_activation,
             chat_count = excluded.chat_count,
             search_count = excluded.search_count,
             upload_count = excluded.upload_count,
@@ -194,7 +213,8 @@ async fn derive_daily_product_metrics(pool: &PgPool, target_date: NaiveDate) -> 
             event_date,
             dau,
             new_users,
-            activated_users,
+            first_answer_users,
+            cited_activation_users,
             daily_chat_users,
             daily_search_users,
             daily_upload_users,
@@ -205,13 +225,14 @@ async fn derive_daily_product_metrics(pool: &PgPool, target_date: NaiveDate) -> 
             total_upload_bytes,
             total_estimated_cost_cents,
             cost_per_dau_cents,
-            cost_per_activated_user_cents
+            cost_per_cited_activation_cents
         )
         select
             $1::date as event_date,
             count(*) filter (where dum.is_dau)::bigint as dau,
             count(*) filter (where dum.is_new_user)::bigint as new_users,
-            count(*) filter (where dum.is_activated)::bigint as activated_users,
+            count(*) filter (where dum.is_first_answer)::bigint as first_answer_users,
+            count(*) filter (where dum.is_cited_activation)::bigint as cited_activation_users,
             count(*) filter (where dum.chat_count > 0)::bigint as daily_chat_users,
             count(*) filter (where dum.search_count > 0)::bigint as daily_search_users,
             count(*) filter (where dum.upload_count > 0)::bigint as daily_upload_users,
@@ -231,15 +252,16 @@ async fn derive_daily_product_metrics(pool: &PgPool, target_date: NaiveDate) -> 
                 else (coalesce(sum(dum.estimated_cost_cents), 0) / (count(*) filter (where dum.is_dau)))::bigint
             end as cost_per_dau_cents,
             case
-                when count(*) filter (where dum.is_activated) = 0 then 0
-                else (coalesce(sum(dum.estimated_cost_cents), 0) / (count(*) filter (where dum.is_activated)))::bigint
-            end as cost_per_activated_user_cents
+                when count(*) filter (where dum.is_cited_activation) = 0 then 0
+                else (coalesce(sum(dum.estimated_cost_cents), 0) / (count(*) filter (where dum.is_cited_activation)))::bigint
+            end as cost_per_cited_activation_cents
         from daily_user_metrics dum
         where dum.event_date = $1
         on conflict (event_date) do update
         set dau = excluded.dau,
             new_users = excluded.new_users,
-            activated_users = excluded.activated_users,
+            first_answer_users = excluded.first_answer_users,
+            cited_activation_users = excluded.cited_activation_users,
             daily_chat_users = excluded.daily_chat_users,
             daily_search_users = excluded.daily_search_users,
             daily_upload_users = excluded.daily_upload_users,
@@ -250,7 +272,7 @@ async fn derive_daily_product_metrics(pool: &PgPool, target_date: NaiveDate) -> 
             total_upload_bytes = excluded.total_upload_bytes,
             total_estimated_cost_cents = excluded.total_estimated_cost_cents,
             cost_per_dau_cents = excluded.cost_per_dau_cents,
-            cost_per_activated_user_cents = excluded.cost_per_activated_user_cents
+            cost_per_cited_activation_cents = excluded.cost_per_cited_activation_cents
         "#,
     )
     .bind(target_date)

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { flushSync } from "react-dom";
 
 import { GuestOnlyGate } from "@/components/auth-gates";
@@ -12,6 +12,7 @@ import {
   PUBLISHED_PRIVACY_VERSION,
   PUBLISHED_TERMS_VERSION,
 } from "@/lib/legal/versions";
+import { captureFirstTouch, resolveAttribution } from "@/lib/analytics/first-touch";
 import { register } from "@/lib/auth/client";
 import { useAuth } from "@/lib/auth/context";
 import { describeAuthError } from "@/lib/auth/errors";
@@ -35,6 +36,10 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [consented, setConsented] = useState(false);
   const nextPath = getSafeNextPath(searchParams.get("next"));
+
+  useEffect(() => {
+    captureFirstTouch(searchParams);
+  }, [searchParams]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -72,6 +77,7 @@ export default function RegisterPage() {
         terms_version: PUBLISHED_TERMS_VERSION,
         privacy_version: PUBLISHED_PRIVACY_VERSION,
         referral_code: referralCode.trim() ? referralCode.trim() : null,
+        marketing: resolveAttribution(searchParams),
       });
 
       if (!response.success || !response.data) {

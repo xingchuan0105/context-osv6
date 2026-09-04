@@ -279,14 +279,25 @@ pub(crate) async fn auth_register_handler(
         result.auth_version,
         &result.role,
     );
+    let mut metadata = serde_json::json!({
+        "email_domain": result.email.split('@').nth(1).unwrap_or_default(),
+    });
+    if let Some(marketing) = req.marketing.as_ref()
+        && let Some(obj) = metadata.as_object_mut()
+    {
+        for (key, value) in marketing.non_empty_pairs() {
+            obj.insert(
+                key.to_string(),
+                serde_json::Value::String(value.to_string()),
+            );
+        }
+    }
     record_api_product_event_if_available(
         &state,
         result.user_id,
         analytics::ProductEventName::UserRegistered,
         analytics::ResultTag::Success,
-        serde_json::json!({
-            "email_domain": result.email.split('@').nth(1).unwrap_or_default(),
-        }),
+        metadata,
     )
     .await;
 

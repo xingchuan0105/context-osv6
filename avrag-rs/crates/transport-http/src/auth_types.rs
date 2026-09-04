@@ -51,6 +51,59 @@ pub(crate) struct RegisterRequest {
     /// `NEXT_PUBLIC_DEV_OWNER_USER_ID`). Ignored unless that env is set (cloud never sets it).
     #[serde(default)]
     pub local: Option<bool>,
+    /// Optional first-touch marketing attribution (landing UTM params). Recorded
+    /// into the `user_registered` product event metadata; never blocks register.
+    #[serde(default)]
+    pub marketing: Option<RegisterMarketing>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct RegisterMarketing {
+    #[serde(default)]
+    pub utm_source: Option<String>,
+    #[serde(default)]
+    pub utm_medium: Option<String>,
+    #[serde(default)]
+    pub utm_campaign: Option<String>,
+    #[serde(default)]
+    pub utm_content: Option<String>,
+    #[serde(default)]
+    pub utm_term: Option<String>,
+    #[serde(default)]
+    pub referrer: Option<String>,
+    #[serde(default)]
+    pub landing_path: Option<String>,
+}
+
+impl RegisterMarketing {
+    pub(crate) fn non_empty_pairs(&self) -> Vec<(&'static str, &str)> {
+        fn clean(value: &Option<String>) -> Option<&str> {
+            value.as_deref().map(str::trim).filter(|v| !v.is_empty())
+        }
+        let mut pairs = Vec::new();
+        if let Some(v) = clean(&self.utm_source) {
+            pairs.push(("utm_source", v));
+        }
+        if let Some(v) = clean(&self.utm_medium) {
+            pairs.push(("utm_medium", v));
+        }
+        if let Some(v) = clean(&self.utm_campaign) {
+            pairs.push(("utm_campaign", v));
+        }
+        if let Some(v) = clean(&self.utm_content) {
+            pairs.push(("utm_content", v));
+        }
+        if let Some(v) = clean(&self.utm_term) {
+            pairs.push(("utm_term", v));
+        }
+        if let Some(v) = clean(&self.referrer) {
+            pairs.push(("referrer", v));
+        }
+        if let Some(v) = clean(&self.landing_path) {
+            pairs.push(("landing_path", v));
+        }
+        pairs
+    }
 }
 
 #[derive(Debug, Deserialize)]

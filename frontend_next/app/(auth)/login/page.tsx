@@ -8,6 +8,7 @@ import { flushSync } from "react-dom";
 import { GuestOnlyGate } from "@/components/auth-gates";
 import LegalFooterLinks from "@/components/legal/LegalFooterLinks";
 import { AuthFrame } from "@/components/page-frame";
+import { buildAuthHref, captureFirstTouch } from "@/lib/analytics/first-touch";
 import { login } from "@/lib/auth/client";
 import { useAuth } from "@/lib/auth/context";
 import { describeAuthError } from "@/lib/auth/errors";
@@ -29,10 +30,15 @@ export default function LoginPage() {
   const [interactive, setInteractive] = useState(false);
   const [desktopEscape, setDesktopEscape] = useState(false);
   const nextPath = getSafeNextPath(searchParams.get("next"));
+  const registerHref = buildAuthHref("/register", searchParams);
 
   useEffect(() => {
     setInteractive(true);
   }, []);
+
+  useEffect(() => {
+    captureFirstTouch(searchParams);
+  }, [searchParams]);
 
   // Desktop client must never stay on cloud /login (SaaS form).
   useEffect(() => {
@@ -171,7 +177,7 @@ export default function LoginPage() {
           </div>
           <p className="app-form-footnote">
             {formatUiMessage(locale, "authNeedsAccount")}{" "}
-            <Link className="app-link" href="/register">
+            <Link className="app-link" href={registerHref}>
               {formatUiMessage(locale, "authSignUp")}
             </Link>
           </p>

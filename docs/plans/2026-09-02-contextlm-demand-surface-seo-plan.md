@@ -1,5 +1,7 @@
 # Context LM — 需求承接面 SEO 方案（Phase E · Demand Surface）
 
+> **状态注记（2026-09-04）**：本计划自 2026-09-04 起暂停大规模执行；选题复核与优先序以 [`../research/2026-09-04-product-site-traffic-acquisition-cro-best-practices.md`](../research/2026-09-04-product-site-traffic-acquisition-cro-best-practices.md) §4 为准，先验证 1–2 个高意图资产（候选方向：本地 AI 知识库搭建、AI 知识库选型、RAG 是什么、MCP 怎么用）。关联的「8 篇批量内容」管线（`contextlm-marketing/docs/2026-08-29-keyword-research.md` §6）同步暂停，暂停口径见 `contextlm-marketing/arsenal/README.md` §6。以下为历史正文，保留备查。
+
 **日期**: 2026-09-02 · **状态**: Plan（待执行批准）
 **上游**: [`2026-08-11-contextlm-geo-seo-optimization-plan.md`](./2026-08-11-contextlm-geo-seo-optimization-plan.md)（Phase A–D 已关，GEOHub 代理分达标）、[`2026-09-01-contextlm-english-public-surface-plan.md`](./2026-09-01-contextlm-english-public-surface-plan.md)（英文面已上线）
 **审查依据**: 外部文章框架「B2B / AI SaaS / B2C：自然流量究竟集中在哪些 URL」对本站的逐项代码审查（2026-09-02，结论见 §1；证据路径见 §7）

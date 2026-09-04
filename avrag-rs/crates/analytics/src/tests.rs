@@ -55,17 +55,6 @@ fn cost_event_serializes_provider_and_usage_fields() {
 }
 
 #[test]
-fn activation_rule_requires_notebook_upload_and_chat() {
-    let flags = crate::rollups::ActivationInputs {
-        created_workspace: true,
-        uploaded_document: true,
-        completed_chat: true,
-    };
-
-    assert!(crate::rollups::is_activated(&flags));
-}
-
-#[test]
 fn burst_detector_flags_short_window_replay() {
     let result = crate::anomaly::detect_request_burst(&[10, 11, 12, 13, 14], 5, 60);
     assert!(result.is_some());

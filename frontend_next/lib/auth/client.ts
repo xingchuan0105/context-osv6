@@ -30,6 +30,16 @@ export type LoginRequest = {
   password: string;
 };
 
+export type RegisterMarketing = {
+  utm_source?: string;
+  utm_medium?: string;
+  utm_campaign?: string;
+  utm_content?: string;
+  utm_term?: string;
+  referrer?: string;
+  landing_path?: string;
+};
+
 export type RegisterRequest = {
   email: string;
   password: string;
@@ -38,6 +48,8 @@ export type RegisterRequest = {
   privacy_version?: string;
   /** Optional referral code (ADR-0010 PR4). */
   referral_code?: string | null;
+  /** First-touch marketing attribution captured from landing UTM params. */
+  marketing?: RegisterMarketing | null;
 };
 
 export type ChangePasswordRequest = {

@@ -45,6 +45,7 @@ beforeEach(() => {
   mocks.useRouterMock.mockReset();
   mocks.useSearchParamsMock.mockReset();
   mocks.useAuthMock.mockReset();
+  window.sessionStorage.clear();
 
   mocks.useRouterMock.mockReturnValue({ replace: mocks.replaceMock });
   mocks.useSearchParamsMock.mockReturnValue(new URLSearchParams());
@@ -159,12 +160,121 @@ describe("login and register pages", () => {
         terms_version: PUBLISHED_TERMS_VERSION,
         privacy_version: PUBLISHED_PRIVACY_VERSION,
         referral_code: null,
+        marketing: null,
       });
     });
 
     await waitFor(() => {
       expect(mocks.completeAuthMock).toHaveBeenCalledWith(payload);
       expect(mocks.replaceMock).toHaveBeenCalledWith("/chat");
+    });
+  });
+
+  it("preserves next and UTM params on the login → register link", () => {
+    mocks.useSearchParamsMock.mockReturnValue(
+      new URLSearchParams(
+        "next=%2Fdashboard&utm_source=portal&utm_medium=hero&utm_campaign=team_trial&utm_content=hero_primary",
+      ),
+    );
+
+    render(<LoginPage />);
+
+    const href = screen.getByRole("link", { name: "去注册" }).getAttribute("href") ?? "";
+    expect(href).toContain("/register?");
+    expect(href).toContain("next=%2Fdashboard");
+    expect(href).toContain("utm_source=portal");
+    expect(href).toContain("utm_medium=hero");
+    expect(href).toContain("utm_campaign=team_trial");
+    expect(href).toContain("utm_content=hero_primary");
+  });
+
+  it("sends URL UTM params as registration marketing attribution", async () => {
+    const user = userEvent.setup();
+    const payload = {
+      token: "token-789",
+      reset_ticket: null,
+      user: {
+        id: "user-3",
+        email: "ads@example.com",
+        full_name: "Ads User",
+      },
+    };
+
+    mocks.useSearchParamsMock.mockReturnValue(
+      new URLSearchParams("utm_source=portal&utm_medium=hero&utm_campaign=team_trial"),
+    );
+    mocks.registerMock.mockResolvedValue({
+      success: true,
+      data: payload,
+      error: null,
+    });
+
+    render(<RegisterPage />);
+
+    await user.type(screen.getByLabelText("邮箱"), "ads@example.com");
+    await user.type(screen.getByLabelText("密码"), "password123");
+    await user.type(screen.getByLabelText("确认密码"), "password123");
+    await user.click(screen.getByRole("checkbox"));
+    await user.click(screen.getByRole("button", { name: "创建账号" }));
+
+    await waitFor(() => {
+      expect(mocks.registerMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          marketing: {
+            utm_source: "portal",
+            utm_medium: "hero",
+            utm_campaign: "team_trial",
+          },
+        }),
+      );
+    });
+  });
+
+  it("falls back to stored first-touch attribution when the URL has no UTM", async () => {
+    const user = userEvent.setup();
+    const payload = {
+      token: "token-abc",
+      reset_ticket: null,
+      user: {
+        id: "user-4",
+        email: "stored@example.com",
+        full_name: "Stored User",
+      },
+    };
+
+    window.sessionStorage.setItem(
+      "contextlm.first_touch",
+      JSON.stringify({
+        utm_source: "portal",
+        utm_medium: "footer",
+        utm_campaign: "client",
+        landing_path: "/login",
+      }),
+    );
+    mocks.registerMock.mockResolvedValue({
+      success: true,
+      data: payload,
+      error: null,
+    });
+
+    render(<RegisterPage />);
+
+    await user.type(screen.getByLabelText("邮箱"), "stored@example.com");
+    await user.type(screen.getByLabelText("密码"), "password123");
+    await user.type(screen.getByLabelText("确认密码"), "password123");
+    await user.click(screen.getByRole("checkbox"));
+    await user.click(screen.getByRole("button", { name: "创建账号" }));
+
+    await waitFor(() => {
+      expect(mocks.registerMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          marketing: expect.objectContaining({
+            utm_source: "portal",
+            utm_medium: "footer",
+            utm_campaign: "client",
+          }),
+        }),
+      );
     });
   });
 
