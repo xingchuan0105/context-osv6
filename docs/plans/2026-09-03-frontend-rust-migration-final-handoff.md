@@ -2,8 +2,8 @@
 
 | 字段 | 内容 |
 |---|---|
-| 日期 | 2026-09-03；2026-09-04 更新（浏览器垂直切片 + live backend smoke） |
-| 状态 | **Phase 0 浏览器垂直切片已完成（真实 Fetch/SSE + Leptos SSR/hydration，浏览器证据齐全）；Gate 0 仍为 NO-GO** |
+| 日期 | 2026-09-03；2026-09-04 更新（浏览器切片 + live smoke + Tauri 垂直切片） |
+| 状态 | **Phase 0 浏览器切片、live smoke、Tauri IPC/CSR 已完成；Gate 0 仍为 NO-GO** |
 | 关联权威设计 | [`2026-09-03-frontend-rust-migration-design.md`](2026-09-03-frontend-rust-migration-design.md) |
 | 实施编排计划 | [`2026-09-03-frontend-rust-migration-implementation-plan.md`](2026-09-03-frontend-rust-migration-implementation-plan.md) |
 | 性能实测报告 | [`2026-09-03-phase-0-benchmark-report.md`](2026-09-03-phase-0-benchmark-report.md)（Gate 0 NO-GO） |
@@ -74,13 +74,19 @@
 
 - 产品 Rust 零改动。新增 `tests/browser/playwright.live.config.ts` 与 `chat-live-smoke.spec.ts`（无 `LIVE_BACKEND=1` 不跑）；默认 fixture 套件 `testIgnore` 该文件。
 - 未改 Next、未改后端 API/CORS、未做 Auth UI、未伪造代理头。
-- Gate 0 仍为 NO-GO（无性能对照、无 Tauri）。
+- Gate 0 仍为 NO-GO（无性能对照）。
+
+### 3.3 Tauri 垂直切片（2026-09-04）
+
+- `TauriIpcTransport` wasm32 经 `__TAURI__` 调用既有 `chat_stream` / `chat_cancel`；native `new()` 仍 `Unavailable`；fixture mock 对等测试保留。
+- CSR：`mount_csr` + `dist/tauri` 已构建。未改 `desktop/src-tauri/tauri.conf.json`。
+- 证据见 [`2026-09-04-frontend-rust-phase-0-tauri-vertical-slice-task.md`](2026-09-04-frontend-rust-phase-0-tauri-vertical-slice-task.md) §5。
 
 ## 4. Gate 0 仍为 NO-GO
 
 以下阻断项仍未完成：
 
-- 真实 Tauri IPC adapter 与 Tauri CSR 产物（浏览器 Fetch/SSE 已完成）；
+- 真实 Tauri WebView / 安装包点验（CSR 产物已构建，生产 `frontendDist` 仍指向 Next）；
 - Headless 浏览器 LCP、绘制延迟、掉帧、Heap 与无障碍数据；
 - 与优化后 Next.js 在同机、同浏览器、同网络条件下的对照记录。
 

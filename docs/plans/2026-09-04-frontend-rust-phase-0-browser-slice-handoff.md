@@ -3,7 +3,7 @@
 | 字段 | 内容 |
 |---|---|
 | 日期 | 2026-09-04 |
-| 状态 | 浏览器垂直切片 **已完成**；live backend smoke **已完成**；Gate 0 仍 **NO-GO**；下一棒是 Tauri / 完整功能 / 性能对照 |
+| 状态 | 浏览器切片、live smoke、Tauri 垂直切片 **已完成**；Gate 0 仍 **NO-GO**；下一棒是会话历史 / 性能对照 |
 | 完成提交 | `1f39b4a3`（feat(frontend_rust): Phase 0 browser vertical slice） |
 | 上游任务 | [`2026-09-04-frontend-rust-phase-0-browser-vertical-slice-task.md`](2026-09-04-frontend-rust-phase-0-browser-vertical-slice-task.md)（§10 验证报告） |
 | 权威设计 | [`2026-09-03-frontend-rust-migration-design.md`](2026-09-03-frontend-rust-migration-design.md) |
@@ -14,8 +14,9 @@
 
 `frontend_rust` 现在是一个**真实可运行的浏览器薄切片**：Leptos 0.8 SSR + hydration 的 `/chat` 与
 `/chat/:sessionId`，经真实 Fetch/ReadableStream 消费 SSE（唯一契约 `contracts::chat::ChatEvent`），
-发送/流式/停止/错误/重试全旅程有自动化浏览器证据。**它不是产品前端**，不得部署；Tauri、完整
-Chat-first 功能、性能对照均未开始。
+发送/流式/停止/错误/重试全旅程有自动化浏览器证据。`TauriIpcTransport` 已接既有
+`chat_stream` / `chat_cancel`，CSR 产物可构建。**它不是产品前端**，不得部署；未切
+`tauri.conf.json`；完整 Chat-first 与性能对照未开始。
 
 ## 2. 架构地图（改造后）
 
@@ -28,7 +29,7 @@ frontend_rust/
 │   │   ├── src/transport.rs         # ChatTransport / ChatEventStream（Send 按 target 收窄）/ TransportError / Cancellation
 │   │   ├── src/browser_transport.rs # wasm32: 真实 Fetch+ReadableStream+AbortController；native: Unavailable
 │   │   ├── src/fixture_transport.rs # 确定性测试用
-│   │   └── src/tauri_transport.rs   # 未实现（留给 Tauri 任务）
+│   │   └── src/tauri_transport.rs   # wasm32: __TAURI__ invoke/listen；native: mock 或 Unavailable
 │   ├── web-ui/                # Leptos 0.8 应用 + 纯状态模型（crate-type = ["cdylib","rlib"]）
 │   │   ├── src/app.rs               # App（Router，App 级 provide model/token 上下文）+ shell()
 │   │   ├── src/components/chat/chat_page.rs   # ChatPage：composer/消息/活动/推理/引用/错误区域
@@ -86,6 +87,9 @@ cd tests/browser && pnpm exec playwright test
 # 要求本机 avrag-api 可访问；8080 若被 Next 占用，用空闲端口另起 API 并设 LIVE_API_BASE
 cd tests/browser && LIVE_BACKEND=1 LIVE_API_BASE=http://127.0.0.1:<api-port> \
   pnpm exec playwright test --config playwright.live.config.ts
+
+# Tauri CSR 产物（不改 desktop tauri.conf.json）
+bash scripts/build-tauri-csr.sh   # 产出 dist/tauri/
 ```
 
 WSL 纪律：`jobs=2`，不要叠加并发全量 cargo 运行；长时间任务后台 + 日志。
@@ -139,13 +143,17 @@ WSL 纪律：`jobs=2`，不要叠加并发全量 cargo 运行；长时间任务�
 
 ## 6. 建议的下一任务切片（按依赖排序）
 
-1. **Tauri 垂直切片**：`TauriIpcTransport` 接既有 `chat_stream_start`/cancel command，复用同一
-   decoder/reducer/fixture；Tauri CSR 产物（`csr` feature 已预留）；按设计 §10 验收。
-2. **会话列表 + 历史加载**（Chat-first W2 子集）：只读 API，`/chat/:sessionId` 恢复历史；
+1. **会话列表 + 历史加载**（Chat-first W2 子集）：只读 API，`/chat/:sessionId` 恢复历史；
    注意 reducer 与历史消息的单管线，不发明第二完成路径。
-3. **Gate 0 性能对照**：冻结 benchmark charter 后同机采集 LCP/输入到绘制/掉帧/Heap/30 分钟
+2. **Gate 0 性能对照**：冻结 benchmark charter 后同机采集 LCP/输入到绘制/掉帧/Heap/30 分钟
    压力，Rust 与优化后 Next 同夹具对照；未达标即按设计 §3.3 停止迁移转优化 Next。
+3. **真实 Tauri WebView 点验**（可选，Phase 5 之前）：用临时 `frontendDist` 或独立 window
+   验证 IPC 一轮；不要把生产 `tauri.conf.json` 切走 Next。
 4. 之后才是 Phase 1 固化（route manifest、SEO/security/style 基线测试、Token 同步校验）。
+
+Tauri 垂直切片证据见
+[`2026-09-04-frontend-rust-phase-0-tauri-vertical-slice-task.md`](2026-09-04-frontend-rust-phase-0-tauri-vertical-slice-task.md) §5。
+仓库 command 实名是 `chat_stream` / `chat_cancel`，不是设计稿里的 `chat_stream_start`。
 
 live backend smoke 已完成，证据见
 [`2026-09-04-frontend-rust-phase-0-live-backend-smoke-task.md`](2026-09-04-frontend-rust-phase-0-live-backend-smoke-task.md) §6。

@@ -6,7 +6,9 @@ use leptos::prelude::*;
 use leptos_router::NavigateOptions;
 use leptos_router::hooks::{use_navigate, use_params};
 use leptos_router::params::Params;
-use web_sdk::{BrowserHttpTransport, ChatClient};
+use web_sdk::{
+    BrowserHttpTransport, ChatClient, ChatTransport, TauriIpcTransport, is_tauri_runtime,
+};
 
 #[derive(Params, PartialEq, Clone, Debug)]
 struct ChatParams {
@@ -359,18 +361,41 @@ fn citation_label(citation: &serde_json::Value) -> String {
     }
 }
 
+enum PocTransport {
+    Browser(BrowserHttpTransport),
+    Tauri(TauriIpcTransport),
+}
+
+impl ChatTransport for PocTransport {
+    async fn stream_chat(
+        &self,
+        request: contracts::chat::ChatRequest,
+        cancellation: web_sdk::Cancellation,
+    ) -> Result<web_sdk::ChatEventStream, web_sdk::TransportError> {
+        match self {
+            Self::Browser(transport) => transport.stream_chat(request, cancellation).await,
+            Self::Tauri(transport) => transport.stream_chat(request, cancellation).await,
+        }
+    }
+}
+
+fn select_transport(token: Option<String>) -> PocTransport {
+    if is_tauri_runtime() {
+        PocTransport::Tauri(TauriIpcTransport::new(token))
+    } else {
+        PocTransport::Browser(BrowserHttpTransport::new(&poc_api_base(), token))
+    }
+}
+
 fn focus_composer(composer_ref: NodeRef<leptos::html::Textarea>) {
     if let Some(element) = composer_ref.get() {
         let _ = element.focus();
     }
 }
 
-/// 启动一条聊天流：DOM → BrowserHttpTransport → Fetch → SSE decoder
-/// → ChatEvent → ChatCanvasModel/reducer → DOM。每个事件按 StreamScope 校验
-/// 后进入模型；transport 失败进入独立错误终态，不拼入答案正文。
-/// 注意：本任务跨越客户端导航（/chat → /chat/:id）存活，而路由切换会重建
-/// ChatPage 并 dispose 页面级响应节点。因此任务内只允许访问 App 级 model、
-/// Router 级 navigate 与 window.location，不得读取页面级 Memo/Signal。
+/// 启动一条聊天流。浏览器：Fetch/SSE。Tauri WebView：既有 `chat_stream` IPC。
+/// 两条路径都把 `ChatEvent` 交给同一 reducer。任务内只允许访问 App 级 model、
+/// Router 级 navigate 与 window.location。
 fn spawn_chat_stream(
     model: RwSignal<ChatCanvasModel>,
     turn: PreparedUserTurn,
@@ -378,9 +403,7 @@ fn spawn_chat_stream(
     navigate: impl Fn(&str, NavigateOptions) + Clone + 'static,
 ) {
     leptos::task::spawn_local(async move {
-        let base_url = poc_api_base();
-        let transport = BrowserHttpTransport::new(&base_url, token);
-        let client = ChatClient::new(transport);
+        let client = ChatClient::new(select_transport(token));
         let scope = turn.stream_scope;
         match client.stream(turn.request, turn.cancellation).await {
             Ok(mut stream) => {

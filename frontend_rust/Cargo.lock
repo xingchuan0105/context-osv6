@@ -2530,6 +2530,7 @@ version = "0.1.0"
 dependencies = [
  "async-stream",
  "contracts",
+ "futures-channel",
  "futures-util",
  "js-sys",
  "serde_json",

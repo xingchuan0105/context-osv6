@@ -107,7 +107,7 @@ async fn test_unimplemented_real_adapters_fail_explicitly() {
         Err(TransportError::Unavailable(_))
     ));
 
-    let tauri_result = TauriIpcTransport::new()
+    let tauri_result = TauriIpcTransport::new(None)
         .stream_chat(request, Cancellation::new())
         .await;
     assert!(matches!(tauri_result, Err(TransportError::Unavailable(_))));

@@ -3,8 +3,13 @@ use crate::components::chat::chat_page::ChatPage;
 use leptos::prelude::*;
 use leptos_config::LeptosOptions;
 use leptos_meta::{MetaTags, Stylesheet, provide_meta_context};
-use leptos_router::components::{Route, Router, Routes};
+use leptos_router::components::{Redirect, Route, Router, Routes};
 use leptos_router::path;
+
+#[component]
+fn RedirectToChat() -> impl IntoView {
+    view! { <Redirect path="/chat"/> }
+}
 
 /// 根组件：App 级提供唯一的 ChatCanvasModel 信号上下文。
 /// 客户端导航（/chat → /chat/:id）不重建该模型，保证流不被 URL 落地打断。
@@ -25,6 +30,7 @@ pub fn App() -> impl IntoView {
                     </main>
                 }
             }>
+                <Route path=path!("/") view=RedirectToChat/>
                 <Route path=path!("/chat") view=ChatPage/>
                 <Route path=path!("/chat/:session_id") view=ChatPage/>
             </Routes>
