@@ -3,7 +3,7 @@ use crate::components::chat::ChatCanvasModel;
 use crate::components::chat::chat_page::ChatPage;
 use leptos::prelude::*;
 use leptos_config::LeptosOptions;
-use leptos_meta::{MetaTags, Stylesheet, provide_meta_context};
+use leptos_meta::{HashedStylesheet, MetaTags, provide_meta_context};
 use leptos_router::components::{Redirect, Route, Router, Routes};
 use leptos_router::path;
 
@@ -49,7 +49,7 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                 <meta charset="utf-8"/>
                 <meta name="viewport" content="width=device-width, initial-scale=1"/>
                 <title>"Context-OS Chat"</title>
-                <Stylesheet id="leptos" href="/pkg/web_ui.css"/>
+                <HashedStylesheet id="leptos" options=options.clone()/>
                 <link rel="stylesheet" href="/style/chat-poc.css"/>
                 <AutoReload options=options.clone()/>
                 <HydrationScripts options/>

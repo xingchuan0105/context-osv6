@@ -111,15 +111,17 @@ mod wasm {
             .set("Authorization", &format!("Bearer {token}"))
             .map_err(network_error)?;
 
+        let window = web_sys::window()
+            .ok_or_else(|| TransportError::Unavailable("no window object".to_string()))?;
         let controller = AbortController::new().map_err(network_error)?;
         let signal = controller.signal();
         let timeout = Closure::once(move || controller.abort());
-        if let Some(window) = web_sys::window() {
-            let _ = window.set_timeout_with_callback_and_timeout_and_arguments_0(
+        let timeout_id = window
+            .set_timeout_with_callback_and_timeout_and_arguments_0(
                 timeout.as_ref().unchecked_ref(),
                 AUTH_BOOTSTRAP_TIMEOUT_MS,
-            );
-        }
+            )
+            .map_err(network_error)?;
 
         let init = RequestInit::new();
         init.set_method("GET");
@@ -127,14 +129,11 @@ mod wasm {
         init.set_headers_headers(&headers);
         init.set_signal(Some(&signal));
 
-        let window = web_sys::window()
-            .ok_or_else(|| TransportError::Unavailable("no window object".to_string()))?;
         let request = Request::new_with_str_and_init(&url, &init).map_err(network_error)?;
-        let response = JsFuture::from(window.fetch_with_request(&request))
-            .await
-            .map_err(network_error)?;
+        let response = JsFuture::from(window.fetch_with_request(&request)).await;
+        window.clear_timeout_with_handle(timeout_id);
         drop(timeout);
-        let response: web_sys::Response = response.dyn_into().map_err(network_error)?;
+        let response: web_sys::Response = response.map_err(network_error)?.dyn_into().map_err(network_error)?;
         let status = response.status();
         let body = read_text(&response).await;
         if !(200..=299).contains(&status) {
