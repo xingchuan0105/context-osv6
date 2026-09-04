@@ -28,6 +28,8 @@ echo "== cos-tokens sync =="
 # App (in monorepo)
 copy_tokens "$ROOT/frontend_next/app/design-tokens.css"
 copy_mark "$ROOT/frontend_next/public/brand/context-os-mark.svg"
+copy_tokens "$ROOT/frontend_rust/style/design-tokens.css"
+copy_mark "$ROOT/frontend_rust/assets/brand/context-os-mark.svg"
 
 # Sibling repos (optional if present)
 if [[ -d /home/chuan/context-os-landing ]]; then

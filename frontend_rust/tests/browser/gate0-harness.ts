@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type CDPSession, type Page } from "@playwright/test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
@@ -72,6 +72,100 @@ export function summarize(values: number[]) {
 export function writeResult(path: string, payload: unknown) {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+}
+
+export const STRESS_MS = Number(process.env.GATE0_STRESS_MS || 30 * 60 * 1000);
+export const STRESS_EVERY_MS = Number(process.env.GATE0_STRESS_EVERY_MS || 30_000);
+/** 后 10 分钟斜率低于此值（字节/分钟）视为平台噪声，不判无界增长。 */
+const HEAP_SLOPE_NOISE_BYTES_PER_MIN = 50_000;
+
+export type HeapSample = {
+  i: number;
+  t_ms: number;
+  heap_cdp: number | null;
+  heap_perf: number | null;
+};
+
+export type HeapSlopeJudgement = {
+  n: number;
+  last10_n: number;
+  slope_bytes_per_min: number | null;
+  last10_min: number | null;
+  last10_max: number | null;
+  last10_range_ratio: number | null;
+  plateau: boolean;
+  unbounded: boolean;
+};
+
+export function linearSlopePerMinute(samples: Array<{ t_ms: number; heap: number }>): number | null {
+  if (samples.length < 2) return null;
+  const xs = samples.map((s) => s.t_ms / 60_000);
+  const ys = samples.map((s) => s.heap);
+  const n = xs.length;
+  const xMean = xs.reduce((a, b) => a + b, 0) / n;
+  const yMean = ys.reduce((a, b) => a + b, 0) / n;
+  let num = 0;
+  let den = 0;
+  for (let i = 0; i < n; i += 1) {
+    const dx = xs[i] - xMean;
+    num += dx * (ys[i] - yMean);
+    den += dx * dx;
+  }
+  return den === 0 ? 0 : num / den;
+}
+
+export function judgeHeapSlope(samples: HeapSample[]): HeapSlopeJudgement {
+  const withHeap = samples
+    .filter((s): s is HeapSample & { heap_cdp: number } => s.heap_cdp != null)
+    .map((s) => ({ t_ms: s.t_ms, heap: s.heap_cdp }));
+  const lastT = withHeap.length ? withHeap[withHeap.length - 1].t_ms : 0;
+  const last10 = withHeap.filter((s) => s.t_ms >= lastT - 10 * 60_000);
+  const slope = linearSlopePerMinute(last10);
+  const heaps = last10.map((s) => s.heap);
+  const min = heaps.length ? Math.min(...heaps) : null;
+  const max = heaps.length ? Math.max(...heaps) : null;
+  const mean = heaps.length ? heaps.reduce((a, b) => a + b, 0) / heaps.length : 0;
+  const rangeRatio = min != null && max != null && mean > 0 ? (max - min) / mean : null;
+  const plateau =
+    (rangeRatio != null && rangeRatio < 0.05) ||
+    (slope != null && Math.abs(slope) < HEAP_SLOPE_NOISE_BYTES_PER_MIN);
+  const unbounded = slope != null && slope > HEAP_SLOPE_NOISE_BYTES_PER_MIN && !plateau;
+  return {
+    n: withHeap.length,
+    last10_n: last10.length,
+    slope_bytes_per_min: slope,
+    last10_min: min,
+    last10_max: max,
+    last10_range_ratio: rangeRatio,
+    plateau,
+    unbounded,
+  };
+}
+
+export async function attachCdpHeap(page: Page): Promise<CDPSession> {
+  return page.context().newCDPSession(page);
+}
+
+export async function readHeapCdp(client: CDPSession): Promise<number | null> {
+  try {
+    const usage = (await client.send("Runtime.getHeapUsage")) as {
+      usedSize?: number;
+    };
+    if (typeof usage.usedSize === "number") {
+      return usage.usedSize;
+    }
+  } catch {
+    // Chromium 无此方法时走 Performance 指标
+  }
+  try {
+    const metrics = (await client.send("Performance.getMetrics")) as {
+      metrics?: Array<{ name: string; value: number }>;
+    };
+    const row = metrics.metrics?.find((item) => item.name === "JSHeapUsedSize");
+    return row ? row.value : null;
+  } catch {
+    return null;
+  }
 }
 
 export function streamSampleIssue(sample: StreamSample): string | null {

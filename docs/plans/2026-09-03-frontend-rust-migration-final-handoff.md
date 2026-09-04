@@ -3,11 +3,12 @@
 | 字段 | 内容 |
 |---|---|
 | 日期 | 2026-09-03；2026-09-04 更新（浏览器切片 + live smoke + Tauri 垂直切片） |
-| 状态 | **Phase 0 浏览器切片、live smoke、Tauri IPC/CSR 已完成；Gate 0 仍为 NO-GO** |
+| 状态 | **Phase 0 浏览器切片已完成；Gate 0 改为观察。下一棒：[`2026-09-04-rust-web-gpui-desktop-handoff.md`](2026-09-04-rust-web-gpui-desktop-handoff.md)** |
 | 关联权威设计 | [`2026-09-03-frontend-rust-migration-design.md`](2026-09-03-frontend-rust-migration-design.md) |
 | 实施编排计划 | [`2026-09-03-frontend-rust-migration-implementation-plan.md`](2026-09-03-frontend-rust-migration-implementation-plan.md) |
 | 性能实测报告 | [`2026-09-03-phase-0-benchmark-report.md`](2026-09-03-phase-0-benchmark-report.md)（Gate 0 NO-GO） |
-| 浏览器切片交接 | [`2026-09-04-frontend-rust-phase-0-browser-slice-handoff.md`](2026-09-04-frontend-rust-phase-0-browser-slice-handoff.md)（下一棒任务入口） |
+| 浏览器切片交接 | [`2026-09-04-frontend-rust-phase-0-browser-slice-handoff.md`](2026-09-04-frontend-rust-phase-0-browser-slice-handoff.md)（历史） |
+| 现行下一棒 | [`2026-09-04-rust-web-gpui-desktop-handoff.md`](2026-09-04-rust-web-gpui-desktop-handoff.md) |
 
 ## 1. 不变红线
 

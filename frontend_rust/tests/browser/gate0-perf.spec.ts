@@ -15,10 +15,17 @@ import {
   rustGotoChat,
   rustCollectStream,
   rustNewChat,
+  rustSendAndMeasure,
   loginGate0Api,
   wireNextChat,
   summarize,
   writeResult,
+  STRESS_EVERY_MS,
+  STRESS_MS,
+  attachCdpHeap,
+  judgeHeapSlope,
+  readHeapCdp,
+  type HeapSample,
 } from "./gate0-harness";
 
 const WEB_BASE = `http://127.0.0.1:${Number(process.env.POC_WEB_PORT || 3200)}`;
@@ -141,9 +148,72 @@ test("Gate 0 Rust PoC 5 cold + 20 hot", async ({ browser }) => {
   console.log(`gate0 result written ${RESULT_PATH}`);
 });
 
-test("Gate 0 30-minute heap slope (opt-in)", async () => {
+test("Gate 0 30-minute heap slope (opt-in)", async ({ browser }) => {
   test.skip(process.env.GATE0_STRESS !== "1", "set GATE0_STRESS=1 for the 30-minute sample");
-  test.fail(true, "30-minute collector not implemented in this slice");
+  test.setTimeout(Math.max(STRESS_MS + 120_000, 120_000));
+
+  const page = await browser.newPage();
+  await rustGotoChat(page, FIXTURE_BASE);
+  const cdp = await attachCdpHeap(page);
+  try {
+    await cdp.send("Performance.enable").catch(() => undefined);
+  } catch {
+    // optional
+  }
+
+  const started = Date.now();
+  const samples: HeapSample[] = [];
+  const errors: string[] = [];
+  let i = 0;
+  while (Date.now() - started < STRESS_MS) {
+    const tickStart = Date.now();
+    try {
+      if (i > 0) {
+        await rustNewChat(page);
+      }
+      await rustSendAndMeasure(page);
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message.slice(0, 200) : String(error));
+    }
+    const heapCdp = await readHeapCdp(cdp);
+    const heapPerf = await page.evaluate(() => {
+      const mem = (performance as unknown as { memory?: { usedJSHeapSize: number } }).memory;
+      return mem ? mem.usedJSHeapSize : null;
+    });
+    samples.push({
+      i,
+      t_ms: Date.now() - started,
+      heap_cdp: heapCdp,
+      heap_perf: heapPerf,
+    });
+    i += 1;
+    const wait = STRESS_EVERY_MS - (Date.now() - tickStart);
+    if (wait > 0 && Date.now() - started < STRESS_MS) {
+      await page.waitForTimeout(wait);
+    }
+  }
+
+  const judgement = judgeHeapSlope(samples);
+  const stressPath = join(
+    process.cwd(),
+    "results",
+    `gate0-stress-${new Date().toISOString().replace(/[:.]/g, "-")}.json`,
+  );
+  writeResult(stressPath, {
+    charter: "docs/plans/2026-09-04-frontend-rust-phase-0-gate0-benchmark-charter.md",
+    collected_at: new Date().toISOString(),
+    rust_profile: RUST_PROFILE,
+    duration_ms: Date.now() - started,
+    interval_ms: STRESS_EVERY_MS,
+    heap_source: "CDP Runtime.getHeapUsage (performance.memory recorded only)",
+    judgement,
+    errors,
+    samples,
+  });
+  console.log(`gate0 stress written ${stressPath}`);
+  await page.close();
+  expect(samples.length, "need at least two heap samples").toBeGreaterThan(1);
+  expect(judgement.unbounded, "last 10 min CDP heap slope unbounded").toBe(false);
 });
 
 async function collectNext(

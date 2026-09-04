@@ -1,9 +1,9 @@
-# Rust 前端 Phase 0：浏览器垂直切片交接文档（下一棒任务入口）
+# Rust 前端 Phase 0：浏览器垂直切片交接文档
 
 | 字段 | 内容 |
 |---|---|
 | 日期 | 2026-09-04 |
-| 状态 | 浏览器切片、live smoke、Tauri、会话历史、Gate 0 **debug / Next / release-like** 已采；Gate 0 仍 **NO-GO** |
+| 状态 | **历史入口**。下一棒改走 [`2026-09-04-rust-web-gpui-desktop-handoff.md`](2026-09-04-rust-web-gpui-desktop-handoff.md)。本文只保留浏览器 / Gate 0 采集证据 |
 | 完成提交 | `1f39b4a3`（feat(frontend_rust): Phase 0 browser vertical slice） |
 | 上游任务 | [`2026-09-04-frontend-rust-phase-0-browser-vertical-slice-task.md`](2026-09-04-frontend-rust-phase-0-browser-vertical-slice-task.md)（§10 验证报告） |
 | 权威设计 | [`2026-09-03-frontend-rust-migration-design.md`](2026-09-03-frontend-rust-migration-design.md) |
@@ -18,7 +18,7 @@
 `chat_stream` / `chat_cancel`，CSR 产物可构建。侧栏只读会话列表 + `/chat/:id` 历史恢复已接入
 同一 `ConversationManager` / reducer（浏览器 Fetch；桌面 REST IPC 未做）。**它不是产品前端**，
 不得部署；未切 `tauri.conf.json`。Gate 0 已冻结 charter，并采到 Rust debug、Next standalone、
-Rust release-like 各 5 冷 + 20 热；核心 p95 未达 ≥20%，体积护栏失败，缺 30 分钟，结论仍 **NO-GO**。
+Rust release-like 各 5 冷 + 20 热；核心 p95 未达 ≥20%；30 分钟 CDP 未判无界（§2.6）；结论仍 **NO-GO**。
 
 ## 2. 架构地图（改造后）
 
@@ -121,13 +121,14 @@ WSL 纪律：`jobs=2`，不要叠加并发全量 cargo 运行；长时间任务�
 - live backend：无 token 的真实 401 → `unauthorized`；有 JWT 的一轮 Quick Chat 流式收束、URL 落地。
 - Gate 0 第一采集（debug）：Rust 5 冷 + 20 热，first token p95 235.5ms，complete p95 1545.9ms。
 - Gate 0 Next 对照（standalone :3000）：两侧 5+20；first p95 Rust debug 234.8 / Next 262.7（10.6%）；complete 1531.6 / 1538.6（0.5%）。
-- Gate 0 release-like：first p95 229.0 / Next 268.0（14.6%）；complete 1527.8 / 1540.7（0.8%）；传输 1.46MB vs 0.56MB；30 分钟未采。
+- Gate 0 release-like：first p95 229.0 / Next 268.0（14.6%）；complete 1527.8 / 1540.7（0.8%）；传输 1.46MB vs 0.56MB。
+- Gate 0 30 分钟（release）：63 点 CDP，后 10 分钟斜率 +41 KB/min，`unbounded=false`。见报告 §2.6。
 
 未验证/未完成：
 
 - 真实 Tauri WebView 点验；桌面会话列表（需 REST IPC）；Session files、RAG/Web/Workspace/Share/BYOK；
 - Markdown 富渲染/代码高亮/虚拟列表；
-- Gate 0 仍缺：30 分钟堆斜率（且 `performance.memory` 10MB 分桶不可用）；
+- Gate 0 核心仍未达 ≥20%；稳定性已采（CDP，不用分桶 `performance.memory`）；
 - Nginx/systemd/部署脚本（Phase 6 之前禁止）。
 
 ## 5. 实施期踩坑记录（下一棒别再踩）
@@ -175,13 +176,11 @@ WSL 纪律：`jobs=2`，不要叠加并发全量 cargo 运行；长时间任务�
 15. **夹具末事件无结尾空行时 Next 解析不到 `done`**（残留行不进 `data` 字段，
     `data-pending` 一直为 true）。夹具服务在最后一块后补 `\n\n`。关页前 `unrouteAll`。
 
-## 6. 建议的下一任务切片（按依赖排序）
+## 6. 下一棒
 
-1. **30 分钟堆斜率**（仍不许 GO）：实现 `GATE0_STRESS=1`，用 CDP 堆，不要用分桶的 `usedJSHeapSize`。
-   采完后按设计 §3.3 评估是否停迁移：核心最大改善 14.6% / 0.8%，体积约 2.6× Next，complete 被夹具 15ms×97 绑死。
-2. **真实 Tauri WebView 点验**（可选，Phase 5 之前）：用临时 `frontendDist` 或独立 window
-   验证 IPC 一轮；不要把生产 `tauri.conf.json` 切走 Next。桌面会话列表需要 REST IPC 才能做。
-3. 之后才是 Phase 1 固化（route manifest、SEO/security/style 基线测试、Token 同步校验）。Gate 0 通过前禁止。
+整表只认 [`2026-09-04-rust-web-gpui-desktop-handoff.md`](2026-09-04-rust-web-gpui-desktop-handoff.md)。
+
+本切片的 Gate 0 / 会话 / Tauri 证据仍如下。
 
 Gate 0 第一采集证据见
 [`2026-09-04-frontend-rust-phase-0-gate0-perf-task.md`](2026-09-04-frontend-rust-phase-0-gate0-perf-task.md) §4
@@ -208,6 +207,6 @@ live backend smoke 已完成，证据见
 
 - `frontend_next` 只读；`contracts::chat` 是唯一 wire 真相（禁止第二 DTO/别名/解析忽略）；
 - 不改后端 API；不把协议残片/host 标签拼进用户主气泡；
-- 不动 Nginx/systemd/部署脚本，不部署生产；Gate 0 通过前禁止 Phase 1–6；
+- 不动 Nginx/systemd/部署脚本，不部署生产；未另批不删 `frontend_next`。Gate 0 为观察项，按 [ADR-0011](../adr/0011-rust-web-gpui-desktop.md) 开发；
 - 任何 compile/test 先报耗时获同意；结构性改动后 `code-review-graph update`；
 - 只提交本任务文件，本地提交不 push。

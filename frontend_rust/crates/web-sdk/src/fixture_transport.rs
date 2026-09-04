@@ -10,6 +10,10 @@ impl FixtureTransport {
         Self { events }
     }
 
+    pub fn events(&self) -> &[ChatEvent] {
+        &self.events
+    }
+
     pub fn from_json_lines(json_str: &str) -> Result<Self, serde_json::Error> {
         let mut events = Vec::new();
         for line in json_str.lines() {

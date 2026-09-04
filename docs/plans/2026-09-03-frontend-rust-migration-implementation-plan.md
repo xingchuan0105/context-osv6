@@ -3,12 +3,12 @@
 | 字段 | 内容 |
 |---|---|
 | 日期 | 2026-09-03 |
-| 状态 | 编排草案（未开工；以 Phase 0 可行性与收益验证为绝对前置门禁） |
+| 状态 | 编排草案。**2026-09-04 19:40：Gate 0 改为观察，不再是绝对前置门禁**；目标态见 [ADR-0011](../adr/0011-rust-web-gpui-desktop.md) |
 | 设计真相 | [`2026-09-03-frontend-rust-migration-design.md`](2026-09-03-frontend-rust-migration-design.md)（权威设计规范） |
 | 产品 IA | [`docs/design/PRODUCT_IA.md`](../design/PRODUCT_IA.md)（Canonical 路由、Shell 规则与单一完成页） |
 | 视觉基线 | [`docs/design/STYLE_BASELINE.md`](../design/STYLE_BASELINE.md) 与 `packages/cos-tokens/tokens.css` |
 | 桌面真相 | `desktop/src-tauri` 与 `frontend_next/lib/runtime/tauri-ipc.ts` |
-| 规则硬约束 | 编译/测试前须先做耗时估算并获得批准；Gate 0 未通过前严禁进入 Phase 1，严禁提前删除 `frontend_next` |
+| 规则硬约束 | 编译/测试前须先做耗时估算并获得批准；严禁未另批就删除 `frontend_next` 或部署。Gate 0 数字只观察 |
 
 ---
 

@@ -5,6 +5,10 @@
 > 状态：评审修订稿；建议只批准 Phase 0 可行性验证，尚未批准全量迁移或删除 `frontend_next`
 >
 > 候选栈：Leptos + Axum + cargo-leptos；版本由 Phase 0 的 SSR/WASM/Tauri 验证结果锁定
+>
+> **2026-09-04 目标态修订：** 桌面不再走 Tauri WebView / Leptos CSR。在线仍是 Leptos；Windows / macOS / Linux 桌面均为 GPUI。权威：[ADR-0011](../adr/0011-rust-web-gpui-desktop.md)。下文 §4 三目标矩阵、§10、Phase 5、完成定义中的「同一 `web-ui` + Tauri IPC」**不再执行**。
+>
+> **2026-09-04 19:40：** Gate 0 全部改为观察项，不再因未达 ≥20% 停开发。§3.3 的「停迁移」对开发计划失效；删除 Next / 部署仍须另批。
 
 ## 1. 决策摘要
 

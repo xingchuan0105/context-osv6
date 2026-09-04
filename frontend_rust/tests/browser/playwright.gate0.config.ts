@@ -14,7 +14,7 @@ const RUST_PROFILE = process.env.GATE0_RUST_PROFILE === "release" ? "release" : 
 export default defineConfig({
   testDir: ".",
   testMatch: "gate0-perf.spec.ts",
-  timeout: 900_000,
+  timeout: process.env.GATE0_STRESS === "1" ? 2_700_000 : 900_000,
   retries: 0,
   workers: 1,
   reporter: [["list"]],

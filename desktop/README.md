@@ -2,6 +2,8 @@
 
 基于 Tauri 2 的桌面客户端，复用 `frontend_next` 静态资源 + `avrag-rs` Rust 核心。
 
+**目标态（2026-09-04）：** 产品桌面 UI 改为全平台 GPUI，不再走 WebView / Leptos CSR。见 [ADR-0011](../docs/adr/0011-rust-web-gpui-desktop.md)。本文描述的是**现网发货路径**，在 GPUI 对等之前不要改生产 `tauri.conf.json`。
+
 ## 架构
 
 ```

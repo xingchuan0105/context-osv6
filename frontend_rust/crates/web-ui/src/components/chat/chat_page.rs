@@ -7,10 +7,7 @@ use leptos::prelude::*;
 use leptos_router::NavigateOptions;
 use leptos_router::hooks::{use_navigate, use_params};
 use leptos_router::params::Params;
-use web_sdk::{
-    BrowserHttpTransport, BrowserRestClient, ChatClient, ChatTransport, TauriIpcTransport,
-    is_tauri_runtime,
-};
+use web_sdk::{BrowserHttpTransport, BrowserRestClient, ChatClient};
 
 #[derive(Params, PartialEq, Clone, Debug)]
 struct ChatParams {
@@ -252,9 +249,6 @@ pub fn ChatPage() -> impl IntoView {
                 </button>
                 <Show when=move || token.with(|value| value.is_empty())>
                     <p class="chat-sessions-hint">"填写访问令牌后加载会话"</p>
-                </Show>
-                <Show when=move || is_tauri_runtime()>
-                    <p class="chat-sessions-hint">"桌面端会话列表待 REST IPC"</p>
                 </Show>
                 <ul class="chat-session-items">
                     <For
@@ -551,41 +545,14 @@ fn citation_label(citation: &serde_json::Value) -> String {
     }
 }
 
-enum PocTransport {
-    Browser(BrowserHttpTransport),
-    Tauri(TauriIpcTransport),
-}
-
-impl ChatTransport for PocTransport {
-    async fn stream_chat(
-        &self,
-        request: contracts::chat::ChatRequest,
-        cancellation: web_sdk::Cancellation,
-    ) -> Result<web_sdk::ChatEventStream, web_sdk::TransportError> {
-        match self {
-            Self::Browser(transport) => transport.stream_chat(request, cancellation).await,
-            Self::Tauri(transport) => transport.stream_chat(request, cancellation).await,
-        }
-    }
-}
-
-fn select_transport(token: Option<String>) -> PocTransport {
-    if is_tauri_runtime() {
-        PocTransport::Tauri(TauriIpcTransport::new(token))
-    } else {
-        PocTransport::Browser(BrowserHttpTransport::new(&poc_api_base(), token))
-    }
-}
-
 fn focus_composer(composer_ref: NodeRef<leptos::html::Textarea>) {
     if let Some(element) = composer_ref.get() {
         let _ = element.focus();
     }
 }
 
-/// 启动一条聊天流。浏览器：Fetch/SSE。Tauri WebView：既有 `chat_stream` IPC。
-/// 两条路径都把 `ChatEvent` 交给同一 reducer。任务内只允许访问 App 级 model、
-/// Router 级 navigate 与 window.location。
+/// 启动一条聊天流。浏览器 Fetch/SSE，事件进同一 reducer。
+/// 任务内只允许访问 App 级 model、Router 级 navigate 与 window.location。
 fn spawn_chat_stream(
     model: RwSignal<ChatCanvasModel>,
     turn: PreparedUserTurn,
@@ -593,7 +560,7 @@ fn spawn_chat_stream(
     navigate: impl Fn(&str, NavigateOptions) + Clone + 'static,
 ) {
     leptos::task::spawn_local(async move {
-        let client = ChatClient::new(select_transport(token.clone()));
+        let client = ChatClient::new(BrowserHttpTransport::new(&poc_api_base(), token.clone()));
         let scope = turn.stream_scope;
         match client.stream(turn.request, turn.cancellation).await {
             Ok(mut stream) => {
@@ -627,9 +594,6 @@ fn spawn_refresh_sessions(model: RwSignal<ChatCanvasModel>, token: Option<String
     let Some(token) = token.filter(|value| !value.is_empty()) else {
         return;
     };
-    if is_tauri_runtime() {
-        return;
-    }
     leptos::task::spawn_local(async move {
         let client = BrowserRestClient::new(&poc_api_base(), Some(token));
         if let Ok(list) = client.list_sessions().await {
@@ -649,11 +613,6 @@ fn spawn_load_history(
 ) {
     let load_gen = history_load_gen.get_untracked() + 1;
     history_load_gen.set(load_gen);
-    if is_tauri_runtime() {
-        history_loading.set(false);
-        history_error.set(Some("桌面端尚未提供会话历史 IPC。".to_string()));
-        return;
-    }
     history_loading.set(true);
     history_error.set(None);
     leptos::task::spawn_local(async move {

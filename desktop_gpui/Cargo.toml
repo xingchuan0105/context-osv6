@@ -1,0 +1,21 @@
+[package]
+name = "desktop-gpui"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Context-OS desktop UI (GPUI). Independent workspace; not a member of avrag-rs."
+
+[dependencies]
+contracts = { path = "../contracts" }
+web-sdk = { path = "../frontend_rust/crates/web-sdk" }
+serde_json = "1.0.145"
+gpui = { version = "0.2", optional = true }
+
+[features]
+default = []
+ui = ["dep:gpui"]
+
+[[bin]]
+name = "desktop-gpui"
+path = "src/main.rs"
+required-features = ["ui"]

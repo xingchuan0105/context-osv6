@@ -2,11 +2,11 @@
 
 | 字段 | 内容 |
 |---|---|
-| 日期 | 2026-09-03（修正审计）；2026-09-04（Rust debug + Next 对照 + release-like 再采） |
-| 状态 | **审计未通过 / 结论保持 NO-GO**（release-like 已采；核心 p95 仍未达 ≥20%；体积护栏仍失败；无 30 分钟） |
+| 日期 | 2026-09-03（修正审计）；2026-09-04（debug / Next / release-like / 护栏改观察 / 30 分钟 CDP） |
+| 状态 | **数字已归档；2026-09-04 19:40 起 Gate 0 全部为观察项，不再挡开发**（核心仍未达 ≥20%；30 分钟 `unbounded=false`） |
 | 关联设计 | [`2026-09-03-frontend-rust-migration-design.md`](2026-09-03-frontend-rust-migration-design.md) |
 | 关联计划 | [`2026-09-03-frontend-rust-migration-implementation-plan.md`](2026-09-03-frontend-rust-migration-implementation-plan.md) |
-| 修正结论 | **NO-GO（release-like 核心改善 14.6% / 0.8%，体积仍约 2.6× Next，不得进入全量迁移）** |
+| 修正结论 | **观察：核心 14.6% / 0.8%，无流式性能故事；稳定性已采。开发按 ADR-0011 继续，不把本报告写成性能通过** |
 
 ---
 
@@ -400,7 +400,51 @@ LCP / 体积优于完整 Next **不算**核心收益（charter §3）。debug 6.
 
 ---
 
+## 2.5 业主放开护栏后的整体对照（2026-09-04 18:56）
+
+业主决定：§4 护栏改为观察项，不再因体积/LCP/堆/掉帧否决。核心 p95 ≥20% 未改。数字取 §2.4 同机 release-like 一轮。
+
+### 总表
+
+| 层 | 指标 | Rust release | Next standalone | 差值 | 角色 |
+|---|---|---|---|---|---|
+| 核心 | first token p95 | 229.0ms | 268.0ms | Rust 快 14.6% | **未达 ≥20%** |
+| 核心 | complete p95 | 1527.8ms | 1540.7ms | Rust 快 0.8% | **未达 ≥20%**（夹具 97×15ms 地板约 1455ms） |
+| 观察 | 冷启动 LCP p95 | 108ms | 428ms | Rust 快 | 观察 |
+| 观察 | 冷启动传输 | 1.46MB | 0.56MB | Rust 约 2.6× | 观察（Axum 未压 WASM；Next 是压缩 JS） |
+| 观察 | 掉帧 p95 | 0 | 0 | 持平 | 观察 |
+| 观察 | `performance.memory` | 10MB 桶 | 10.6–17.1MB | 不可比 | 观察；斜率改走 CDP |
+
+### 整体效果（不是 GO）
+
+1. **流式墙钟几乎被夹具写死。** 两边 complete 都是 ~1.53s，release 相对 debug 只动了几毫秒。用户感知的「写完」时间不会因换前端而少 20%。
+2. **Rust 首绘略快，是因为没有打字机。** 第一枚 token（242 字）一次进 DOM；Next 先吐 8 个字。这 39ms 是产品策略差，不是 SSE/WASM 吞吐差。夹具前奏 210ms 两边一起等。
+3. **体积大是传输形态，不是页面「更重」。** 1.4MB `web_ui.wasm` 未经 gzip/br；Next 564KB 是压过的包。放开护栏后这项不再挡决策，但也不能把它读成「Rust 更省」。
+4. **LCP / 掉帧对 PoC 有利或持平**，不能当迁移收益（charter §3 已排除）。
+5. **正确性**（既有切片）：真实 SSE、停止/重试、会话历史、Tauri IPC 骨架已通。这是「能跑」不是「该迁」。
+
+放开护栏之后，**整体仍是：薄切片能工作，流式收益不够支持全量迁移。** GO 仍缺核心 ≥20%。30 分钟堆见 §2.6，未判无界，但不能把稳定性当成流式收益。
+
+---
+
+## 2.6 30 分钟 CDP 堆（2026-09-04 19:04–19:35）
+
+| 项 | 值 |
+|---|---|
+| 开关 | `GATE0_STRESS=1 GATE0_RUST_PROFILE=release`（未同时开 `GATE0=1`） |
+| 墙钟 | 31.7 min Playwright；样本窗 `duration_ms=1_813_439`（约 30.2 min） |
+| 间隔 | 30s；63 点；错误 0 |
+| 堆源 | CDP `Runtime.getHeapUsage.usedSize`（`performance.memory` 全程 10MB 桶，仅对照） |
+| 后 10 分钟 | 21 点；CDP 2.85–4.00MB；斜率 **+41.2 KB/min** |
+| 判定 | `plateau=true`（\|斜率\| < 50KB/min）；`unbounded=false` |
+| 原始 | `frontend_rust/tests/browser/results/gate0-stress-2026-09-04T11-35-01-088Z.json`（gitignore，不入库） |
+
+全程 CDP 在约 2.2–4.0MB 振荡，未见持续抬升。`performance.memory` 不能做斜率，与 §2.4 结论一致。
+
+稳定性项**已满足 charter §5**。核心两项仍未达 ≥20%，**GO 仍不成立**。
+
+---
+
 ## 3. 最终审计结论
 
-**Gate 0 结论保持：NO-GO（release-like 已采，仍不足以支持迁移）**。
-系统必须保持 `frontend_next` 稳定运行。下一棒是可用的 30 分钟堆测法（CDP，不要用分桶的 `performance.memory`）；严禁生产发布。
+**Gate 0 数字：核心未达 ≥20%；稳定性未判无界。** 2026-09-04 19:40 起全部为观察项，不再挡开发。生产在对等前仍跑 `frontend_next`；删除 Next / 部署须另批。目标态见 [ADR-0011](../adr/0011-rust-web-gpui-desktop.md)。

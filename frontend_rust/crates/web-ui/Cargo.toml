@@ -29,7 +29,6 @@ web-sys = { workspace = true, features = ["Window", "Location"] }
 default = []
 hydrate = ["leptos/hydrate"]
 ssr = ["leptos/ssr", "leptos_router/ssr", "leptos_meta/ssr"]
-csr = ["leptos/csr"]
 
 [dev-dependencies]
 tokio = { workspace = true }
