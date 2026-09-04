@@ -3,7 +3,7 @@
 | 字段 | 内容 |
 |---|---|
 | 日期 | 2026-09-04 |
-| 状态 | 浏览器垂直切片 **已完成**；Gate 0 仍 **NO-GO**；等待下一任务（Tauri / 完整功能 / 性能对照） |
+| 状态 | 浏览器垂直切片 **已完成**；live backend smoke **已完成**；Gate 0 仍 **NO-GO**；下一棒是 Tauri / 完整功能 / 性能对照 |
 | 完成提交 | `1f39b4a3`（feat(frontend_rust): Phase 0 browser vertical slice） |
 | 上游任务 | [`2026-09-04-frontend-rust-phase-0-browser-vertical-slice-task.md`](2026-09-04-frontend-rust-phase-0-browser-vertical-slice-task.md)（§10 验证报告） |
 | 权威设计 | [`2026-09-03-frontend-rust-migration-design.md`](2026-09-03-frontend-rust-migration-design.md) |
@@ -39,7 +39,7 @@ frontend_rust/
 ├── assets/style/chat-poc.css  # PoC 布局（只引用 Token；design-tokens.css 走 style-file 管线）
 └── tests/
     ├── fixtures/stream-long-3000.{chunks.json,events.jsonl}   # 3013 字确定性分块夹具
-    └── browser/               # Playwright 验收（fixture-sse-server.mjs + chat-journey.spec.ts）
+    └── browser/               # Playwright：fixture 套件 + gated live smoke（playwright.live.config.ts）
 ```
 
 事件流（浏览器旅程断言的链路）：
@@ -81,6 +81,11 @@ LEPTOS_SITE_ADDR=127.0.0.1:3001 LEPTOS_SITE_ROOT=$PWD/target/site ./target/debug
 
 # 浏览器验收（会先自动拉起 web-server:3200 与 fixture:3201；需先 cargo leptos build）
 cd tests/browser && pnpm exec playwright test
+
+# live backend smoke（gated；PoC 必须绑 18080，因默认 CORS 不含 3001/3200）
+# 要求本机 avrag-api 可访问；8080 若被 Next 占用，用空闲端口另起 API 并设 LIVE_API_BASE
+cd tests/browser && LIVE_BACKEND=1 LIVE_API_BASE=http://127.0.0.1:<api-port> \
+  pnpm exec playwright test --config playwright.live.config.ts
 ```
 
 WSL 纪律：`jobs=2`，不要叠加并发全量 cargo 运行；长时间任务后台 + 日志。
@@ -92,16 +97,16 @@ WSL 纪律：`jobs=2`，不要叠加并发全量 cargo 运行；长时间任务�
 
 ## 4. 已验证 vs 未验证
 
-已验证（证据：任务文档 §10 + Playwright 7/7）：
+已验证（证据：切片任务 §10 + Playwright 7/7；live smoke 任务 §6 + Playwright 2/2）：
 
 - decoder 覆盖 §4.1 全部 10 类输入；3000+ 字夹具 decoder→reducer 与 fixture→reducer 终态一致；
 - 浏览器侧 113 字节乱序分块（UTF-8 跨包）完整渲染；真实取消被服务端观测；401/坏 JSON 为
   `role="alert"` typed error；retry 新流隔离；SSR 双路由表单语义；hydration 无重复 root/无错误；
 - dev 与 release-like 产物均实际构建并启动。
+- live backend：无 token 的真实 401 → `unauthorized`；有 JWT 的一轮 Quick Chat 流式收束、URL 落地。
 
 未验证/未完成：
 
-- **live backend smoke 未执行**（2026-09-04 本机 8081 未运行后端；未改造 Auth、未伪造通过）；
 - Tauri IPC / Tauri CSR 产物；会话列表、历史加载、Session files、RAG/Web/Workspace/Share/BYOK；
 - Markdown 富渲染/代码高亮/虚拟列表；Next/Rust 同机性能与 30 分钟压力对照（Gate 0 必需）；
 - Nginx/systemd/部署脚本（Phase 6 之前禁止）。
@@ -128,18 +133,23 @@ WSL 纪律：`jobs=2`，不要叠加并发全量 cargo 运行；长时间任务�
    的计数器用 `/admin/reset` 在 `beforeEach` 清零，避免跨用例污染。
 7. **base_url 不能带 query**（transport 直接 `base + "/api/v1/chat"`）；fixture 的字节切片模式
    走路径前缀 `/bytes/:n/api/v1/chat`。
+8. **本机 8080 可能不是 avrag-api**。`GET /health` 若返回大段 HTML，是 Next 占用了配置端口。
+   live smoke 不要改 `.env`；另起空闲端口并设 `LIVE_API_BASE`。PoC 页用 `127.0.0.1:18080`
+   （默认 CORS 白名单），不要用 3001/3200 打真实 API。
 
 ## 6. 建议的下一任务切片（按依赖排序）
 
-1. **live backend smoke**（最小）：本机起 `avrag-rs` 后端，`avrag-rs/.env` 静默复用凭据，
-   PoC token 输入框走一轮真实 `/api/v1/chat`；任何偏差只记录可复现证据，不顺手改 Next/后端。
-2. **Tauri 垂直切片**：`TauriIpcTransport` 接既有 `chat_stream_start`/cancel command，复用同一
+1. **Tauri 垂直切片**：`TauriIpcTransport` 接既有 `chat_stream_start`/cancel command，复用同一
    decoder/reducer/fixture；Tauri CSR 产物（`csr` feature 已预留）；按设计 §10 验收。
-3. **会话列表 + 历史加载**（Chat-first W2 子集）：只读 API，`/chat/:sessionId` 恢复历史；
+2. **会话列表 + 历史加载**（Chat-first W2 子集）：只读 API，`/chat/:sessionId` 恢复历史；
    注意 reducer 与历史消息的单管线，不发明第二完成路径。
-4. **Gate 0 性能对照**：冻结 benchmark charter 后同机采集 LCP/输入到绘制/掉帧/Heap/30 分钟
+3. **Gate 0 性能对照**：冻结 benchmark charter 后同机采集 LCP/输入到绘制/掉帧/Heap/30 分钟
    压力，Rust 与优化后 Next 同夹具对照；未达标即按设计 §3.3 停止迁移转优化 Next。
-5. 之后才是 Phase 1 固化（route manifest、SEO/security/style 基线测试、Token 同步校验）。
+4. 之后才是 Phase 1 固化（route manifest、SEO/security/style 基线测试、Token 同步校验）。
+
+live backend smoke 已完成，证据见
+[`2026-09-04-frontend-rust-phase-0-live-backend-smoke-task.md`](2026-09-04-frontend-rust-phase-0-live-backend-smoke-task.md) §6。
+踩坑：配置端口 8080 可能被 Next HTML 占用；PoC 页必须用 CORS 白名单 origin（`127.0.0.1:18080`），不要用 3001/3200 打真实 API。
 
 ## 7. 红线（任何后续任务不得突破）
 

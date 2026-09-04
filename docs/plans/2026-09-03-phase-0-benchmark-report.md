@@ -47,7 +47,7 @@
 
 - Tauri IPC 与 Tauri CSR 产物仍未实现/未验证；
 - 仍无 Next.js 同机、同浏览器、同网络条件的 LCP/Heap/掉帧/30 分钟压力对照数据；
-- live backend  smoke 未执行（本机 8081 后端未运行）。
+- live backend smoke 已执行（2026-09-04）：真实 `/api/v1/chat` 一轮 + 401 对照经浏览器 Fetch 通过；未采集性能数字。配置端口 8080 当时被 Next HTML 占用，smoke 使用一次性 `127.0.0.1:18081`。证据见 [`2026-09-04-frontend-rust-phase-0-live-backend-smoke-task.md`](2026-09-04-frontend-rust-phase-0-live-backend-smoke-task.md) §6。
 
 因此 **Gate 0 结论保持 NO-GO**：不得据此进入全量迁移或 Phase 1–6，本报告不含任何推测性能数字。
 

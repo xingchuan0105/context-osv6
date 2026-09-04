@@ -2,7 +2,7 @@
 
 | 字段 | 内容 |
 |---|---|
-| 日期 | 2026-09-03；2026-09-04 更新（浏览器垂直切片完成） |
+| 日期 | 2026-09-03；2026-09-04 更新（浏览器垂直切片 + live backend smoke） |
 | 状态 | **Phase 0 浏览器垂直切片已完成（真实 Fetch/SSE + Leptos SSR/hydration，浏览器证据齐全）；Gate 0 仍为 NO-GO** |
 | 关联权威设计 | [`2026-09-03-frontend-rust-migration-design.md`](2026-09-03-frontend-rust-migration-design.md) |
 | 实施编排计划 | [`2026-09-03-frontend-rust-migration-implementation-plan.md`](2026-09-03-frontend-rust-migration-implementation-plan.md) |
@@ -68,7 +68,13 @@
 - wasm32 hydrate check（`web-sdk` + `web-ui --features hydrate`）：通过。`contracts` `ts-rs` warning 依旧存在，如实保留。
 - `cargo leptos build`（dev）与 `cargo leptos build --release`（含 wasm-opt）：均构建成功；release 产物启动 smoke 通过（SSR 表单语义、`/pkg/*` 产物、`/healthz`）。
 - Playwright（chromium，真实浏览器 + 受控 SSE 测试服务器）：7 passed / 0 failed，覆盖 SSR smoke、hydration、字节级乱序分块完整渲染、真实取消（服务端观测 abort）、401/坏 JSON 错误态、retry 新流隔离。
-- live backend smoke 未执行（本机 8081 未运行后端）。
+- live backend smoke 已执行（2026-09-04）：配置端口 8080 被 Next.js HTML 占用，另起 `avrag-api` 于 `127.0.0.1:18081`；gated Playwright 2/2（401 对照 + 真实 Quick Chat）。证据见 [`2026-09-04-frontend-rust-phase-0-live-backend-smoke-task.md`](2026-09-04-frontend-rust-phase-0-live-backend-smoke-task.md) §6。
+
+### 3.2 live backend smoke（2026-09-04）
+
+- 产品 Rust 零改动。新增 `tests/browser/playwright.live.config.ts` 与 `chat-live-smoke.spec.ts`（无 `LIVE_BACKEND=1` 不跑）；默认 fixture 套件 `testIgnore` 该文件。
+- 未改 Next、未改后端 API/CORS、未做 Auth UI、未伪造代理头。
+- Gate 0 仍为 NO-GO（无性能对照、无 Tauri）。
 
 ## 4. Gate 0 仍为 NO-GO
 
