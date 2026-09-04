@@ -7,7 +7,7 @@ migration role must not have.
 
 | File | Purpose |
 |------|---------|
-| `002_runtime_grants.sql` | Create/harden `avrag` (owner/migrator), create `avrag_runtime` (DML only), grant business tables, set default privileges, assert invariants. |
+| `002_runtime_grants.sql` | Create/harden `avrag` (owner/migrator; holds `CREATE` on schema `public` — required for `CREATE INDEX`/`CREATE TABLE` migrations), create `avrag_runtime` (DML only), grant business tables, set default privileges, assert invariants. |
 | `002_runtime_grants.down.sql` | Revoke runtime grants (keeps the role). |
 
 ## Runbook connection

@@ -49,6 +49,10 @@ GRANT USAGE ON SCHEMA public TO avrag_runtime;
 REVOKE CREATE ON SCHEMA public FROM PUBLIC;
 REVOKE CREATE ON SCHEMA public FROM avrag_runtime;
 REVOKE ALL ON DATABASE CURRENT_DATABASE() FROM PUBLIC;
+-- Migration runner keeps DDL: object ownership alone cannot CREATE INDEX/TABLE
+-- (schema public is owned by avrag_cluster_admin since §5; pre-hardening this
+-- came implicitly from the PUBLIC pseudo-role grant).
+GRANT CREATE ON SCHEMA public TO avrag;
 
 -- DML on business tables: everything except migration-ledger/sensitive sets.
 DO $$
