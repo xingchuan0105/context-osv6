@@ -34,6 +34,21 @@ pub enum TransportError {
     Unavailable(String),
 }
 
+#[cfg(target_arch = "wasm32")]
+pub(crate) const MAX_ERROR_BODY_BYTES: usize = 4096;
+
+impl TransportError {
+    pub fn from_http_status(status: u16, body: String) -> Self {
+        match status {
+            401 => Self::Unauthorized,
+            402 => Self::PaymentRequired(body),
+            403 => Self::Forbidden(body),
+            429 => Self::RateLimited,
+            _ => Self::HttpStatus { status, body },
+        }
+    }
+}
+
 #[derive(Clone, Default)]
 pub struct Cancellation {
     token: CancellationToken,

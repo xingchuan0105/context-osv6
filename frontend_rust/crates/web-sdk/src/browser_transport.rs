@@ -52,7 +52,7 @@ impl ChatTransport for BrowserHttpTransport {
 
 #[cfg(target_arch = "wasm32")]
 mod wasm_fetch {
-    use super::{BrowserHttpTransport, MAX_ERROR_BODY_BYTES};
+    use super::BrowserHttpTransport;
     use crate::sse_decoder::events_from_byte_stream;
     use crate::transport::{Cancellation, ChatEventStream, TransportError};
     use contracts::chat::{ChatEvent, ChatRequest};
@@ -106,7 +106,7 @@ mod wasm_fetch {
         let status = response.status();
         if !(200..=299).contains(&status) {
             let body_text = read_bounded_text(&response).await;
-            return Err(map_http_status(status, body_text));
+            return Err(TransportError::from_http_status(status, body_text));
         }
 
         let raw_body = response.body().ok_or(TransportError::EmptyBody)?;
@@ -180,16 +180,6 @@ mod wasm_fetch {
         }
     }
 
-    fn map_http_status(status: u16, body: String) -> TransportError {
-        match status {
-            401 => TransportError::Unauthorized,
-            402 => TransportError::PaymentRequired(body),
-            403 => TransportError::Forbidden(body),
-            429 => TransportError::RateLimited,
-            _ => TransportError::HttpStatus { status, body },
-        }
-    }
-
     async fn read_bounded_text(response: &Response) -> String {
         let Ok(promise) = response.text() else {
             return String::new();
@@ -199,7 +189,9 @@ mod wasm_fetch {
             .ok()
             .and_then(|value| value.as_string())
             .unwrap_or_default();
-        text.chars().take(MAX_ERROR_BODY_BYTES).collect()
+        text.chars()
+            .take(crate::transport::MAX_ERROR_BODY_BYTES)
+            .collect()
     }
 
     fn is_abort_error(value: &wasm_bindgen::JsValue) -> bool {
@@ -225,9 +217,6 @@ mod wasm_fetch {
         TransportError::Network(describe_js(&value))
     }
 }
-
-#[cfg(target_arch = "wasm32")]
-const MAX_ERROR_BODY_BYTES: usize = 4096;
 
 #[cfg(target_arch = "wasm32")]
 impl ChatTransport for BrowserHttpTransport {

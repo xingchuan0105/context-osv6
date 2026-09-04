@@ -11,7 +11,9 @@ pub use app::{App, shell};
 pub use components::chat::{ChatCanvasModel, PreparedUserTurn, StreamScope};
 pub use reducer::{ActivityEntry, ChatTurnState, TurnStatus, reduce_chat_event};
 pub use routes::AppRoute;
-pub use session::{ActiveConversation, ConversationManager, ConversationMessage, MessageRole};
+pub use session::{
+    ActiveConversation, ConversationManager, ConversationMessage, MessageRole, messages_from_wire,
+};
 
 #[cfg(feature = "hydrate")]
 #[wasm_bindgen::prelude::wasm_bindgen]

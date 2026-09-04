@@ -1,6 +1,7 @@
 use crate::reducer::{ChatTurnState, TurnStatus, reduce_chat_event};
-use crate::session::{ConversationManager, MessageRole};
+use crate::session::{ConversationManager, ConversationMessage, MessageRole};
 use contracts::chat::{ChatEvent, ChatRequest};
+use contracts::workspaces::ChatSession;
 use web_sdk::{Cancellation, TransportError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -158,6 +159,51 @@ impl ChatCanvasModel {
     pub fn switch_to_personal_session(&mut self, session_id: &str) {
         self.invalidate_active_stream();
         self.manager.switch_to_personal_session(session_id);
+    }
+
+    pub fn switch_to_session(&mut self, session: &ChatSession) {
+        self.invalidate_active_stream();
+        self.manager.switch_to_session(session);
+    }
+
+    pub fn replace_session_list(&mut self, mut sessions: Vec<ChatSession>) {
+        sessions.sort_by(|left, right| {
+            right
+                .updated_at
+                .cmp(&left.updated_at)
+                .then_with(|| left.id.cmp(&right.id))
+        });
+        self.manager.session_list = sessions;
+    }
+
+    /// 把只读历史写进当前会话。epoch / session 不匹配或正在流式时拒绝，
+    /// 避免迟到响应覆盖新会话或打断当前 turn。
+    pub fn apply_history(
+        &mut self,
+        session_id: &str,
+        epoch: u64,
+        session: Option<ChatSession>,
+        messages: Vec<ConversationMessage>,
+    ) -> bool {
+        if self.manager.conversation_epoch != epoch {
+            return false;
+        }
+        if self.manager.active.session_id.as_deref() != Some(session_id) {
+            return false;
+        }
+        if self.is_streaming() {
+            return false;
+        }
+        if let Some(session) = session {
+            if session.id != session_id {
+                return false;
+            }
+            self.manager.active.workspace_id = session.workspace_id;
+            self.manager.active.model_role = session.model_role;
+            self.manager.active.scope_kind = session.scope_kind;
+        }
+        self.manager.active.messages = messages;
+        true
     }
 
     pub fn switch_to_workspace(&mut self, workspace_id: &str, session_id: Option<&str>) {

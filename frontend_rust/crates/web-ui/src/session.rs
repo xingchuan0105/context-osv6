@@ -1,5 +1,5 @@
 use contracts::{
-    chat::AnswerBlock,
+    chat::{AnswerBlock, ChatMessage},
     workspaces::{ChatSession, ConversationScopeKind},
 };
 
@@ -12,6 +12,36 @@ pub struct ConversationMessage {
     pub reasoning: Option<String>,
     pub citations: Vec<serde_json::Value>,
     pub created_at: String,
+}
+
+impl ConversationMessage {
+    pub fn from_wire(message: &ChatMessage) -> Option<Self> {
+        let role = match message.role.as_str() {
+            "user" => MessageRole::User,
+            "assistant" => MessageRole::Assistant,
+            _ => return None,
+        };
+        Some(Self {
+            id: message.id.to_string(),
+            role,
+            content: message.content.clone(),
+            answer_blocks: message.answer_blocks.clone(),
+            reasoning: None,
+            citations: message
+                .citations
+                .iter()
+                .filter_map(|citation| serde_json::to_value(citation).ok())
+                .collect(),
+            created_at: message.created_at.clone(),
+        })
+    }
+}
+
+pub fn messages_from_wire(messages: &[ChatMessage]) -> Vec<ConversationMessage> {
+    messages
+        .iter()
+        .filter_map(ConversationMessage::from_wire)
+        .collect()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -69,7 +99,7 @@ impl ConversationManager {
         };
     }
 
-    /// 恢复已有个人对话（Canonical /chat/:sessionId）
+    /// 恢复已有个人对话（Canonical /chat/:sessionId，尚无列表元数据时）
     pub fn switch_to_personal_session(&mut self, session_id: &str) {
         self.conversation_epoch += 1;
         self.active = ActiveConversation {
@@ -77,6 +107,18 @@ impl ConversationManager {
             workspace_id: None,
             model_role: self.active.model_role.clone(),
             scope_kind: ConversationScopeKind::Personal,
+            messages: Vec::new(),
+        };
+    }
+
+    /// 恢复已有会话，保留 wire 上的 workspace / scope / model_role。
+    pub fn switch_to_session(&mut self, session: &ChatSession) {
+        self.conversation_epoch += 1;
+        self.active = ActiveConversation {
+            session_id: Some(session.id.clone()),
+            workspace_id: session.workspace_id.clone(),
+            model_role: session.model_role.clone(),
+            scope_kind: session.scope_kind,
             messages: Vec::new(),
         };
     }

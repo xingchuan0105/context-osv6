@@ -1,13 +1,15 @@
 use crate::components::chat::{ChatCanvasModel, PreparedUserTurn};
 use crate::reducer::{ActivityEntry, TurnStatus};
-use crate::session::{ConversationMessage, MessageRole};
+use crate::session::{ConversationMessage, MessageRole, messages_from_wire};
+use contracts::workspaces::ChatSession;
 use futures_util::StreamExt;
 use leptos::prelude::*;
 use leptos_router::NavigateOptions;
 use leptos_router::hooks::{use_navigate, use_params};
 use leptos_router::params::Params;
 use web_sdk::{
-    BrowserHttpTransport, ChatClient, ChatTransport, TauriIpcTransport, is_tauri_runtime,
+    BrowserHttpTransport, BrowserRestClient, ChatClient, ChatTransport, TauriIpcTransport,
+    is_tauri_runtime,
 };
 
 #[derive(Params, PartialEq, Clone, Debug)]
@@ -24,6 +26,9 @@ pub fn ChatPage() -> impl IntoView {
     let token = expect_context::<RwSignal<String>>();
     let params = use_params::<ChatParams>();
     let navigate = use_navigate();
+    let history_error = RwSignal::new(None::<String>);
+    let history_loading = RwSignal::new(false);
+    let history_load_gen = RwSignal::new(0_u64);
 
     let composer = RwSignal::new(String::new());
     let composer_ref = NodeRef::<leptos::html::Textarea>::new();
@@ -45,8 +50,82 @@ pub fn ChatPage() -> impl IntoView {
                 m.manager().active.session_id.as_deref() != Some(session_id.as_str())
             });
             if needs_bind {
-                model.update(|m| m.switch_to_personal_session(&session_id));
+                model.update(|m| {
+                    if let Some(session) = m
+                        .manager()
+                        .session_list
+                        .iter()
+                        .find(|session| session.id == session_id)
+                        .cloned()
+                    {
+                        m.switch_to_session(&session);
+                    } else {
+                        m.switch_to_personal_session(&session_id);
+                    }
+                });
             }
+            let token_value = token.get_untracked();
+            let should_load = !token_value.is_empty()
+                && model.with_untracked(|m| {
+                    !m.is_streaming()
+                        && m.manager().active.messages.is_empty()
+                        && m.manager().active.session_id.as_deref() == Some(session_id.as_str())
+                });
+            if should_load {
+                let epoch = model.with_untracked(|m| m.manager().conversation_epoch);
+                spawn_load_history(
+                    model,
+                    session_id,
+                    epoch,
+                    token_value,
+                    history_error,
+                    history_loading,
+                    history_load_gen,
+                );
+            }
+        } else {
+            let should_reset = model.with_untracked(|m| {
+                !m.is_streaming() && m.manager().active.session_id.is_some()
+            });
+            if should_reset {
+                model.update(|m| m.new_personal_chat(None));
+                history_error.set(None);
+                history_loading.set(false);
+                history_load_gen.update(|n| *n += 1);
+            }
+        }
+    });
+
+    Effect::new(move |_| {
+        let token_value = token.get();
+        if token_value.is_empty() {
+            model.update(|m| m.replace_session_list(Vec::new()));
+            return;
+        }
+        spawn_refresh_sessions(model, Some(token_value.clone()));
+        let session_id = params
+            .get_untracked()
+            .ok()
+            .and_then(|p| p.session_id);
+        let Some(session_id) = session_id else {
+            return;
+        };
+        let should_load = model.with_untracked(|m| {
+            !m.is_streaming()
+                && m.manager().active.messages.is_empty()
+                && m.manager().active.session_id.as_deref() == Some(session_id.as_str())
+        });
+        if should_load {
+            let epoch = model.with_untracked(|m| m.manager().conversation_epoch);
+            spawn_load_history(
+                model,
+                session_id,
+                epoch,
+                token_value,
+                history_error,
+                history_loading,
+                history_load_gen,
+            );
         }
     });
 
@@ -57,7 +136,7 @@ pub fn ChatPage() -> impl IntoView {
 
     let try_prepare_turn = move |query: &str| {
         let query = query.trim().to_string();
-        if query.is_empty() {
+        if query.is_empty() || history_loading.get_untracked() {
             return None;
         }
         let mut model = model.write();
@@ -105,6 +184,9 @@ pub fn ChatPage() -> impl IntoView {
     let retry = {
         let navigate = navigate.clone();
         move |_| {
+            if history_loading.get_untracked() {
+                return;
+            }
             let turn = model.write().retry_last();
             if let Some(turn) = turn {
                 spawn_chat_stream(model, turn, current_token(), navigate.clone());
@@ -113,10 +195,42 @@ pub fn ChatPage() -> impl IntoView {
         }
     };
 
+    let start_new = {
+        let navigate = navigate.clone();
+        move |_| {
+            model.update(|m| m.new_personal_chat(None));
+            history_error.set(None);
+            history_loading.set(false);
+            history_load_gen.update(|n| *n += 1);
+            navigate(
+                "/chat",
+                NavigateOptions {
+                    scroll: false,
+                    ..Default::default()
+                },
+            );
+        }
+    };
+
+    let open_session = {
+        let navigate = navigate.clone();
+        move |session_id: String| {
+            navigate(
+                &format!("/chat/{session_id}"),
+                NavigateOptions {
+                    scroll: false,
+                    ..Default::default()
+                },
+            );
+        }
+    };
+
     let is_streaming = move || model.with(|m| m.is_streaming());
+    let composer_locked = move || is_streaming() || history_loading.get();
     let can_retry = move || {
         model.with(|m| {
             !m.is_streaming()
+                && !history_loading.get()
                 && m.manager()
                     .active
                     .messages
@@ -126,166 +240,242 @@ pub fn ChatPage() -> impl IntoView {
     };
 
     view! {
-        <main class="chat-canvas" aria-label="对话画布" data-testid="chat-canvas">
-            <header class="chat-header">
-                <h1 class="chat-title">"Context-OS 对话"</h1>
-                <details class="poc-token">
-                    <summary>"PoC 访问令牌（仅内存，不持久化）"</summary>
-                    <label for="poc-token-input">"访问令牌"</label>
-                    <input
-                        id="poc-token-input"
-                        data-testid="poc-token-input"
-                        type="password"
-                        autocomplete="off"
-                        placeholder="留空则不携带 Authorization"
-                        prop:value=move || token.get()
-                        on:input=move |ev| token.set(event_target_value(&ev))
-                    />
-                </details>
-            </header>
-
-            <section class="chat-transcript" aria-label="消息列表" data-testid="chat-transcript">
-                <Show when=move || model.with(|m| m.manager().active.messages.is_empty())>
-                    <p class="chat-empty" data-testid="chat-empty">"开始一轮新的对话。"</p>
+        <div class="chat-shell">
+            <aside class="chat-sessions" aria-label="会话列表" data-testid="session-list">
+                <button
+                    type="button"
+                    class="chat-new-chat"
+                    data-testid="new-chat-button"
+                    on:click=start_new
+                >
+                    "新对话"
+                </button>
+                <Show when=move || token.with(|value| value.is_empty())>
+                    <p class="chat-sessions-hint">"填写访问令牌后加载会话"</p>
                 </Show>
-                <For
-                    each=move || model.with(|m| m.manager().active.messages.clone())
-                    key=|message| message.id.clone()
-                    children=message_view
-                />
-
-                <Show when=move || {
-                    model.with(|m| !matches!(m.live_turn().status, TurnStatus::Idle))
-                }>
-                    <article class="chat-message chat-live" data-role="assistant">
-                        <div
-                            class="chat-live-answer"
-                            aria-live="polite"
-                            data-testid="live-answer"
-                        >
-                            {move || model.with(|m| m.live_turn().answer_text.clone())}
-                        </div>
-                    </article>
+                <Show when=move || is_tauri_runtime()>
+                    <p class="chat-sessions-hint">"桌面端会话列表待 REST IPC"</p>
                 </Show>
-
-                {move || {
-                    match model.with(|m| m.live_turn().status.clone()) {
-                        TurnStatus::Error { code, message } => {
-                            Some(view! {
-                                <p class="chat-error" role="alert" data-testid="chat-error">
-                                    {format!("请求失败（{code}）：{message}")}
-                                </p>
-                            })
+                <ul class="chat-session-items">
+                    <For
+                        each=move || model.with(|m| m.manager().session_list.clone())
+                        key=|session| session.id.clone()
+                        children=move |session| {
+                            let session_id = session.id.clone();
+                            let current_id = session_id.clone();
+                            let open_session = open_session.clone();
+                            view! {
+                                <li>
+                                    <button
+                                        type="button"
+                                        class="chat-session-item"
+                                        data-testid="session-item"
+                                        data-session-id=session.id.clone()
+                                        data-current=move || {
+                                            if model.with(|m| {
+                                                m.manager().active.session_id.as_deref()
+                                                    == Some(current_id.as_str())
+                                            }) {
+                                                "true"
+                                            } else {
+                                                "false"
+                                            }
+                                        }
+                                        on:click=move |_| open_session(session_id.clone())
+                                    >
+                                        {session_label(&session)}
+                                    </button>
+                                </li>
+                            }
                         }
-                        _ => None,
-                    }
+                    />
+                </ul>
+                {move || {
+                    history_error.get().map(|message| {
+                        view! {
+                            <p class="chat-error" role="alert" data-testid="session-error">
+                                {message}
+                            </p>
+                        }
+                    })
                 }}
+            </aside>
+            <main class="chat-canvas" aria-label="对话画布" data-testid="chat-canvas">
+                <header class="chat-header">
+                    <h1 class="chat-title">"Context-OS 对话"</h1>
+                    <details class="poc-token">
+                        <summary>"PoC 访问令牌（仅内存，不持久化）"</summary>
+                        <label for="poc-token-input">"访问令牌"</label>
+                        <input
+                            id="poc-token-input"
+                            data-testid="poc-token-input"
+                            type="password"
+                            autocomplete="off"
+                            placeholder="留空则不携带 Authorization"
+                            prop:value=move || token.get()
+                            on:input=move |ev| token.set(event_target_value(&ev))
+                        />
+                    </details>
+                </header>
 
-                <Show when=move || model.with(|m| !m.live_turn().activities.is_empty())>
-                    <section
-                        class="chat-activity"
-                        aria-label="进度"
-                        aria-live="polite"
-                        data-testid="activity-region"
-                    >
-                        <h2>"进度"</h2>
-                        <ul>
-                            <For
-                                each=move || model.with(|m| m.live_turn().activities.clone())
-                                key=|entry: &ActivityEntry| {
-                                    format!("{}:{}", entry.phase, entry.title)
-                                }
-                                children=move |entry| {
-                                    view! {
-                                        <li>
-                                            <span class="chat-activity-phase">{entry.phase}</span>
-                                            <span class="chat-activity-title">{entry.title}</span>
-                                            {entry.detail.map(|detail| view! {
-                                                <span class="chat-activity-detail">{detail}</span>
-                                            })}
-                                        </li>
+                <section class="chat-transcript" aria-label="消息列表" data-testid="chat-transcript">
+                    <Show when=move || {
+                        model.with(|m| m.manager().active.messages.is_empty()) && !history_loading.get()
+                    }>
+                        <p class="chat-empty" data-testid="chat-empty">"开始一轮新的对话。"</p>
+                    </Show>
+                    <Show when=move || history_loading.get()>
+                        <p class="chat-empty" data-testid="history-loading">"正在加载会话…"</p>
+                    </Show>
+                    <For
+                        each=move || model.with(|m| m.manager().active.messages.clone())
+                        key=|message| message.id.clone()
+                        children=message_view
+                    />
+
+                    <Show when=move || {
+                        model.with(|m| !matches!(m.live_turn().status, TurnStatus::Idle))
+                    }>
+                        <article class="chat-message chat-live" data-role="assistant">
+                            <div
+                                class="chat-live-answer"
+                                aria-live="polite"
+                                data-testid="live-answer"
+                            >
+                                {move || model.with(|m| m.live_turn().answer_text.clone())}
+                            </div>
+                        </article>
+                    </Show>
+
+                    {move || {
+                        match model.with(|m| m.live_turn().status.clone()) {
+                            TurnStatus::Error { code, message } => {
+                                Some(view! {
+                                    <p class="chat-error" role="alert" data-testid="chat-error">
+                                        {format!("请求失败（{code}）：{message}")}
+                                    </p>
+                                })
+                            }
+                            _ => None,
+                        }
+                    }}
+
+                    <Show when=move || model.with(|m| !m.live_turn().activities.is_empty())>
+                        <section
+                            class="chat-activity"
+                            aria-label="进度"
+                            aria-live="polite"
+                            data-testid="activity-region"
+                        >
+                            <h2>"进度"</h2>
+                            <ul>
+                                <For
+                                    each=move || model.with(|m| m.live_turn().activities.clone())
+                                    key=|entry: &ActivityEntry| {
+                                        format!("{}:{}", entry.phase, entry.title)
                                     }
-                                }
-                            />
-                        </ul>
-                    </section>
-                </Show>
+                                    children=move |entry| {
+                                        view! {
+                                            <li>
+                                                <span class="chat-activity-phase">{entry.phase}</span>
+                                                <span class="chat-activity-title">{entry.title}</span>
+                                                {entry.detail.map(|detail| view! {
+                                                    <span class="chat-activity-detail">{detail}</span>
+                                                })}
+                                            </li>
+                                        }
+                                    }
+                                />
+                            </ul>
+                        </section>
+                    </Show>
 
-                <Show when=move || model.with(|m| !m.live_turn().reasoning_summary.is_empty())>
-                    <section
-                        class="chat-reasoning"
-                        aria-label="推理摘要"
-                        data-testid="reasoning-region"
-                    >
-                        <h2>"推理摘要"</h2>
-                        <p>{move || model.with(|m| m.live_turn().reasoning_summary.clone())}</p>
-                    </section>
-                </Show>
+                    <Show when=move || model.with(|m| !m.live_turn().reasoning_summary.is_empty())>
+                        <section
+                            class="chat-reasoning"
+                            aria-label="推理摘要"
+                            data-testid="reasoning-region"
+                        >
+                            <h2>"推理摘要"</h2>
+                            <p>{move || model.with(|m| m.live_turn().reasoning_summary.clone())}</p>
+                        </section>
+                    </Show>
 
-                <Show when=move || model.with(|m| !m.live_turn().citations.is_empty())>
-                    <section
-                        class="chat-citations"
-                        aria-label="引用"
-                        data-testid="citations-region"
-                    >
-                        <h2>"引用"</h2>
-                        <ul>
-                            <For
-                                each=move || model.with(|m| m.live_turn().citations.clone())
-                                key=|citation| citation_key(citation)
-                                children=move |citation| {
-                                    view! { <li>{citation_label(&citation)}</li> }
-                                }
-                            />
-                        </ul>
-                    </section>
-                </Show>
+                    <Show when=move || model.with(|m| !m.live_turn().citations.is_empty())>
+                        <section
+                            class="chat-citations"
+                            aria-label="引用"
+                            data-testid="citations-region"
+                        >
+                            <h2>"引用"</h2>
+                            <ul>
+                                <For
+                                    each=move || model.with(|m| m.live_turn().citations.clone())
+                                    key=|citation| citation_key(citation)
+                                    children=move |citation| {
+                                        view! { <li>{citation_label(&citation)}</li> }
+                                    }
+                                />
+                            </ul>
+                        </section>
+                    </Show>
 
-                <p class="chat-status" aria-live="polite" data-testid="status-line">
-                    {move || model.with(status_line)}
-                </p>
-            </section>
+                    <p class="chat-status" aria-live="polite" data-testid="status-line">
+                        {move || model.with(status_line)}
+                    </p>
+                </section>
 
-            <form class="chat-composer" aria-label="发送消息" on:submit=send>
-                <label for="chat-composer-input">"输入消息"</label>
-                <textarea
-                    id="chat-composer-input"
-                    data-testid="composer-input"
-                    node_ref=composer_ref
-                    rows=3
-                    prop:value=move || composer.get()
-                    on:input=move |ev| composer.set(event_target_value(&ev))
-                    on:keydown=send_keydown
-                    placeholder="输入消息，Enter 发送（Shift+Enter 换行）"
-                ></textarea>
-                <div class="chat-composer-actions">
-                    <button
-                        type="submit"
-                        data-testid="send-button"
-                        disabled=move || is_streaming()
-                    >
-                        "发送"
-                    </button>
-                    <button
-                        type="button"
-                        data-testid="stop-button"
-                        disabled=move || !is_streaming()
-                        on:click=stop
-                    >
-                        "停止"
-                    </button>
-                    <button
-                        type="button"
-                        data-testid="retry-button"
-                        disabled=move || !can_retry()
-                        on:click=retry
-                    >
-                        "重试"
-                    </button>
-                </div>
-            </form>
-        </main>
+                <form class="chat-composer" aria-label="发送消息" on:submit=send>
+                    <label for="chat-composer-input">"输入消息"</label>
+                    <textarea
+                        id="chat-composer-input"
+                        data-testid="composer-input"
+                        node_ref=composer_ref
+                        rows=3
+                        prop:value=move || composer.get()
+                        on:input=move |ev| composer.set(event_target_value(&ev))
+                        on:keydown=send_keydown
+                        placeholder="输入消息，Enter 发送（Shift+Enter 换行）"
+                    ></textarea>
+                    <div class="chat-composer-actions">
+                        <button
+                            type="submit"
+                            data-testid="send-button"
+                            disabled=move || composer_locked()
+                        >
+                            "发送"
+                        </button>
+                        <button
+                            type="button"
+                            data-testid="stop-button"
+                            disabled=move || !is_streaming()
+                            on:click=stop
+                        >
+                            "停止"
+                        </button>
+                        <button
+                            type="button"
+                            data-testid="retry-button"
+                            disabled=move || !can_retry()
+                            on:click=retry
+                        >
+                            "重试"
+                        </button>
+                    </div>
+                </form>
+            </main>
+        </div>
     }
+}
+
+fn session_label(session: &ChatSession) -> String {
+    session
+        .title
+        .as_deref()
+        .map(str::trim)
+        .filter(|title| !title.is_empty())
+        .map(|title| title.to_string())
+        .unwrap_or_else(|| "未命名对话".to_string())
 }
 
 fn message_view(message: ConversationMessage) -> impl IntoView {
@@ -403,7 +593,7 @@ fn spawn_chat_stream(
     navigate: impl Fn(&str, NavigateOptions) + Clone + 'static,
 ) {
     leptos::task::spawn_local(async move {
-        let client = ChatClient::new(select_transport(token));
+        let client = ChatClient::new(select_transport(token.clone()));
         let scope = turn.stream_scope;
         match client.stream(turn.request, turn.cancellation).await {
             Ok(mut stream) => {
@@ -427,6 +617,67 @@ fn spawn_chat_stream(
                 model.update(|m| {
                     m.on_transport_error(scope, error);
                 });
+            }
+        }
+        spawn_refresh_sessions(model, token);
+    });
+}
+
+fn spawn_refresh_sessions(model: RwSignal<ChatCanvasModel>, token: Option<String>) {
+    let Some(token) = token.filter(|value| !value.is_empty()) else {
+        return;
+    };
+    if is_tauri_runtime() {
+        return;
+    }
+    leptos::task::spawn_local(async move {
+        let client = BrowserRestClient::new(&poc_api_base(), Some(token));
+        if let Ok(list) = client.list_sessions().await {
+            model.update(|m| m.replace_session_list(list.sessions));
+        }
+    });
+}
+
+fn spawn_load_history(
+    model: RwSignal<ChatCanvasModel>,
+    session_id: String,
+    epoch: u64,
+    token: String,
+    history_error: RwSignal<Option<String>>,
+    history_loading: RwSignal<bool>,
+    history_load_gen: RwSignal<u64>,
+) {
+    let load_gen = history_load_gen.get_untracked() + 1;
+    history_load_gen.set(load_gen);
+    if is_tauri_runtime() {
+        history_loading.set(false);
+        history_error.set(Some("桌面端尚未提供会话历史 IPC。".to_string()));
+        return;
+    }
+    history_loading.set(true);
+    history_error.set(None);
+    leptos::task::spawn_local(async move {
+        let client = BrowserRestClient::new(&poc_api_base(), Some(token));
+        let session = client.get_session(&session_id).await.ok();
+        let result = client.list_messages(&session_id).await;
+        if history_load_gen.get_untracked() != load_gen {
+            return;
+        }
+        history_loading.set(false);
+        match result {
+            Ok(list) => {
+                let applied = model.write().apply_history(
+                    &session_id,
+                    epoch,
+                    session,
+                    messages_from_wire(&list.messages),
+                );
+                if applied {
+                    history_error.set(None);
+                }
+            }
+            Err(error) => {
+                history_error.set(Some(format!("加载会话失败：{error}")));
             }
         }
     });

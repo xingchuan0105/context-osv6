@@ -54,13 +54,7 @@ pub fn parse_ipc_event(value: &serde_json::Value) -> Result<ChatEvent, Transport
 }
 
 pub fn map_ipc_error_status(status: u16, body: String) -> TransportError {
-    match status {
-        401 => TransportError::Unauthorized,
-        402 => TransportError::PaymentRequired(body),
-        403 => TransportError::Forbidden(body),
-        429 => TransportError::RateLimited,
-        _ => TransportError::HttpStatus { status, body },
-    }
+    TransportError::from_http_status(status, body)
 }
 
 impl ChatTransport for TauriIpcTransport {

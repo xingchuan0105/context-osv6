@@ -1,5 +1,6 @@
-use contracts::chat::ChatEvent;
-use web_ui::{ChatCanvasModel, MessageRole, TurnStatus};
+use contracts::chat::{ChatEvent, ChatMessage};
+use contracts::workspaces::{ChatSession, ConversationScopeKind};
+use web_ui::{ChatCanvasModel, ConversationMessage, MessageRole, TurnStatus, messages_from_wire};
 
 fn done_payload(answer: &str) -> serde_json::Value {
     done_payload_with(answer, serde_json::json!([]), serde_json::json!([]))
@@ -610,4 +611,176 @@ fn test_quick_chat_request_contract_shape() {
     let json = serde_json::to_value(&turn.request).unwrap();
     assert!(json.get("model_role").is_none());
     assert!(json.get("request_id").is_none());
+}
+
+fn sample_session(id: &str) -> ChatSession {
+    ChatSession {
+        id: id.to_string(),
+        owner_user_id: "user-1".to_string(),
+        workspace_id: Some("ws-1".to_string()),
+        scope_kind: ConversationScopeKind::Workspace,
+        workspace_name: Some("材料".to_string()),
+        title: Some("上周讨论".to_string()),
+        agent_type: "chat".to_string(),
+        model_role: "quick_chat".to_string(),
+        pinned: false,
+        created_at: "2026-09-01T00:00:00Z".to_string(),
+        updated_at: "2026-09-04T00:00:00Z".to_string(),
+    }
+}
+
+fn history_messages() -> Vec<ConversationMessage> {
+    vec![
+        ConversationMessage {
+            id: "11".to_string(),
+            role: MessageRole::User,
+            content: "你好".to_string(),
+            answer_blocks: Vec::new(),
+            reasoning: None,
+            citations: Vec::new(),
+            created_at: "2026-09-04T00:00:00Z".to_string(),
+        },
+        ConversationMessage {
+            id: "12".to_string(),
+            role: MessageRole::Assistant,
+            content: "你好，我是助手。".to_string(),
+            answer_blocks: Vec::new(),
+            reasoning: None,
+            citations: vec![serde_json::json!({"doc_name": "手册"})],
+            created_at: "2026-09-04T00:00:01Z".to_string(),
+        },
+    ]
+}
+
+#[test]
+fn test_switch_to_session_keeps_workspace_metadata() {
+    let mut canvas = ChatCanvasModel::new();
+    canvas.switch_to_session(&sample_session("sess-ws"));
+    assert_eq!(
+        canvas.manager().active.session_id.as_deref(),
+        Some("sess-ws")
+    );
+    assert_eq!(canvas.manager().active.workspace_id.as_deref(), Some("ws-1"));
+    assert_eq!(
+        canvas.manager().active.scope_kind,
+        ConversationScopeKind::Workspace
+    );
+    assert!(canvas.manager().active.messages.is_empty());
+}
+
+#[test]
+fn test_replace_session_list_does_not_bump_epoch() {
+    let mut canvas = ChatCanvasModel::new();
+    canvas.switch_to_personal_session("sess-a");
+    let epoch = canvas.manager().conversation_epoch;
+    canvas.replace_session_list(vec![sample_session("sess-a")]);
+    assert_eq!(canvas.manager().conversation_epoch, epoch);
+    assert_eq!(canvas.manager().session_list.len(), 1);
+}
+
+#[test]
+fn test_replace_session_list_orders_by_recent() {
+    let mut older = sample_session("sess-old");
+    older.updated_at = "2026-09-01T00:00:00Z".to_string();
+    let mut newer = sample_session("sess-new");
+    newer.updated_at = "2026-09-04T00:00:00Z".to_string();
+    let mut canvas = ChatCanvasModel::new();
+    canvas.replace_session_list(vec![older, newer]);
+    assert_eq!(canvas.manager().session_list[0].id, "sess-new");
+    assert_eq!(canvas.manager().session_list[1].id, "sess-old");
+}
+
+#[test]
+fn test_apply_history_restores_messages_and_session_meta() {
+    let mut canvas = ChatCanvasModel::new();
+    canvas.switch_to_personal_session("sess-1");
+    let epoch = canvas.manager().conversation_epoch;
+    assert!(canvas.apply_history(
+        "sess-1",
+        epoch,
+        Some(sample_session("sess-1")),
+        history_messages()
+    ));
+    assert_eq!(canvas.manager().active.messages.len(), 2);
+    assert_eq!(canvas.manager().active.messages[0].content, "你好");
+    assert_eq!(
+        canvas.manager().active.messages[1].content,
+        "你好，我是助手。"
+    );
+    assert_eq!(canvas.manager().active.workspace_id.as_deref(), Some("ws-1"));
+    assert_eq!(
+        canvas.manager().active.scope_kind,
+        ConversationScopeKind::Workspace
+    );
+}
+
+#[test]
+fn test_apply_history_rejects_stale_epoch() {
+    let mut canvas = ChatCanvasModel::new();
+    canvas.switch_to_personal_session("sess-1");
+    let epoch = canvas.manager().conversation_epoch;
+    canvas.new_personal_chat(None);
+    assert!(!canvas.apply_history("sess-1", epoch, None, history_messages()));
+    assert!(canvas.manager().active.messages.is_empty());
+}
+
+#[test]
+fn test_apply_history_rejects_session_mismatch() {
+    let mut canvas = ChatCanvasModel::new();
+    canvas.switch_to_personal_session("sess-a");
+    let epoch = canvas.manager().conversation_epoch;
+    assert!(!canvas.apply_history("sess-b", epoch, None, history_messages()));
+    assert!(canvas.manager().active.messages.is_empty());
+}
+
+#[test]
+fn test_apply_history_rejects_session_meta_id_mismatch() {
+    let mut canvas = ChatCanvasModel::new();
+    canvas.switch_to_personal_session("sess-1");
+    let epoch = canvas.manager().conversation_epoch;
+    assert!(!canvas.apply_history(
+        "sess-1",
+        epoch,
+        Some(sample_session("sess-other")),
+        history_messages()
+    ));
+    assert!(canvas.manager().active.messages.is_empty());
+}
+
+#[test]
+fn test_apply_history_rejects_while_streaming() {
+    let mut canvas = ChatCanvasModel::new();
+    canvas.switch_to_personal_session("sess-1");
+    let epoch = canvas.manager().conversation_epoch;
+    canvas.prepare_user_turn("抢先发送");
+    assert!(canvas.is_streaming());
+    assert!(!canvas.apply_history("sess-1", epoch, None, history_messages()));
+    assert_eq!(canvas.manager().active.messages.len(), 1);
+    assert_eq!(canvas.manager().active.messages[0].role, MessageRole::User);
+}
+
+#[test]
+fn test_messages_from_wire_skips_unknown_roles() {
+    let messages: Vec<ChatMessage> = serde_json::from_value(serde_json::json!([
+        {
+            "id": 1,
+            "session_id": "sess-1",
+            "role": "system",
+            "content": "ignore",
+            "created_at": "2026-09-04T00:00:00Z"
+        },
+        {
+            "id": 2,
+            "session_id": "sess-1",
+            "role": "user",
+            "content": "可见",
+            "created_at": "2026-09-04T00:00:01Z"
+        }
+    ]))
+    .unwrap();
+    let mapped = messages_from_wire(&messages);
+    assert_eq!(mapped.len(), 1);
+    assert_eq!(mapped[0].id, "2");
+    assert_eq!(mapped[0].content, "可见");
+    assert!(mapped[0].reasoning.is_none());
 }

@@ -25,6 +25,12 @@ const CHUNK_DELAY_MS = Number(process.env.CHUNK_DELAY_MS || 15);
 
 const state = { aborted: false, requests: 0, bytesWritten: 0, lastAuthorization: null };
 
+function jsonOk(res, body) {
+  cors(res);
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify(body));
+}
+
 function cors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', 'authorization, content-type, accept');
@@ -125,6 +131,32 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(state));
     return;
+  }
+  if (req.method === 'GET') {
+    const pathname = url.pathname;
+    if (pathname.endsWith('/api/v1/chat/sessions')) {
+      jsonOk(res, { sessions: [] });
+      return;
+    }
+    const messagesMatch = pathname.match(/\/api\/v1\/chat\/sessions\/([^/]+)\/messages$/);
+    if (messagesMatch) {
+      jsonOk(res, { messages: [] });
+      return;
+    }
+    const sessionMatch = pathname.match(/\/api\/v1\/chat\/sessions\/([^/]+)$/);
+    if (sessionMatch) {
+      const id = decodeURIComponent(sessionMatch[1]);
+      jsonOk(res, {
+        id,
+        owner_user_id: 'fixture-user',
+        scope_kind: 'personal',
+        agent_type: 'chat',
+        model_role: 'quick_chat',
+        created_at: '2026-09-04T00:00:00Z',
+        updated_at: '2026-09-04T00:00:00Z',
+      });
+      return;
+    }
   }
   if (req.method === 'POST' && url.pathname === '/admin/reset') {
     state.aborted = false;

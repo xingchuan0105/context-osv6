@@ -3,7 +3,7 @@
 | 字段 | 内容 |
 |---|---|
 | 日期 | 2026-09-04 |
-| 状态 | 浏览器切片、live smoke、Tauri 垂直切片 **已完成**；Gate 0 仍 **NO-GO**；下一棒是会话历史 / 性能对照 |
+| 状态 | 浏览器切片、live smoke、Tauri 垂直切片、会话列表 + 历史 **已完成**；Gate 0 仍 **NO-GO**；下一棒是性能对照 |
 | 完成提交 | `1f39b4a3`（feat(frontend_rust): Phase 0 browser vertical slice） |
 | 上游任务 | [`2026-09-04-frontend-rust-phase-0-browser-vertical-slice-task.md`](2026-09-04-frontend-rust-phase-0-browser-vertical-slice-task.md)（§10 验证报告） |
 | 权威设计 | [`2026-09-03-frontend-rust-migration-design.md`](2026-09-03-frontend-rust-migration-design.md) |
@@ -15,8 +15,9 @@
 `frontend_rust` 现在是一个**真实可运行的浏览器薄切片**：Leptos 0.8 SSR + hydration 的 `/chat` 与
 `/chat/:sessionId`，经真实 Fetch/ReadableStream 消费 SSE（唯一契约 `contracts::chat::ChatEvent`），
 发送/流式/停止/错误/重试全旅程有自动化浏览器证据。`TauriIpcTransport` 已接既有
-`chat_stream` / `chat_cancel`，CSR 产物可构建。**它不是产品前端**，不得部署；未切
-`tauri.conf.json`；完整 Chat-first 与性能对照未开始。
+`chat_stream` / `chat_cancel`，CSR 产物可构建。侧栏只读会话列表 + `/chat/:id` 历史恢复已接入
+同一 `ConversationManager` / reducer（浏览器 Fetch；桌面 REST IPC 未做）。**它不是产品前端**，
+不得部署；未切 `tauri.conf.json`；Gate 0 性能对照未开始。
 
 ## 2. 架构地图（改造后）
 
@@ -28,6 +29,8 @@ frontend_rust/
 │   │   ├── src/sse_decoder.rs       # 增量 SSE decoder + events_from_byte_stream 消费回路
 │   │   ├── src/transport.rs         # ChatTransport / ChatEventStream（Send 按 target 收窄）/ TransportError / Cancellation
 │   │   ├── src/browser_transport.rs # wasm32: 真实 Fetch+ReadableStream+AbortController；native: Unavailable
+│   │   ├── src/conversation_api.rs  # 只读 sessions/messages URL + parse
+│   │   ├── src/browser_rest.rs      # wasm32 GET JSON；native: Unavailable
 │   │   ├── src/fixture_transport.rs # 确定性测试用
 │   │   └── src/tauri_transport.rs   # wasm32: __TAURI__ invoke/listen；native: mock 或 Unavailable
 │   ├── web-ui/                # Leptos 0.8 应用 + 纯状态模型（crate-type = ["cdylib","rlib"]）
@@ -111,7 +114,7 @@ WSL 纪律：`jobs=2`，不要叠加并发全量 cargo 运行；长时间任务�
 
 未验证/未完成：
 
-- Tauri IPC / Tauri CSR 产物；会话列表、历史加载、Session files、RAG/Web/Workspace/Share/BYOK；
+- 真实 Tauri WebView 点验；桌面会话列表（需 REST IPC）；Session files、RAG/Web/Workspace/Share/BYOK；
 - Markdown 富渲染/代码高亮/虚拟列表；Next/Rust 同机性能与 30 分钟压力对照（Gate 0 必需）；
 - Nginx/systemd/部署脚本（Phase 6 之前禁止）。
 
@@ -140,16 +143,22 @@ WSL 纪律：`jobs=2`，不要叠加并发全量 cargo 运行；长时间任务�
 8. **本机 8080 可能不是 avrag-api**。`GET /health` 若返回大段 HTML，是 Next 占用了配置端口。
    live smoke 不要改 `.env`；另起空闲端口并设 `LIVE_API_BASE`。PoC 页用 `127.0.0.1:18080`
    （默认 CORS 白名单），不要用 3001/3200 打真实 API。
+9. **填 token 会 GET 会话列表**。fixture 必须对带 `/bytes/:n`、`/case/:name` 前缀的
+   `GET .../api/v1/chat/sessions` 与 `.../messages` 回 200，否则 Playwright 的
+   `console.error` 收集会红。桌面 WebView 不能 Fetch `127.0.0.1`（PNA），历史只走浏览器。
+10. **历史 apply 必须带 epoch**。迟到的 GET 不得覆盖新会话或正在 streaming 的 turn。
+    URL 回显仍不得 `switch_*`。`/chat` 仅在「未在流式且已有 session id」时 `new_personal_chat`。
 
 ## 6. 建议的下一任务切片（按依赖排序）
 
-1. **会话列表 + 历史加载**（Chat-first W2 子集）：只读 API，`/chat/:sessionId` 恢复历史；
-   注意 reducer 与历史消息的单管线，不发明第二完成路径。
-2. **Gate 0 性能对照**：冻结 benchmark charter 后同机采集 LCP/输入到绘制/掉帧/Heap/30 分钟
+1. **Gate 0 性能对照**：冻结 benchmark charter 后同机采集 LCP/输入到绘制/掉帧/Heap/30 分钟
    压力，Rust 与优化后 Next 同夹具对照；未达标即按设计 §3.3 停止迁移转优化 Next。
-3. **真实 Tauri WebView 点验**（可选，Phase 5 之前）：用临时 `frontendDist` 或独立 window
-   验证 IPC 一轮；不要把生产 `tauri.conf.json` 切走 Next。
-4. 之后才是 Phase 1 固化（route manifest、SEO/security/style 基线测试、Token 同步校验）。
+2. **真实 Tauri WebView 点验**（可选，Phase 5 之前）：用临时 `frontendDist` 或独立 window
+   验证 IPC 一轮；不要把生产 `tauri.conf.json` 切走 Next。桌面会话列表需要 REST IPC 才能做。
+3. 之后才是 Phase 1 固化（route manifest、SEO/security/style 基线测试、Token 同步校验）。
+
+会话列表 + 历史证据见
+[`2026-09-04-frontend-rust-phase-0-session-history-task.md`](2026-09-04-frontend-rust-phase-0-session-history-task.md) §5。
 
 Tauri 垂直切片证据见
 [`2026-09-04-frontend-rust-phase-0-tauri-vertical-slice-task.md`](2026-09-04-frontend-rust-phase-0-tauri-vertical-slice-task.md) §5。
