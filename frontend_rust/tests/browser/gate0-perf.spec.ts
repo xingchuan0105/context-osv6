@@ -7,13 +7,16 @@ import {
   type SideResult,
   installLcpObserver,
   measureColdNav,
+  nextCollectStream,
   nextGotoChat,
-  nextSendAndMeasure,
+  nextGotoChatHome,
+  nextNewChat,
   readObservedLcp,
   rustGotoChat,
   rustCollectStream,
   rustNewChat,
-  stubNextChatToFixture,
+  loginGate0Api,
+  wireNextChat,
   summarize,
   writeResult,
 } from "./gate0-harness";
@@ -21,6 +24,7 @@ import {
 const WEB_BASE = `http://127.0.0.1:${Number(process.env.POC_WEB_PORT || 3200)}`;
 const FIXTURE_BASE = `http://127.0.0.1:${Number(process.env.POC_FIXTURE_PORT || 3201)}`;
 const NEXT_BASE = (process.env.GATE0_NEXT_BASE || "").replace(/\/$/, "");
+const API_BASE = (process.env.GATE0_API_BASE || "").replace(/\/$/, "");
 const RESULT_PATH = join(
   process.cwd(),
   "results",
@@ -100,7 +104,9 @@ test("Gate 0 Rust PoC 5 cold + 20 hot", async ({ browser }) => {
 
   const next: SideResult = {
     side: "next",
-    build_note: NEXT_BASE ? `GATE0_NEXT_BASE=${NEXT_BASE}` : "unset",
+    build_note: NEXT_BASE
+      ? `GATE0_NEXT_BASE=${NEXT_BASE} GATE0_API_BASE=${API_BASE || "unset"}`
+      : "unset",
     cold_nav: [],
     streams: [],
     discarded: [],
@@ -108,6 +114,8 @@ test("Gate 0 Rust PoC 5 cold + 20 hot", async ({ browser }) => {
 
   if (!NEXT_BASE) {
     next.blocked = "GATE0_NEXT_BASE unset";
+  } else if (!API_BASE) {
+    next.blocked = "GATE0_API_BASE unset (Next on :8080 does not proxy /api)";
   } else {
     try {
       await collectNext(browser, next);
@@ -122,6 +130,8 @@ test("Gate 0 Rust PoC 5 cold + 20 hot", async ({ browser }) => {
     collected_at: new Date().toISOString(),
     rust_web: WEB_BASE,
     fixture: FIXTURE_BASE,
+    next_web: NEXT_BASE || null,
+    api: API_BASE || null,
     rust: pack(rust),
     next: pack(next),
   };
@@ -138,11 +148,12 @@ async function collectNext(
   browser: import("@playwright/test").Browser,
   next: SideResult,
 ) {
+  const auth = await loginGate0Api(API_BASE);
   for (let i = 0; i < COLD_N; i += 1) {
     const page = await browser.newPage();
     await installLcpObserver(page);
-    await stubNextChatToFixture(page, FIXTURE_BASE);
-    await nextGotoChat(page, NEXT_BASE);
+    await wireNextChat(page, { apiBase: API_BASE, fixtureBase: FIXTURE_BASE, auth });
+    await nextGotoChatHome(page, NEXT_BASE);
     await page.waitForTimeout(400);
     const nav = await measureColdNav(page);
     const observed = await readObservedLcp(page);
@@ -150,20 +161,23 @@ async function collectNext(
       nav_lcp_ms: observed ?? nav.nav_lcp_ms,
       encoded_transfer_bytes: nav.encoded_transfer_bytes,
     } satisfies ColdNavSample);
-    const stream = await nextSendAndMeasure(page);
-    stream.kind = "cold";
+    await nextGotoChat(page, NEXT_BASE);
+    const stream = await nextCollectStream(page, NEXT_BASE, "cold", next.discarded);
     next.streams.push(stream);
+    await page.unrouteAll({ behavior: "ignoreErrors" });
     await page.close();
   }
 
   const hotPage = await browser.newPage();
-  await stubNextChatToFixture(hotPage, FIXTURE_BASE);
+  await wireNextChat(hotPage, { apiBase: API_BASE, fixtureBase: FIXTURE_BASE, auth });
   await nextGotoChat(hotPage, NEXT_BASE);
   for (let i = 0; i < HOT_N; i += 1) {
-    await hotPage.goto(`${NEXT_BASE}/chat`, { waitUntil: "domcontentloaded" });
-    const stream = await nextSendAndMeasure(hotPage);
-    stream.kind = "hot";
+    if (i > 0) {
+      await nextNewChat(hotPage, NEXT_BASE);
+    }
+    const stream = await nextCollectStream(hotPage, NEXT_BASE, "hot", next.discarded);
     next.streams.push(stream);
   }
+  await hotPage.unrouteAll({ behavior: "ignoreErrors" });
   await hotPage.close();
 }

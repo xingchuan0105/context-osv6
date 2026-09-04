@@ -262,6 +262,50 @@ async function installStreamMarks(page: Page) {
   }, FIXTURE_MARKER);
 }
 
+async function installNextStreamMarks(page: Page) {
+  await page.evaluate((marker) => {
+    const w = window as unknown as {
+      __gate0_marks: Gate0Marks;
+      __gate0_obs?: MutationObserver;
+      __gate0_mark_raf?: number;
+    };
+    if (w.__gate0_obs) w.__gate0_obs.disconnect();
+    if (typeof w.__gate0_mark_raf === "number") cancelAnimationFrame(w.__gate0_mark_raf);
+    w.__gate0_marks = { start: -1, first: null, complete: null, firstLen: null };
+    const tick = () => {
+      if (w.__gate0_marks.start < 0) return;
+      const nodes = document.querySelectorAll(
+        '[data-testid="chat-message"][data-role="assistant"]',
+      );
+      const last = nodes[nodes.length - 1];
+      const text = last?.textContent ?? "";
+      const pending = last?.getAttribute("data-pending");
+      const now = performance.now();
+      if (w.__gate0_marks.first == null && text.length > 0) {
+        w.__gate0_marks.first = now;
+        w.__gate0_marks.firstLen = text.length;
+      }
+      if (
+        w.__gate0_marks.complete == null &&
+        text.includes(marker) &&
+        pending !== "true"
+      ) {
+        w.__gate0_marks.complete = now;
+      }
+    };
+    const obs = new MutationObserver(tick);
+    obs.observe(document.body, { subtree: true, childList: true, characterData: true });
+    w.__gate0_obs = obs;
+    const poll = () => {
+      tick();
+      if (w.__gate0_marks.complete == null) {
+        w.__gate0_mark_raf = requestAnimationFrame(poll);
+      }
+    };
+    w.__gate0_mark_raf = requestAnimationFrame(poll);
+  }, FIXTURE_MARKER);
+}
+
 async function readStreamMarks(page: Page): Promise<Gate0Marks> {
   return page.evaluate(() => {
     const w = window as unknown as {
@@ -320,49 +364,99 @@ async function stopLongFrameCounter(page: Page): Promise<number | null> {
   });
 }
 
-export async function stubNextChatToFixture(page: Page, fixtureBase: string) {
-  const auth = {
-    token: "gate0-fixture",
-    user: {
-      id: "gate0-user",
-      email: "e2e-test@example.com",
-      full_name: "Gate0 Fixture",
-    },
-    reset_ticket: null,
-  };
-  await page.context().addCookies([
-    {
-      name: "avrag.auth.session",
-      value: "1",
-      domain: "127.0.0.1",
-      path: "/",
-    },
-    {
-      name: "avrag.auth.persisted",
-      value: encodeURIComponent(JSON.stringify(auth)),
-      domain: "127.0.0.1",
-      path: "/",
-    },
-  ]);
-  await page.addInitScript((payload) => {
-    window.localStorage.setItem("avrag.auth.v1", JSON.stringify(payload));
-    document.cookie = "avrag.auth.session=1; path=/";
-    document.cookie = `avrag.auth.persisted=${encodeURIComponent(JSON.stringify(payload))}; path=/`;
-  }, auth);
+export type Gate0Auth = {
+  token: string;
+  user: { id: string; email: string; full_name: string };
+};
 
-  await page.route("**/api/auth/me", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        success: true,
-        data: auth,
-        error: null,
-      }),
+const LEGAL_TERMS_VERSION = "2026-06-13";
+const LEGAL_PRIVACY_VERSION = "2026-06-13";
+
+export async function loginGate0Api(apiBase: string): Promise<Gate0Auth> {
+  const { request } = await import("@playwright/test");
+  const ctx = await request.newContext({ baseURL: apiBase });
+  try {
+    const email = process.env.E2E_TEST_USER_EMAIL || "e2e-test@example.com";
+    const password = process.env.E2E_TEST_USER_PASSWORD || "E2eTest123!";
+    const login = await ctx.post("/api/auth/login", {
+      data: { email, password },
+      timeout: 30_000,
     });
-  });
-  await page.route("**/api/v1/chat/sessions**", async (route) => {
-    if (route.request().method() === "GET") {
+    if (!login.ok()) {
+      throw new Error(`login failed: ${login.status()}`);
+    }
+    const body = (await login.json()) as {
+      success?: boolean;
+      data?: Gate0Auth | null;
+    };
+    if (!body.success || !body.data?.token || !body.data.user?.id) {
+      throw new Error("login response missing token/user");
+    }
+    const accepted = await ctx.post("/api/auth/legal-acceptance", {
+      headers: { Authorization: `Bearer ${body.data.token}` },
+      data: {
+        terms_version: LEGAL_TERMS_VERSION,
+        privacy_version: LEGAL_PRIVACY_VERSION,
+        context: "re_acceptance",
+      },
+      timeout: 15_000,
+    });
+    if (!accepted.ok()) {
+      throw new Error(`legal-acceptance failed: ${accepted.status()}`);
+    }
+    return body.data;
+  } finally {
+    await ctx.dispose();
+  }
+}
+
+export async function wireNextChat(
+  page: Page,
+  opts: { apiBase: string; fixtureBase: string; auth: Gate0Auth },
+) {
+  const persisted = { token: opts.auth.token, user: opts.auth.user };
+  await page.addInitScript(
+    ({ payload, fixtureChat }) => {
+      window.localStorage.setItem("avrag.auth.v1", JSON.stringify(payload));
+      const encoded = encodeURIComponent(JSON.stringify(payload));
+      document.cookie = "avrag.auth.session=1; Path=/; SameSite=Lax; Max-Age=31536000";
+      document.cookie = `avrag.auth.persisted=${encoded}; Path=/; SameSite=Lax; Max-Age=31536000`;
+      const originalFetch = window.fetch.bind(window);
+      window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+        const url =
+          typeof input === "string"
+            ? input
+            : input instanceof URL
+              ? input.toString()
+              : input.url;
+        const method = (init?.method || (input instanceof Request ? input.method : "GET")).toUpperCase();
+        if (method === "POST" && /\/api\/v1\/chat\/?$/.test(new URL(url, location.origin).pathname)) {
+          return originalFetch(fixtureChat, init);
+        }
+        return originalFetch(input, init);
+      };
+    },
+    { payload: persisted, fixtureChat: `${opts.fixtureBase}/api/v1/chat` },
+  );
+
+  const fixtureOrigin = new URL(opts.fixtureBase).origin;
+  const apiOrigin = new URL(opts.apiBase).origin;
+  await page.route("**/api/**", async (route) => {
+    const req = route.request();
+    const url = new URL(req.url());
+    if (url.origin === fixtureOrigin || url.origin === apiOrigin) {
+      await route.continue();
+      return;
+    }
+    if (req.method() === "GET" && /\/api\/v1\/workspaces\/?$/.test(url.pathname)) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ workspaces: [] }),
+      });
+      return;
+    }
+    if (req.method() === "GET" && /\/api\/v1\/chat\/sessions\/?$/.test(url.pathname)) {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -370,23 +464,97 @@ export async function stubNextChatToFixture(page: Page, fixtureBase: string) {
       });
       return;
     }
-    await route.fallback();
-  });
-  await page.route("**/api/v1/chat", async (route) => {
-    if (route.request().method() !== "POST") {
-      await route.fallback();
+    if (req.method() === "GET" && /\/api\/v1\/chat\/sessions\/sess-900$/.test(url.pathname)) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: "sess-900",
+          owner_user_id: "fixture-user",
+          scope_kind: "personal",
+          agent_type: "chat",
+          model_role: "quick_chat",
+          created_at: "2026-09-04T00:00:00Z",
+          updated_at: "2026-09-04T00:00:00Z",
+        }),
+      });
       return;
     }
-    await route.continue({ url: `${fixtureBase}/api/v1/chat` });
+    if (req.method() === "GET" && url.pathname.endsWith("/sessions/sess-900/messages")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ messages: [] }),
+      });
+      return;
+    }
+    if (req.method() === "GET" && url.pathname.endsWith("/sessions/sess-900/files")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ files: [] }),
+      });
+      return;
+    }
+    const isChatPost =
+      req.method() === "POST" &&
+      (url.pathname === "/api/v1/chat" || url.pathname.endsWith("/api/v1/chat"));
+    if (isChatPost) {
+      await route.continue();
+      return;
+    }
+    const dest = `${opts.apiBase}${url.pathname}${url.search}`;
+    const headers = { ...req.headers() };
+    delete headers.host;
+    try {
+      const response = await page.request.fetch(dest, {
+        method: req.method(),
+        headers,
+        data: req.postDataBuffer() ?? undefined,
+        timeout: 30_000,
+        failOnStatusCode: false,
+      });
+      const respHeaders = { ...response.headers() };
+      delete respHeaders["content-encoding"];
+      delete respHeaders["content-length"];
+      await route.fulfill({
+        status: response.status(),
+        headers: respHeaders,
+        body: await response.body(),
+      });
+    } catch {
+      if (!page.isClosed()) {
+        await route.abort("failed");
+      }
+    }
   });
 }
 
-export async function nextGotoChat(page: Page, origin: string) {
+export async function nextGotoChatHome(page: Page, origin: string) {
   await page.goto(`${origin}/chat`, { waitUntil: "domcontentloaded" });
   await expect(page.getByTestId("workspace-chat-composer")).toBeVisible({ timeout: 20_000 });
 }
 
+export async function nextGotoChat(page: Page, origin: string) {
+  // 夹具 session。/chat 首发会 replace 到 /chat/:id 并 abort SSE（产品行为），
+  // 流式计时必须在已落地的 session 路由上采，否则 complete 永远等不到。
+  await page.goto(`${origin}/chat/sess-900`, { waitUntil: "domcontentloaded" });
+  await nextAwaitIdle(page);
+}
+
+export async function nextAwaitIdle(page: Page) {
+  const composer = page.getByTestId("workspace-chat-composer");
+  await expect(composer).toBeVisible({ timeout: 20_000 });
+  await expect(composer).toBeEnabled({ timeout: 20_000 });
+  await expect(page.locator('[data-testid="chat-message"][data-role="assistant"]')).toHaveCount(0);
+}
+
+export async function nextNewChat(page: Page, origin: string) {
+  await nextGotoChat(page, origin);
+}
+
 export async function nextSendAndMeasure(page: Page): Promise<StreamSample> {
+  await nextAwaitIdle(page);
   const composer = page.getByTestId("workspace-chat-composer");
   await composer.evaluate((el, value) => {
     const textarea = el as HTMLTextAreaElement;
@@ -398,26 +566,57 @@ export async function nextSendAndMeasure(page: Page): Promise<StreamSample> {
     textarea.dispatchEvent(new Event("input", { bubbles: true }));
     textarea.dispatchEvent(new Event("change", { bubbles: true }));
   }, "写一篇 3000 字以上的流式系统说明");
-  const start = Date.now();
+  await expect(page.getByTestId("workspace-chat-send")).toBeEnabled();
   await startLongFrameCounter(page);
-  await page.getByTestId("workspace-chat-send").click();
-  const assistant = page.locator('[data-testid="chat-message"][data-role="assistant"]').last();
-  await expect(assistant).toBeVisible({ timeout: 30_000 });
-  await expect(assistant).not.toHaveText("", { timeout: 30_000 });
-  const first = Date.now() - start;
-  await expect(assistant).toContainText(FIXTURE_MARKER, { timeout: 90_000 });
-  const pending = page.locator(
-    '[data-testid="chat-message"][data-role="assistant"][data-pending="false"]',
-  );
-  if ((await pending.count()) > 0) {
-    await expect(pending.last()).toBeVisible({ timeout: 15_000 });
-  }
-  const complete = Date.now() - start;
+  await installNextStreamMarks(page);
+  await page.getByTestId("workspace-chat-send").evaluate((el) => {
+    const w = window as unknown as { __gate0_marks: Gate0Marks };
+    w.__gate0_marks.start = performance.now();
+    (el as HTMLButtonElement).click();
+  });
+  await page.waitForFunction(() => {
+    const w = window as unknown as { __gate0_marks?: Gate0Marks };
+    return w.__gate0_marks != null && w.__gate0_marks.complete != null;
+  }, undefined, { timeout: 90_000 });
+  const marks = await readStreamMarks(page);
+  const first = marks.first != null && marks.start >= 0 ? marks.first - marks.start : Number.NaN;
+  const complete =
+    marks.complete != null && marks.start >= 0 ? marks.complete - marks.start : Number.NaN;
   return {
     kind: "hot",
     stream_first_token_ms: first,
     stream_complete_ms: complete,
     heap_used_after_stream: await readHeap(page),
     long_frame_count: await stopLongFrameCounter(page),
+    first_paint_chars: marks.firstLen,
   };
+}
+
+export async function nextCollectStream(
+  page: Page,
+  origin: string,
+  kind: "cold" | "hot",
+  discarded: DiscardedSample[],
+): Promise<StreamSample> {
+  let last = "";
+  for (let attempt = 0; attempt < STREAM_ATTEMPTS; attempt += 1) {
+    if (attempt > 0) {
+      await nextNewChat(page, origin);
+    }
+    const sample = await nextSendAndMeasure(page);
+    sample.kind = kind;
+    const reason = streamSampleIssue(sample);
+    if (!reason) {
+      return sample;
+    }
+    discarded.push({
+      kind,
+      reason,
+      stream_first_token_ms: sample.stream_first_token_ms,
+      stream_complete_ms: sample.stream_complete_ms,
+      first_paint_chars: sample.first_paint_chars,
+    });
+    last = `${reason} first=${sample.stream_first_token_ms} complete=${sample.stream_complete_ms} chars=${sample.first_paint_chars}`;
+  }
+  throw new Error(`Gate 0 ${kind} stream invalid after ${STREAM_ATTEMPTS} attempts: ${last}`);
 }

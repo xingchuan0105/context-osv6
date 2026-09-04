@@ -3,7 +3,7 @@
 | 字段 | 内容 |
 |---|---|
 | 日期 | 2026-09-04 |
-| 状态 | 浏览器切片、live smoke、Tauri 垂直切片、会话列表 + 历史、Gate 0 **第一采集**已完成；Gate 0 仍 **NO-GO** |
+| 状态 | 浏览器切片、live smoke、Tauri 垂直切片、会话列表 + 历史、Gate 0 **Rust + Next 对照**已完成；Gate 0 仍 **NO-GO** |
 | 完成提交 | `1f39b4a3`（feat(frontend_rust): Phase 0 browser vertical slice） |
 | 上游任务 | [`2026-09-04-frontend-rust-phase-0-browser-vertical-slice-task.md`](2026-09-04-frontend-rust-phase-0-browser-vertical-slice-task.md)（§10 验证报告） |
 | 权威设计 | [`2026-09-03-frontend-rust-migration-design.md`](2026-09-03-frontend-rust-migration-design.md) |
@@ -17,8 +17,8 @@
 发送/流式/停止/错误/重试全旅程有自动化浏览器证据。`TauriIpcTransport` 已接既有
 `chat_stream` / `chat_cancel`，CSR 产物可构建。侧栏只读会话列表 + `/chat/:id` 历史恢复已接入
 同一 `ConversationManager` / reducer（浏览器 Fetch；桌面 REST IPC 未做）。**它不是产品前端**，
-不得部署；未切 `tauri.conf.json`。Gate 0 已冻结 charter 并采到 Rust debug 5 冷 + 20 热；
-缺 Next / 30 分钟 / release-like，结论仍 **NO-GO**。
+不得部署；未切 `tauri.conf.json`。Gate 0 已冻结 charter，并采到 Rust debug 与 Next standalone
+各 5 冷 + 20 热；核心 p95 未达 ≥20%，缺 30 分钟 / release-like，结论仍 **NO-GO**。
 
 ## 2. 架构地图（改造后）
 
@@ -88,13 +88,15 @@ LEPTOS_SITE_ADDR=127.0.0.1:3001 LEPTOS_SITE_ROOT=$PWD/target/site ./target/debug
 cd tests/browser && pnpm exec playwright test
 
 # live backend smoke（gated；PoC 必须绑 18080，因默认 CORS 不含 3001/3200）
-# 要求本机 avrag-api 可访问；8080 若被 Next 占用，用空闲端口另起 API 并设 LIVE_API_BASE
+# 要求本机 avrag-api 可访问；8080 是 Plane，用空闲端口另起 API 并设 LIVE_API_BASE
 cd tests/browser && LIVE_BACKEND=1 LIVE_API_BASE=http://127.0.0.1:<api-port> \
   pnpm exec playwright test --config playwright.live.config.ts
 
 # Gate 0 采集（需已有 target/debug/web-server；约 1 分钟；不自动 GO）
 GATE0=1 bash scripts/run-gate0-perf.sh
-# 可选 Next：GATE0_NEXT_BASE=http://127.0.0.1:8080 GATE0=1 bash scripts/run-gate0-perf.sh
+# Next 对照（standalone :3000；API :18081。不要用 :8080，那是 Plane）
+GATE0=1 GATE0_NEXT_BASE=http://127.0.0.1:3000 GATE0_API_BASE=http://127.0.0.1:18081 \
+  bash scripts/run-gate0-perf.sh
 
 # Tauri CSR 产物（不改 desktop tauri.conf.json）
 bash scripts/build-tauri-csr.sh   # 产出 dist/tauri/
@@ -116,13 +118,14 @@ WSL 纪律：`jobs=2`，不要叠加并发全量 cargo 运行；长时间任务�
   `role="alert"` typed error；retry 新流隔离；SSR 双路由表单语义；hydration 无重复 root/无错误；
 - dev 与 release-like 产物均实际构建并启动。
 - live backend：无 token 的真实 401 → `unauthorized`；有 JWT 的一轮 Quick Chat 流式收束、URL 落地。
-- Gate 0 第一采集（debug）：Rust 5 冷 + 20 热，first token p95 235.5ms，complete p95 1545.9ms；Next / 30 分钟未采。
+- Gate 0 第一采集（debug）：Rust 5 冷 + 20 热，first token p95 235.5ms，complete p95 1545.9ms。
+- Gate 0 Next 对照（standalone :3000）：两侧 5+20；first p95 Rust 234.8 / Next 262.7（10.6%）；complete 1531.6 / 1538.6（0.5%）；30 分钟未采。
 
 未验证/未完成：
 
 - 真实 Tauri WebView 点验；桌面会话列表（需 REST IPC）；Session files、RAG/Web/Workspace/Share/BYOK；
 - Markdown 富渲染/代码高亮/虚拟列表；
-- Gate 0 仍缺：Next 同机 5+20、`cargo leptos build --release` 再采、30 分钟堆斜率（且 `performance.memory` 10MB 分桶不可用）；
+- Gate 0 仍缺：`cargo leptos build --release` 再采、30 分钟堆斜率（且 `performance.memory` 10MB 分桶不可用）；
 - Nginx/systemd/部署脚本（Phase 6 之前禁止）。
 
 ## 5. 实施期踩坑记录（下一棒别再踩）
@@ -147,7 +150,8 @@ WSL 纪律：`jobs=2`，不要叠加并发全量 cargo 运行；长时间任务�
    的计数器用 `/admin/reset` 在 `beforeEach` 清零，避免跨用例污染。
 7. **base_url 不能带 query**（transport 直接 `base + "/api/v1/chat"`）；fixture 的字节切片模式
    走路径前缀 `/bytes/:n/api/v1/chat`。
-8. **本机 8080 可能不是 avrag-api**。`GET /health` 若返回大段 HTML，是 Next 占用了配置端口。
+8. **本机 8080 经常既不是 avrag-api 也不是 Next**。本机 `:8080` 是 **Plane**
+   （`application-name=Plane`）。Next standalone 在 `:3000`；API 用 `:18081`。
    live smoke 不要改 `.env`；另起空闲端口并设 `LIVE_API_BASE`。PoC 页用 `127.0.0.1:18080`
    （默认 CORS 白名单），不要用 3001/3200 打真实 API。
 9. **填 token 会 GET 会话列表**。fixture 必须对带 `/bytes/:n`、`/case/:name` 前缀的
@@ -159,14 +163,20 @@ WSL 纪律：`jobs=2`，不要叠加并发全量 cargo 运行；长时间任务�
     会在 `/chat` → `/chat/:id` 重挂时读到上一轮 `live-answer`，出现负 first_token / ~400ms
     假 complete。发送前必须 `chat-empty` 且无 live-answer；非增量样本丢弃。
     Done 后 live-answer **仍在**（status ≠ Idle），热路径必须先「新对话」。
-12. **8080 上的 Next 不能靠 cookie stub 进 `/chat` 画布**。`app/(app)/chat/page.tsx` 是
-    `return null`，UI 在 layout。`workspace-chat-composer` 不可见就记 Blocked，不要编 Next 数字。
+12. **不要把 `:8080` 当 Next，也不要只 stub cookie**。`app/(app)/chat/page.tsx` 是
+    `return null`，UI 在 layout。要真实登录 + `legal-acceptance`。
     Chromium `performance.memory` 按 10MB 分桶，不能做 30 分钟斜率。
+13. **`route.continue` 改到另一端口 = `ERR_BLOCKED_BY_CLIENT`**。Gate 0 用页内 `fetch` 补丁
+    把 `POST /api/v1/chat` 发到夹具（与 Rust 3200→3201 同一模式）。
+14. **Next `/chat` 首发会 `replace` 到 `/chat/:id` 并 abort SSE**。流式计时必须落在已有
+    session 路由（夹具是 `sess-900`）。
+15. **夹具末事件无结尾空行时 Next 解析不到 `done`**（残留行不进 `data` 字段，
+    `data-pending` 一直为 true）。夹具服务在最后一块后补 `\n\n`。关页前 `unrouteAll`。
 
 ## 6. 建议的下一任务切片（按依赖排序）
 
-1. **补齐 Gate 0 对照（仍不许 GO 直到 charter 全条满足）**：
-   - Next：真实登录（不要只 stub cookie）后对同一夹具采 5 冷 + 20 热；POST 必须 `route.continue` 保分块。
+1. **补齐 Gate 0 剩余条件（仍不许 GO）**：
+   - Next 对照已采（§2.3）；debug 核心改善 10.6% / 0.5%，体积护栏失败。
    - Rust release-like：`cargo leptos build --release` 后再采一套，debug 数字不得 GO。
    - 30 分钟：实现 `GATE0_STRESS=1`；不要用分桶的 `usedJSHeapSize` 当斜率。
    - 未达标即按设计 §3.3 停迁移、转优化 Next。
@@ -177,8 +187,11 @@ WSL 纪律：`jobs=2`，不要叠加并发全量 cargo 运行；长时间任务�
 Gate 0 第一采集证据见
 [`2026-09-04-frontend-rust-phase-0-gate0-perf-task.md`](2026-09-04-frontend-rust-phase-0-gate0-perf-task.md) §4
 与 [`2026-09-03-phase-0-benchmark-report.md`](2026-09-03-phase-0-benchmark-report.md) §2.2。
+Next 对照见
+[`2026-09-04-frontend-rust-phase-0-gate0-next-contrast-task.md`](2026-09-04-frontend-rust-phase-0-gate0-next-contrast-task.md) §4
+与报告 §2.3。
 charter：[`2026-09-04-frontend-rust-phase-0-gate0-benchmark-charter.md`](2026-09-04-frontend-rust-phase-0-gate0-benchmark-charter.md)（已冻结）。
-复跑：`GATE0=1 bash frontend_rust/scripts/run-gate0-perf.sh`。
+复跑：`GATE0=1 GATE0_NEXT_BASE=http://127.0.0.1:3000 GATE0_API_BASE=http://127.0.0.1:18081 bash frontend_rust/scripts/run-gate0-perf.sh`。
 
 会话列表 + 历史证据见
 [`2026-09-04-frontend-rust-phase-0-session-history-task.md`](2026-09-04-frontend-rust-phase-0-session-history-task.md) §5。

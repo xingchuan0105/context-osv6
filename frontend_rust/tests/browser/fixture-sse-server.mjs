@@ -33,7 +33,7 @@ function jsonOk(res, body) {
 
 function cors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Headers', 'authorization, content-type, accept');
+  res.setHeader('Access-Control-Allow-Headers', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
 }
 
@@ -89,6 +89,12 @@ function streamFixture(req, res, url) {
     }
     writePiece(res, pieces[i]);
     i += 1;
+    if (i >= pieces.length) {
+      // chunks.json 末事件故意无结尾空行（覆盖 EOF flush）。Next 解析器
+      // 不会把无换行的残留 buffer 当成 data 字段，done 不会落地、pending
+      // 一直为 true。这里补一帧结束符，两边都看到完整 last event。
+      writePiece(res, '\n\n');
+    }
   }, CHUNK_DELAY_MS);
 }
 
