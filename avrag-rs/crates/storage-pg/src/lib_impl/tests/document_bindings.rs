@@ -740,34 +740,50 @@ async fn deleting_workspace_sweeps_session_only_artifacts_of_its_sessions() {
     assert_eq!(ws_doc_tasks, 1, "workspace-bound orphan also swept exactly once");
 }
 
-/// Review round-5 T1 / round-6+7 Spec-7: a dual-bound artifact (session +
+/// Review round-5 T1 / round-6+7+8 Spec-7: a dual-bound artifact (session +
 /// workspace) deleted CONCURRENTLY from both scopes must not survive as a
-/// zombie, under BOTH deterministic winner orders. The barrier is a real
-/// database one: a helper connection takes SHARE ROW EXCLUSIVE on both
-/// binding tables FIRST; both deleter tasks then start (winner task spawned
-/// first → FIFO grant order) and block inside `lock_binding_tables`; the
-/// test waits until `pg_stat_activity` shows BOTH sessions waiting on a
-/// lock, and only then releases the helper lock. The winner therefore runs
-/// its capture window against live bindings and commits; the loser enters
-/// its capture AFTER the winner committed — the exact interleave the
-/// fixed-order dual-table lock must serialize. Serial execution cannot
-/// pass this test: without overlap, `pg_stat_activity` never shows two
-/// waiters and the poll times out.
+/// zombie, under BOTH deterministic winner orders.
+///
+/// Determinism is built in three layers (review round-8: a bare spawn pair
+/// does not control the lock queue, and a datname-wide waiter count can be
+/// satisfied by unrelated sessions):
+///
+/// 1. Each deleter pool carries a unique `application_name`, and the barrier
+///    poll counts ONLY those two sessions.
+/// 2. The winner task is spawned first and the test WAITS until it is
+///    observed waiting on the binding-table lock before the loser task is
+///    even spawned — PostgreSQL grants table locks FIFO, so the winner is
+///    decided by observation, not scheduler luck.
+/// 3. Only then does the loser spawn; when BOTH waiters are queued, the
+///    helper barrier connection releases and the winner completes its whole
+///    transaction (capture → scope delete → cascade → sweep → commit) before
+///    the loser enters its capture window.
+///
+/// Serial execution cannot pass: the loser is spawned only after the winner
+/// is provably blocked, so both transactions necessarily overlap.
 #[tokio::test]
 async fn concurrent_session_and_workspace_deletion_sweeps_dual_bound_artifact() {
-    run_dual_deletion_barrier_race("session_first").await;
+    run_dual_deletion_barrier_race(DualDeletionWinner::SessionFirst).await;
 }
 
 /// The workspace-first winner order (review round-6 Spec-7): the workspace
 /// delete is granted the lock first, cascades the session, and commits; the
-/// session delete then runs against the already-cascaded session (legal:
-/// reports false) and still converges.
+/// session delete then runs against the already-cascaded session and MUST
+/// report false — the precise outcome of this order, not a wildcard.
 #[tokio::test]
 async fn concurrent_deletion_workspace_first_order_sweeps_dual_bound_artifact() {
-    run_dual_deletion_barrier_race("workspace_first").await;
+    run_dual_deletion_barrier_race(DualDeletionWinner::WorkspaceFirst).await;
 }
 
-async fn run_dual_deletion_barrier_race(winner: &str) {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DualDeletionWinner {
+    SessionFirst,
+    WorkspaceFirst,
+}
+
+async fn run_dual_deletion_barrier_race(winner: DualDeletionWinner) {
+    use sqlx::ConnectOptions;
+    use std::str::FromStr;
     let Some(database_url) = env::var("DATABASE_URL").ok() else {
         return;
     };
@@ -835,51 +851,87 @@ async fn run_dual_deletion_barrier_race(winner: &str) {
         .await
         .unwrap();
 
-    // Winner-order control: which deleter task is spawned FIRST decides which
-    // connection enters the lock queue first (spawn order → connect order →
-    // FIFO grant order). The barrier poll below refuses to release until both
-    // tasks are queued, so the winner cannot complete serially. `winner` also
-    // selects the post-run assertions below.
-    let session_repo = repo.clone();
-    let workspace_repo = repo.clone();
-    let session_ctx = ctx.clone();
-    let workspace_ctx = ctx.clone();
-    let session_handle = tokio::spawn(async move {
-        session_repo
-            .sessions()
-            .delete_session(&session_ctx, session_id)
-            .await
-    });
-    let workspace_handle = tokio::spawn(async move {
-        workspace_repo
-            .bootstrap()
-            .delete_workspace(&workspace_ctx, workspace_id)
-            .await
-    });
+    // One pool per deleter with a unique, poll-visible application_name
+    // (review round-8 S4: the waiter count must only ever see THESE two
+    // sessions, never other tests or clients on the same database).
+    let session_pool_name = "dual_delete_session_deleter";
+    let workspace_pool_name = "dual_delete_workspace_deleter";
+    let connect_opts = |name: &str| {
+        sqlx::postgres::PgConnectOptions::from_str(&database_url)
+            .unwrap()
+            .application_name(name)
+            .log_slow_statements(log::LevelFilter::Warn, std::time::Duration::from_millis(500))
+    };
+    let session_pool = crate::pg_pool_options()
+        .max_connections(2)
+        .connect_with(connect_opts(session_pool_name))
+        .await
+        .unwrap();
+    let workspace_pool = crate::pg_pool_options()
+        .max_connections(2)
+        .connect_with(connect_opts(workspace_pool_name))
+        .await
+        .unwrap();
+    let session_repo = PgAppRepository::from_pool(session_pool);
+    let workspace_repo = PgAppRepository::from_pool(workspace_pool);
 
-    // TRUE barrier: wait until BOTH deleters are queued on the binding-table
-    // lock (wait_event_type = 'Lock'), so the winner cannot finish serially
-    // before the loser even starts.
+    // Winner first: spawn and WAIT until it is observed waiting on the
+    // binding-table lock — this (not scheduler timing) is what fixes the
+    // FIFO queue order.
+    let (first_name, first_repo, first_ctx, first_op) = match winner {
+        DualDeletionWinner::SessionFirst => (
+            session_pool_name,
+            session_repo.clone(),
+            ctx.clone(),
+            DeleterOp::Session(session_id),
+        ),
+        DualDeletionWinner::WorkspaceFirst => (
+            workspace_pool_name,
+            workspace_repo.clone(),
+            ctx.clone(),
+            DeleterOp::Workspace(workspace_id),
+        ),
+    };
+    let first_handle = tokio::spawn({
+        let repo = first_repo;
+        let ctx = first_ctx;
+        async move { first_op.execute(&repo, &ctx).await }
+    });
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
     loop {
-        let waiting: i64 = {
-            let mut tx = repo.raw().begin().await.unwrap();
-            sqlx::query("select set_config('app.current_role', 'super_admin', true)")
-                .execute(tx.as_mut())
-                .await
-                .unwrap();
-            let n = sqlx::query_scalar::<_, i64>(
-                "select count(*)::bigint from pg_stat_activity
-                 where datname = current_database()
-                   and wait_event_type = 'Lock'
-                   and pid <> pg_backend_pid()",
-            )
-            .fetch_one(tx.as_mut())
-            .await
-            .unwrap();
-            tx.commit().await.unwrap();
-            n
-        };
+        let waiting = count_waiting_deleters(&repo, &[first_name]).await;
+        if waiting >= 1 {
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "winner deleter must be queued on the barrier lock within 30s"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+
+    // Loser second: now the queue order is already fixed (winner at front).
+    let (second_name, second_repo, second_ctx, second_op) = match winner {
+        DualDeletionWinner::SessionFirst => (
+            workspace_pool_name,
+            workspace_repo.clone(),
+            ctx.clone(),
+            DeleterOp::Workspace(workspace_id),
+        ),
+        DualDeletionWinner::WorkspaceFirst => (
+            session_pool_name,
+            session_repo.clone(),
+            ctx.clone(),
+            DeleterOp::Session(session_id),
+        ),
+    };
+    let second_handle = tokio::spawn({
+        let repo = second_repo;
+        let ctx = second_ctx;
+        async move { second_op.execute(&repo, &ctx).await }
+    });
+    loop {
+        let waiting = count_waiting_deleters(&repo, &[first_name, second_name]).await;
         if waiting >= 2 {
             break;
         }
@@ -894,22 +946,28 @@ async fn run_dual_deletion_barrier_race(winner: &str) {
     // (capture → scope delete → cascade → sweep → commit), then the other
     // enters its capture window against the post-commit state.
     sqlx::query("commit").execute(&mut barrier).await.unwrap();
-    let deleted_session = session_handle.await.unwrap().unwrap();
-    let deleted_workspace = workspace_handle.await.unwrap().unwrap();
+    let first_result = first_handle.await.unwrap().unwrap();
+    let second_result = second_handle.await.unwrap().unwrap();
     match winner {
-        "session_first" => {
+        DualDeletionWinner::SessionFirst => {
             assert!(
-                deleted_session,
+                first_result.session == Some(true),
                 "session-first winner must delete its scope row"
             );
-            assert!(deleted_workspace, "workspace scope row survives the session cascade");
-        }
-        _ => {
             assert!(
-                deleted_workspace,
+                second_result.workspace == Some(true),
+                "workspace scope row survives the session cascade"
+            );
+        }
+        DualDeletionWinner::WorkspaceFirst => {
+            assert!(
+                first_result.workspace == Some(true),
                 "workspace-first winner must delete its scope row"
             );
-            // The session was already cascaded — reporting false is legal.
+            assert!(
+                second_result.session == Some(false),
+                "session delete must report false: the workspace cascade already removed it"
+            );
         }
     }
 
@@ -960,4 +1018,61 @@ async fn run_dual_deletion_barrier_race(winner: &str) {
         tasks, 1,
         "exactly one cleanup task for the orphan (idempotency key dedupes concurrent sweeps)"
     );
+}
+
+/// The two scope-owner deletions, named so the barrier poll can assert on
+/// exact per-operation outcomes (review round-8 S3: no stringly winner flag,
+/// no wildcard branch, no discarded results).
+#[derive(Debug, Clone, Copy)]
+enum DeleterOp {
+    Session(Uuid),
+    Workspace(Uuid),
+}
+
+#[derive(Debug, Default)]
+struct DeleterResult {
+    session: Option<bool>,
+    workspace: Option<bool>,
+}
+
+impl DeleterOp {
+    async fn execute(
+        &self,
+        repo: &PgAppRepository,
+        ctx: &AuthContext,
+    ) -> Result<DeleterResult, PgStorageError> {
+        let mut result = DeleterResult::default();
+        match self {
+            DeleterOp::Session(session_id) => {
+                result.session = Some(repo.sessions().delete_session(ctx, *session_id).await?);
+            }
+            DeleterOp::Workspace(workspace_id) => {
+                result.workspace = Some(repo.bootstrap().delete_workspace(ctx, *workspace_id).await?);
+            }
+        }
+        Ok(result)
+    }
+}
+
+/// Count lock-waiting sessions among EXACTLY the named deleter connections
+/// (review round-8 S4: filter by application_name — a datname-wide count
+/// could be satisfied by any unrelated client waiting on any lock).
+async fn count_waiting_deleters(repo: &PgAppRepository, names: &[&str]) -> i64 {
+    let mut tx = repo.raw().begin().await.unwrap();
+    sqlx::query("select set_config('app.current_role', 'super_admin', true)")
+        .execute(tx.as_mut())
+        .await
+        .unwrap();
+    let n = sqlx::query_scalar::<_, i64>(
+        "select count(*)::bigint from pg_stat_activity
+         where datname = current_database()
+           and wait_event_type = 'Lock'
+           and application_name = any($1)",
+    )
+    .bind(names)
+    .fetch_one(tx.as_mut())
+    .await
+    .unwrap();
+    tx.commit().await.unwrap();
+    n
 }

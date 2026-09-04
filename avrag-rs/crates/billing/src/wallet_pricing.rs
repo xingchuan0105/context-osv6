@@ -239,24 +239,27 @@ fn resolve_in(
         .find_map(|r| r.rates(prompt_tokens, at))
 }
 
-/// Whitelist check used by relay / startup validation: the FIRST row matching
-/// `provider` + `model` must resolve through the SAME `rate_sets()` resolver
-/// the runtime debits with AND every declared rate set must be billable
-/// (positive finite input, non-negative cache/output). A lone-peak,
-/// zero-price, negative-price or empty-tiers row returns `None`, so a
-/// whitelisted call can never skip its debit (review round-7 P0: the old
-/// `representative()` accepted those shapes while the debit resolved `None`).
+/// Whitelist check used by relay / startup validation: resolve the FIRST
+/// structurally servable row matching `provider` + `model` — the same row
+/// `resolve_in` (the debit path) would pick — then billable-check THAT row.
+/// Filtering inside `find_map` would instead skip a non-billable first row
+/// and whitelist on a later good row while the debit still stops at the
+/// first (review round-8 P0: `[zero, good]` whitelisted via row 2, debited
+/// 0 fen from row 1 — unbilled relay call). A lone-peak, zero-price,
+/// negative-price, hybrid or empty-tiers first row → `None` = not whitelisted.
 pub fn official_rates_for(provider: &str, model: &str) -> Option<OfficialRates> {
     let p = provider.trim().to_ascii_lowercase();
     let m = model.trim().to_ascii_lowercase();
-    configured_rate_rows()
+    let rows = configured_rate_rows();
+    let (row_sets, row) = rows
         .iter()
         .filter(|r| r.matches(&p, &m))
-        .find_map(|r| {
-            r.rate_sets()
-                .filter(|sets| sets.iter().all(RateRow::billable_set))
-                .map(|sets| sets[0].into())
-        })
+        .find_map(|r| r.rate_sets().map(|sets| (sets, r)))?;
+    let _ = row;
+    row_sets
+        .iter()
+        .all(RateRow::billable_set)
+        .then(|| row_sets[0].into())
 }
 
 fn price_from_rates(
@@ -743,26 +746,13 @@ mod price_gate_tests {
 
     // ---- Round-7 P0: the whitelist path must consume the SAME resolver ----
 
-    /// Serializes `PLATFORM_OFFICIAL_RATES_JSON` mutation across tests
-    /// (wallet.rs tests own their own lock — process-wide env, so the two
-    /// locks must be taken together when both modules run concurrently).
-    static RATES_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
     /// Point `official_rates_for` at `json`, run `f`, restore the prior value.
+    /// Uses the crate-wide RAII guard (review round-8 S6: one shared lock for
+    /// the whole crate — the local Mutex here previously serialized only this
+    /// module while wallet.rs tests mutated the same process-wide env var).
     fn with_rates<T>(json: &str, f: impl FnOnce() -> T) -> T {
-        let _guard = RATES_ENV_LOCK.lock().unwrap();
-        let prev = std::env::var_os("PLATFORM_OFFICIAL_RATES_JSON");
-        // SAFETY: serialized by RATES_ENV_LOCK; restored before unlock.
-        unsafe { std::env::set_var("PLATFORM_OFFICIAL_RATES_JSON", json) };
-        let out = f();
-        // SAFETY: serialized by RATES_ENV_LOCK.
-        unsafe {
-            match prev {
-                Some(v) => std::env::set_var("PLATFORM_OFFICIAL_RATES_JSON", v),
-                None => std::env::remove_var("PLATFORM_OFFICIAL_RATES_JSON"),
-            }
-        }
-        out
+        let _guard = crate::test_rates_env::set_rates_env(json);
+        f()
     }
 
     /// The relay whitelist (`ensure_whitelisted`) and the startup warning
@@ -819,6 +809,64 @@ mod price_gate_tests {
             // Zero price resolves Some(0) fen at runtime → debit returns
             // Ok(None) = unbilled call. The whitelist must stop it upstream.
             assert_eq!(list_price_fen("deepseek", "v4-flash", 1000, 1000, 0), Some(0));
+        });
+    }
+
+    /// Review round-8 P0: with duplicate matching rows the whitelist must
+    /// pick the SAME row the debit picks — the first STRUCTURALLY RESOLVABLE
+    /// row — and billable-check that row only. Filtering billable inside
+    /// find_map skipped a zero first row and whitelisted on row 2 while the
+    /// debit stopped at row 1 (0 fen) — unbilled relay call.
+    #[test]
+    fn whitelist_picks_the_debit_row_when_first_match_is_zero() {
+        let zero_then_good = r#"[
+            {"model_contains":"v4-flash","input":0,"output":0},
+            {"model_contains":"v4-flash","input":100,"cache":2,"output":200}]"#;
+        with_rates(zero_then_good, || {
+            assert!(
+                official_rates_for("deepseek", "v4-flash").is_none(),
+                "first resolvable row is zero → whitelist must refuse, not skip to row 2"
+            );
+            // The debit also stops at row 1 — both paths see the same row.
+            assert_eq!(list_price_fen("deepseek", "v4-flash", 1000, 1000, 0), Some(0));
+        });
+
+        let negative_then_good = r#"[
+            {"model_contains":"v4-flash","input":-20,"output":80},
+            {"model_contains":"v4-flash","input":100,"cache":2,"output":200}]"#;
+        with_rates(negative_then_good, || {
+            assert!(
+                official_rates_for("deepseek", "v4-flash").is_none(),
+                "first resolvable row is non-billable → whitelist must refuse, not skip to row 2"
+            );
+            // The debit also stops at row 1 (its odd -20/+80 mix yields an
+            // absurd ~1 fen) — same row, no divergence.
+            let debit = list_price_fen("deepseek", "v4-flash", 1000, 1000, 0);
+            assert_ne!(debit, None, "negative row is resolvable: debit does not skip it");
+        });
+
+        // Broken-shape first row: both paths skip it (shapeless ≠ resolvable)
+        // and agree on the next resolvable row.
+        let lone_peak_then_good = r#"[
+            {"model_contains":"v4-flash","peak":{"input":300,"cache":10,"output":900}},
+            {"model_contains":"v4-flash","input":100,"cache":2,"output":200}]"#;
+        with_rates(lone_peak_then_good, || {
+            let rates = official_rates_for("deepseek", "v4-flash");
+            assert_eq!(rates.unwrap().input_fen_per_mtok, 100.0);
+            assert_eq!(
+                list_price_fen("deepseek", "v4-flash", 1000, 1000, 0),
+                Some(1),
+                "both paths price from row 2 (1000 tokens × 100 fen/1M × 1.5, ceil)"
+            );
+        });
+
+        // Good row first, zero second: both paths stop at row 1 — billable.
+        let good_then_zero = r#"[
+            {"model_contains":"v4-flash","input":100,"cache":2,"output":200},
+            {"model_contains":"v4-flash","input":0,"output":0}]"#;
+        with_rates(good_then_zero, || {
+            assert_eq!(official_rates_for("deepseek", "v4-flash").unwrap().input_fen_per_mtok, 100.0);
+            assert!(list_price_fen("deepseek", "v4-flash", 1000, 1000, 0).unwrap() > 0);
         });
     }
 }

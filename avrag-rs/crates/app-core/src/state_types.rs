@@ -6,10 +6,12 @@ use contracts::workspaces::{ChatSession, Workspace};
 use std::collections::BTreeMap;
 
 /// One zero-binding orphan judgment, THE single fact for every memory-adapter
-/// deletion path (workspace delete, per-session cascade, explicit unbound
-/// GC in `MemoryDocumentStore`, and `MemoryChatPersistence::delete_session`):
-/// mark the artifact `Deleting` iff no workspace and no conversation binding
-/// remains (review round-7 S3: the check had drifted into three copies).
+/// deletion path (workspace delete ×2 in `MemoryDocumentStore`, the per-session
+/// cascade in the same file, and `MemoryChatPersistence::delete_session`;
+/// `MemoryDocumentStore::delete_document_if_unbound` shares this exact
+/// transition after its own eligibility checks): mark the artifact `Deleting`
+/// iff no workspace and no conversation binding remains (review round-7 S3
+/// extracted the duplicates; round-8 S7 folded in the explicit-GC path).
 pub(crate) fn mark_artifact_if_unbound(state: &mut MemoryState, artifact_id: &str) {
     let still_bound = state
         .workspace_document_bindings

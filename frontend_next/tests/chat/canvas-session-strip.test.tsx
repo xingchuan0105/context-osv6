@@ -174,17 +174,32 @@ describe("SessionFileTray delete failure paths (review round-5)", () => {
     // Start in-flight: a `processing` row is what makes production start the
     // 2s poll interval (review round-7 Spec-4 — the previous version seeded a
     // completed row, which never polls, so no in-flight GET existed).
-    // Every GET returns the row for the whole test — server truth never
-    // converges, so the ONLY thing keeping the row dead is the tombstone.
+    // Server truth never converges — every GET returns the row — so the ONLY
+    // thing keeping the row dead is the tombstone.
     listChatSessionFilesMock.mockResolvedValue([
       readyRow({ binding_id: "bind-1", status: "processing" }),
     ]);
-    // DELETE is slow: the poll interval fires while the delete is pending,
-    // so a poll GET is dispatched before the delete completes and resolves
-    // after it — the exact stale-GET-late interleave.
-    deleteChatSessionFileMock.mockImplementation(
-      () => new Promise((resolve) => setTimeout(() => resolve({ status: "deleted" }), 80)),
-    );
+
+    // Deferred poll GET (review round-8 S5): the FIRST poll tick's GET is
+    // captured unresolved. It is dispatched BEFORE the delete completes and
+    // only released AFTER it — a genuinely in-flight read crossing the
+    // delete, not an immediate-resolve mock.
+    let releasePollGet: ((value: unknown) => void) | null = null;
+    const deferredGet = new Promise((resolve) => {
+      releasePollGet = resolve;
+    });
+    listChatSessionFilesMock.mockImplementationOnce(async () => [
+      readyRow({ binding_id: "bind-1", status: "processing" }),
+    ]);
+    let pollTicks = 0;
+    listChatSessionFilesMock.mockImplementation(async () => {
+      pollTicks += 1;
+      if (pollTicks === 1) {
+        // First poll tick: dispatch and HOLD the response until released.
+        return deferredGet;
+      }
+      return [readyRow({ binding_id: "bind-1", status: "processing" })];
+    });
 
     vi.useFakeTimers();
     try {
@@ -205,25 +220,41 @@ describe("SessionFileTray delete failure paths (review round-5)", () => {
       expect(screen.getByText("report.txt")).toBeInTheDocument();
       const getCallsAfterMount = listChatSessionFilesMock.mock.calls.length;
 
+      // Fire ONE poll tick whose GET stays in flight across the delete.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2000);
+      });
+      const inFlightCalls = listChatSessionFilesMock.mock.calls.length;
+      expect(inFlightCalls).toBe(getCallsAfterMount + 1);
+      expect(releasePollGet).not.toBeNull();
+
+      // Delete while that GET is still pending.
       await act(async () => {
         fireEvent.click(removeButton);
-        // Flush the optimistic removal + the in-flight DELETE promise chain.
         await vi.advanceTimersByTimeAsync(80);
       });
       expect(deleteChatSessionFileMock).toHaveBeenCalled();
-      // Optimistic removal + tombstone: the row is gone even though every
-      // GET still returns it.
       expect(screen.queryByText("report.txt")).not.toBeInTheDocument();
 
-      // The poll interval keeps firing (the GET view still has the row
-      // server-side): every tick is a stale GET landing after the delete —
-      // exactly the resurrect path the tombstone must hold shut.
+      // Now release the pre-delete GET — it resolves AFTER the delete. The
+      // tombstone must keep its stale row dead.
+      await act(async () => {
+        releasePollGet!([readyRow({ binding_id: "bind-1", status: "processing" })]);
+        await deferredGet;
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(screen.queryByText("report.txt")).not.toBeInTheDocument();
+
+      // Later poll ticks (stale GETs too) are filtered by the tombstone as well.
       await act(async () => {
         await vi.advanceTimersByTimeAsync(6000);
         await Promise.resolve();
       });
       expect(screen.queryByText("report.txt")).not.toBeInTheDocument();
-      expect(listChatSessionFilesMock.mock.calls.length).toBeGreaterThan(getCallsAfterMount);
+      expect(listChatSessionFilesMock.mock.calls.length).toBeGreaterThan(
+        getCallsAfterMount + 1,
+      );
     } finally {
       vi.useRealTimers();
     }

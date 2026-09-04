@@ -12,6 +12,8 @@ mod payment_provider;
 pub mod quota_service;
 mod service;
 #[cfg(test)]
+pub(crate) mod test_rates_env;
+#[cfg(test)]
 mod tests_impl;
 mod tier;
 mod types;

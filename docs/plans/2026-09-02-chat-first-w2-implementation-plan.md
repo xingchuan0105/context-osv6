@@ -373,24 +373,45 @@ Standards（P2）：trailing whitespace 清零（`git diff --check` 净）；`li
 
 回归（§15 修改后）：avrag-billing 67、app-billing 13、app-core 45、app-chat 91、storage-pg document_bindings live PG；前端 Vitest 533 passed / 2 skipped（以实际命令输出为准；§15 提交时正文误写 536/2）。
 
-## 16. 第六/七轮审查修复（2026-09-03）
+## 16. 第六/七轮审查修复（2026-09-03；第八轮对其中 5 项的证据判定不成立，见 §17）
 
-第六轮审查确认 S2/S4/T1-b 等已闭环，但推翻 §15 的 S1/S3/S5/T1-a/T1-c 声明；第七轮审查进一步发现 Relay 白名单 P0 与两项测试证据不成立。逐项修复如下（**每项分列「实现」与「证据」**：证据=实际运行并通过的命令/测试；未列出的即尚未建立）：
+第六轮审查确认 S2/S4/T1-b 等已闭环，但推翻 §15 的 S1/S3/S5/T1-a/T1-c 声明；第七轮审查进一步发现 Relay 白名单 P0 与两项测试证据不成立。逐项修复如下（**每项分列「实现」与「证据」**：证据=实际运行并通过的命令/测试；未列出的即尚未建立）。**第八轮审查随后推翻了本表中「Relay 反例」「并发确定性」「前端在途轮询」「orphan 真去重」四行当时的证据与 P0 白名单修复本身（重复匹配行分叉），实际闭环见 §17**：
 
 | 项 | 实现 | 证据 |
 |---|---|---|
 | **六轮 S1 / 七轮 Spec-1：resolver 唯一化** | `RateRow::rate_sets()` 是唯一 shape resolver；`rates()`（运行时定价）、`rates_present_in`（启动门）、`official_rates_for`（Relay 白名单 + 启动告警）三个消费方全部从它出发并施加同一 `billable_set` 判定；`canonical_rate_sets(for_startup_gate)` 与 `representative()` 均已删除 | avrag-billing `hybrid_flat_plus_lone_peak_is_unservable_for_gate_and_runtime`、`gate_and_runtime_agree_on_every_resolvable_row`、`whitelist_refuses_unservable_and_non_billable_rows`、`whitelist_and_runtime_agree_on_debit_servability`；transport-http `whitelist_refuses_lone_peak_zero_and_negative_rate_rows` |
-| **七轮 P0：白名单放行不可计费/零价模型** | `official_rates_for` 不再自选代表价：走 `rate_sets()` + `billable_set` 全集校验，孤立 peak / 零价 / 负价 / flat+孤立 peak 混合行一律 `None` → `ensure_whitelisted` 拒绝（config error），白名单通过的模型在 debit 时必有价格 | 上行两条 agree 测试 + relay 反例测试；UsageObserver fail-open 路径不再可达（白名单在调用前拒绝） |
-| **六轮 S3 / 七轮 Spec-4：前端删除复活竞态** | `removedRef` 永久 tombstone（session 切换才清）；DELETE 失败才回滚 | 竞态测试重写为**真实在途轮询**：processing 行触发生产 2s poll interval（fake timers 推进），DELETE 前 poll tick 已发出、DELETE 慢 80ms、每次 GET 都返回该行；断言行永不复活；**临时删除 tombstone filter 验证测试变红**后恢复，4 例绿 |
+| **七轮 P0：白名单放行不可计费/零价模型** | `official_rates_for` 不再自选代表价：走 `rate_sets()` + `billable_set` 全集校验，孤立 peak / 零价 / 负价 / flat+孤立 peak 混合行一律 `None` → `ensure_whitelisted` 拒绝（config error），白名单通过的模型在 debit 时必有价格（**第八轮推翻：重复匹配行下白名单与 debit 仍选不同行，见 §17**） |
+| **六轮 S3 / 七轮 Spec-4：前端删除复活竞态** | `removedRef` 永久 tombstone（session 切换才清）；DELETE 失败才回滚 | processing 行触发生产 poll interval（**第八轮补强：GET 均立即 resolve，缺少删除前发出、删除后返回的真实迟到 GET，见 §17**） |
 | **六轮 S5 / 七轮确认：契约测试纯端口** | `memory_document_store_contract.rs` 经 `DocumentStorePort::create_workspace` + `SessionPort::create_session` 构造，断言全走公开查询 | app-core 3 契约测试绿 |
 | **六轮 Spec-4 / 七轮确认：memory 不伪造 parse-run** | `set_document_status` 铸造 `parse-run-{uuid}` 的通路删除；binding 行保持 None | snapshot 断言 `parse_version is_null` |
 | **六轮 Spec-3：PG workspace 删除泄漏 session-only artifact** | `delete_workspace` capture = workspace bindings UNION 级联 sessions 的 conversation bindings（同一双表锁内） | live-PG `deleting_workspace_sweeps_session_only_artifacts_of_its_sessions` 绿 |
-| **六轮 S2 / 七轮 S2+Spec-2：并发确定性** | 真实 DB barrier：helper 连接 `LOCK TABLE … SHARE ROW EXCLUSIVE` 双表 → 两个 deleter task 依赢家顺序 spawn（FIFO grant 决定赢家）→ 轮询 `pg_stat_activity` 直到**两个会话都在等锁**（serial 执行到不了这一步）→ 释放屏障 → 第二个 deleter 在第一个 commit 后进入 capture | 两个赢家顺序各自独立测试（`concurrent_session_and_workspace_…` / `concurrent_deletion_workspace_first_order_…`），断言零绑定 + `deleting` + cleanup task **恰 1**；live-PG 12 例 ×2 复跑稳定。**反证**：把屏障阈值临时改为 3 → 测试 32.7s 超时失败（serial 世界观测不到 2 个 waiter），证明 barrier 真实重叠 |
+| **六轮 S2 / 七轮 S2+Spec-2：并发确定性** | 真实 DB barrier：helper 连接 `LOCK TABLE … SHARE ROW EXCLUSIVE` 双表 → 两个 deleter task 依赢家顺序 spawn（FIFO grant 决定赢家）→ 轮询 `pg_stat_activity` 直到**两个会话都在等锁**（serial 执行到不了这一步）→ 释放屏障 → 第二个 deleter 在第一个 commit 后进入 capture | 两个测试当时仍固定 spawn 顺序、赢家只改事后断言；屏障计数按 datname 全库统计（**第八轮推翻：顺序未受控、计数可被无关会话凑满，见 §17**） |
 | **六轮 Spec-6 / 七轮 Spec-3：单次冻结、同源执行** | `enforce_agent_scope` 删除 `validate_rag_doc_scope` 实时重读 — ready/ownership 校验由冻结事实承担（session scope 只收 completed、workspace scope 只收 completed bindings）；`ChatContext::validate_rag_doc_scope` 与 `DocumentContext::validate_rag_doc_scope` 死路径删除；T1-c 换 `MetadataCaptureAgent` 捕获**最终 AgentRequest.doc_scope** | T1-c 断言：两个 binding 查询恰 1 次、`get_document_scope_states` **0 次**、执行 scope == [workspace artifact, session artifact]（foreign id 被冻结 allowed set 丢弃）；app-chat 91 绿 |
-| **七轮 S3：orphan 判定真去重** | 判定上移 `state_types::mark_artifact_if_unbound`（pub(crate)）— `MemoryDocumentStore`（workspace 删除两处）与 `MemoryChatPersistence::delete_session` 共用同一函数 | app-core 42+3+1 绿 |
+| **七轮 S3：orphan 判定去重**（第八轮降级为部分去重，见 §17） | 判定上移 `state_types::mark_artifact_if_unbound`（pub(crate)）— workspace 删除两处 + `MemoryChatPersistence::delete_session` 共用；`delete_document_if_unbound`（显式 GC）仍手写判定 | app-core 42+3+1 绿 |
 | **判断项** | `notebook` 变量/串名全部改 workspace（document_bindings.rs 20 处）；`uploadError`→`actionError` + `chat.fileActionFailed`；`handleFilesPicked` 缩进修复 | 全量编译无新告警；前端 4 例绿 |
 
 另记：`config_helpers` 两例 env 测试多线程偶发互踩（EnvGuard 逐变量恢复、并行 set/remove 同 var）— **先于本波存在**（66dce9ff，2026-08-18），单线程稳定；已登记后续修复。测试 wrapper 委托 ~400 行（Middle Man）维持手写 — `ChatPersistencePort` 六口 supertrait、Rust 无部分实现语法；宏方案待独立小波评估。
 
 回归（第六轮 `0f6e8769` 提交时实际输出）：avrag-billing 69、app-billing 13、app-core 42+3+1、app-chat 91、storage-pg document_bindings 12（live PG）×2、前端全量 533 passed / 2 skipped、tsc 干净、L1 OK。
 回归（第七轮修改后，见提交说明）：avrag-billing 71、app-billing 13、app-core 42+3+1、app-chat 91、app-documents 3+1+5、transport-http lib 89、storage-pg document_bindings 12（live PG）×2、前端 canvas-session-strip 4 例（含反证）。
+
+## 17. 第八轮审查修复（2026-09-04）
+
+第八轮审查指出第七轮的 5 项证据不成立，且白名单 P0 本身仍留有重复匹配行分叉。本轮逐项重做（实现 | 证据分列）：
+
+| 项 | 实现 | 证据 |
+|---|---|---|
+| **八轮 P0/Spec-1：重复匹配行下白名单与 debit 分叉** | `official_rates_for` 改为**先选定首个结构可解析（`rate_sets()` 为 Some）的匹配行 — 与 debit `resolve_in` 停在同一条 — 再对该行执行 `billable_set` 校验**。billable 过滤不再内联进 find_map（那会跳过零价首行、白名单取行 2 而 debit 取行 1 计 0） | avrag-billing `whitelist_picks_the_debit_row_when_first_match_is_zero`：`[零价,正常]`、`[负价,正常]` 白名单拒绝且 debit 同停行 1；`[孤立peak,正常]` 两路同取行 2；`[正常,零价]` 两路同取行 1。avrag-billing 72 绿 |
+| **八轮 S2：Relay 反例未装 fixture、未走 Relay 边界** | `whitelist_refuses_lone_peak_zero_and_negative_rate_rows` 重写：每个反例 JSON **经 `with_installed_rates` 真正写入 `PLATFORM_OFFICIAL_RATES_JSON`**，并断言经 **`ensure_whitelisted`**（Relay 自身边界）返回 INTERNAL_SERVER_ERROR；新增 `[零价,正常]` 行序反例 | transport-http 白名单 3 测试绿 |
+| **八轮 S3/Spec-3：赢家顺序未受控** | 屏障测试重建：每个 deleter 独立连接池 + 唯一 `application_name`；**赢家 task 先 spawn 并等到 pg_stat_activity 观测到它在等锁，才 spawn 输家**（FIFO 授权由观测保证，非调度运气）；结果按 `DeleterOp`/`DeleterResult` 枚举精确断言 — workspace-first 分支**断言 session 删除必须返回 false**（级联已删），session-first 断言两者 true；`count_waiting_deleters` 只按两个 `application_name` 计数 | live-PG 12 例 ×3 复跑稳定。**反证**：临时删除「先 spawn 赢家并等待其入队」步骤（两个 task 同时 spawn）→ workspace-first 断言在 6 次运行中第 2 次失败（session 先赢锁则其删除成功，与 `Some(false)` 矛盾）——证明 spawn-wait 真实控制锁队列；恢复后全绿 |
+| **八轮 S4/Spec-4：屏障统计全库 waiter** | 查询改为 `application_name = any($1)` 且只传两个 deleter 的名字（`dual_delete_session_deleter` / `dual_delete_workspace_deleter`）——其他测试/客户端的等待不再凑数 | 同上 ×3 稳定 |
+| **八轮 S5/Spec-5：前端缺真实迟到 GET** | 竞态测试改用 **deferred Promise**：首个 poll tick 的 GET 被 mock 捕获保持未决（`pollTicks===1` 分支），断言其已发出（calls +1）且未决 → 执行 DELETE → **释放该 GET**，其响应落在 DELETE 之后 — 删除前发出、删除后返回的迟到读真实存在 | 断言行不复活；**临时删除 tombstone filter → 测试红**（迟到 GET 复活行），恢复后 4/4 绿 |
+| **八轮 S6/Spec-6：费率 env 锁不共享** | 新建 `billing/src/test_rates_env.rs`（crate 级共享 `RATES_ENV_LOCK` + RAII `RatesEnvGuard`，panic unwind 也恢复、锁中毒可恢复）；`wallet.rs` 与 `wallet_pricing.rs` 测试全部迁入同一把锁 | avrag-billing 72 绿（含多线程并行） |
+| **八轮 S7/Spec-7：显式 GC 仍手写判定** | `MemoryDocumentStore::delete_document_if_unbound` 的 binding 检查 + `Deleting` 迁移改经 `state_types::mark_artifact_if_unbound`（本路径只保留 owner/终态资格检查与成功回报）；helper 文档改为如实列举四条路径 | app-core 42 lib + 3 契约 + 1 单线程绿 |
+| **判断项** | 赢家/操作字符串 → `DualDeletionWinner` / `DeleterOp` 枚举（拼写安全、断言穷尽）；Relay 测试穿过 `ensure_whitelisted` 授权边界而非只测 billing helper | 编译零新告警 |
+
+**确认闭环（第八轮确认）**：T1-c 冻结 facts 修复、缩进、notebook 术语、MemoryChatPersistence orphan 复用 — 第八轮审查明确认可。
+
+另记：`config_helpers` 两例 env 测试多线程偶发互踩为既有问题（66dce9ff，2026-08-18），本轮多线程运行再次复现 1 次、单线程稳定；已登记后续修复，不属本波。测试 wrapper ~400 行（Middle Man）维持手写，宏方案待独立小波。
+
+回归（第八轮修改后，实际命令输出见提交说明）：avrag-billing 72、app-billing 13、app-core 42 lib + 3 契约 + 1、app-chat 91、app-documents 3+1+5、transport-http lib 89、storage-pg document_bindings 12（live PG）×3；前端 canvas-session-strip 4 例（含反证）。

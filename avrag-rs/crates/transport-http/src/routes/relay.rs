@@ -1059,30 +1059,77 @@ mod tests {
         });
     }
 
-    /// Review round-7 P0: the whitelist must share the runtime's shape +
-    /// billable resolver. A row that resolves `None` at debit time (lone
-    /// peak, hybrid flat+lone-peak) or debits 0 fen (zero/negative price)
-    /// used to pass `official_rates_for` (representative first tier / peak)
-    /// → relay allowed the upstream call → UsageObserver fail-opened and the
-    /// call went unbilled. Refusal is the config error, not a runtime skip.
+    /// Review round-7/8 P0: the whitelist must share the runtime's shape +
+    /// billable resolver AND pick the same row the debit picks. Each fixture
+    /// is actually installed into `PLATFORM_OFFICIAL_RATES_JSON` (round-8:
+    /// the previous version asserted against the ambient env without
+    /// installing `bad`, so a broken resolver could still pass), and the
+    /// refusal is exercised through the Relay boundary `ensure_whitelisted`
+    /// itself — not just the billing helper.
     #[test]
     fn whitelist_refuses_lone_peak_zero_and_negative_rate_rows() {
         let base = r#"[{"model_contains":"v4-flash",<BODY>}]"#;
-        let lone_peak = base.replace(
-            "<BODY>",
-            r#""peak":{"input":300,"cache":10,"output":900}"#,
-        );
-        let hybrid = base.replace(
-            "<BODY>",
-            r#""input":20,"peak":{"input":300,"cache":10,"output":900}"#,
-        );
-        let zero = base.replace("<BODY>", r#""input":0,"output":0"#);
-        let negative = base.replace("<BODY>", r#""input":-20,"output":80"#);
-        for bad in [lone_peak, hybrid, zero, negative] {
-            assert!(
-                avrag_billing::official_rates_for("deepseek", "v4-flash").is_none(),
-                "unbillable/unservable row must not whitelist: {bad}"
+        let cases = [
+            (
+                r#""peak":{"input":300,"cache":10,"output":900}"#,
+                "lone peak: debit resolves None",
+            ),
+            (
+                r#""input":20,"peak":{"input":300,"cache":10,"output":900}"#,
+                "hybrid flat+lone-peak: unservable shape",
+            ),
+            (r#""input":0,"output":0"#, "zero price: debits 0 fen"),
+            (r#""input":-20,"output":80"#, "negative price: non-billable"),
+            // Round-8 P0: a later good row must NOT rescue a zero first row
+            // — the debit stops at the first resolvable row.
+            (
+                r#""input":0,"output":0},{"model_contains":"v4-flash","input":100,"cache":2,"output":200"#,
+                "zero first + good second: debit stops at row 1",
+            ),
+        ];
+        for (body, why) in cases {
+            let fixture = format!(
+                r#"[{{"model_contains":"v4-flash",{body}}}]"#
             );
+            with_installed_rates(&fixture, || {
+                assert!(
+                    avrag_billing::official_rates_for("deepseek", "v4-flash").is_none(),
+                    "unbillable/unservable row must not whitelist: {why}"
+                );
+                let upstream = RelayUpstream {
+                    base_url: "https://api.deepseek.com".to_string(),
+                    api_key: "sk-test".to_string(),
+                    model: "deepseek-v4-flash".to_string(),
+                    provider: "deepseek".to_string(),
+                    timeout_ms: 1000,
+                };
+                let response = ensure_whitelisted(&upstream, "AGENT_LLM").unwrap_err();
+                assert_eq!(
+                    response.status(),
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "relay must refuse the pinned model at its own boundary: {why}"
+                );
+            });
         }
+    }
+
+    /// Install `json` into `PLATFORM_OFFICIAL_RATES_JSON` (same env var the
+    /// production whitelist reads) and restore afterwards. Serialized by the
+    /// module's RATES_ENV_LOCK — the same lock `with_test_rates` uses, so
+    /// every relay test that mutates the env is serialized against the others.
+    fn with_installed_rates<T>(json: &str, f: impl FnOnce() -> T) -> T {
+        let _guard = RATES_ENV_LOCK.lock().unwrap();
+        let prev = std::env::var_os("PLATFORM_OFFICIAL_RATES_JSON");
+        // SAFETY: serialized by RATES_ENV_LOCK; restored before unlock.
+        unsafe { std::env::set_var("PLATFORM_OFFICIAL_RATES_JSON", json) };
+        let out = f();
+        // SAFETY: serialized by RATES_ENV_LOCK.
+        unsafe {
+            match prev {
+                Some(v) => std::env::set_var("PLATFORM_OFFICIAL_RATES_JSON", v),
+                None => std::env::remove_var("PLATFORM_OFFICIAL_RATES_JSON"),
+            }
+        }
+        out
     }
 }

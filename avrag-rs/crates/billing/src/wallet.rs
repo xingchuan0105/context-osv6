@@ -327,31 +327,9 @@ mod tests {
     use std::collections::HashMap;
     use std::sync::Mutex;
 
-    /// Serializes `PLATFORM_OFFICIAL_RATES_JSON` mutation across tests.
-    static RATES_ENV_LOCK: Mutex<()> = Mutex::new(());
-
     /// Deterministic flat test rate: deepseek-v4-flash 1M input → 150 list fen.
     const TEST_RATES_JSON: &str =
         r#"[{"model_contains":"v4-flash","input":100,"cache":2,"output":200}]"#;
-
-    /// Point wallet pricing at [`TEST_RATES_JSON`]; returns the prior value for
-    /// [`restore_rates_env`]. Caller must hold [`RATES_ENV_LOCK`].
-    fn set_test_rates_env() -> Option<std::ffi::OsString> {
-        let prev = std::env::var_os("PLATFORM_OFFICIAL_RATES_JSON");
-        // SAFETY: serialized by RATES_ENV_LOCK; restored before unlock.
-        unsafe { std::env::set_var("PLATFORM_OFFICIAL_RATES_JSON", TEST_RATES_JSON) };
-        prev
-    }
-
-    fn restore_rates_env(prev: Option<std::ffi::OsString>) {
-        // SAFETY: serialized by RATES_ENV_LOCK.
-        unsafe {
-            match prev {
-                Some(v) => std::env::set_var("PLATFORM_OFFICIAL_RATES_JSON", v),
-                None => std::env::remove_var("PLATFORM_OFFICIAL_RATES_JSON"),
-            }
-        }
-    }
 
     /// In-memory wallet store for unit tests (no Postgres).
     struct MemoryWalletStore {
@@ -625,8 +603,7 @@ mod tests {
 
     #[tokio::test]
     async fn usage_debit_reduces_balance_by_list_fen() {
-        let _rates_guard = RATES_ENV_LOCK.lock().unwrap();
-        let prev_rates = set_test_rates_env();
+        let _rates = crate::test_rates_env::set_rates_env(TEST_RATES_JSON);
         let store: Arc<dyn WalletStorePort> = Arc::new(MemoryWalletStore::new());
         let user_id = Uuid::new_v4();
         grant_signup_bonus(store.clone(), user_id).await.unwrap();
@@ -661,13 +638,11 @@ mod tests {
             ledger[0].idempotency_key,
             usage_debit_idempotency_key(event_id)
         );
-        restore_rates_env(prev_rates);
     }
 
     #[tokio::test]
     async fn usage_debit_is_idempotent_for_same_event_id() {
-        let _rates_guard = RATES_ENV_LOCK.lock().unwrap();
-        let prev_rates = set_test_rates_env();
+        let _rates = crate::test_rates_env::set_rates_env(TEST_RATES_JSON);
         let store: Arc<dyn WalletStorePort> = Arc::new(MemoryWalletStore::new());
         let user_id = Uuid::new_v4();
         grant_signup_bonus(store.clone(), user_id).await.unwrap();
@@ -705,7 +680,6 @@ mod tests {
                 .count(),
             1
         );
-        restore_rates_env(prev_rates);
     }
 
     #[tokio::test]
@@ -743,8 +717,7 @@ mod tests {
 
     #[tokio::test]
     async fn zero_balance_usage_debit_fails_without_changing_balance() {
-        let _rates_guard = RATES_ENV_LOCK.lock().unwrap();
-        let prev_rates = set_test_rates_env();
+        let _rates = crate::test_rates_env::set_rates_env(TEST_RATES_JSON);
         let store: Arc<dyn WalletStorePort> = Arc::new(MemoryWalletStore::new());
         let user_id = Uuid::new_v4();
         // Ensure wallet exists at 0 fen (no signup grant).
@@ -771,7 +744,6 @@ mod tests {
         let wallet = store.get_wallet(user_id).await.unwrap().unwrap();
         assert_eq!(wallet.balance_fen, 0);
         assert!(store.list_ledger(user_id, 10).await.unwrap().is_empty());
-        restore_rates_env(prev_rates);
     }
 
     #[tokio::test]

@@ -617,15 +617,7 @@ impl DocumentStorePort for MemoryDocumentStore {
     ) -> Result<bool, AppError> {
         let mut state = self.state.write().await;
         let key = document_id.to_string();
-        let has_workspace_binding = state
-            .workspace_document_bindings
-            .iter()
-            .any(|row| row.artifact_id == key);
-        let has_conversation_binding = state
-            .conversation_document_bindings
-            .iter()
-            .any(|row| row.artifact_id == key);
-        let Some(stored) = state.documents.get_mut(&key) else {
+        let Some(stored) = state.documents.get(&key) else {
             return Ok(false);
         };
         if !org_matches(auth, &stored.document.owner_user_id) {
@@ -634,11 +626,21 @@ impl DocumentStorePort for MemoryDocumentStore {
         if is_deleting_or_deleted(&stored.document.status) {
             return Ok(false);
         }
-        if has_workspace_binding || has_conversation_binding {
+        // The zero-binding precondition is the shared single fact; this path
+        // only adds the eligibility checks and the success report (review
+        // round-8 S7).
+        let still_bound = state
+            .workspace_document_bindings
+            .iter()
+            .any(|row| row.artifact_id == key)
+            || state
+                .conversation_document_bindings
+                .iter()
+                .any(|row| row.artifact_id == key);
+        if still_bound {
             return Ok(false);
         }
-        stored.document.status = DocumentStatus::Deleting;
-        stored.document.updated_at = now_rfc3339();
+        crate::state_types::mark_artifact_if_unbound(&mut state, &key);
         Ok(true)
     }
 
