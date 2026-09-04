@@ -25,6 +25,7 @@ const WEB_BASE = `http://127.0.0.1:${Number(process.env.POC_WEB_PORT || 3200)}`;
 const FIXTURE_BASE = `http://127.0.0.1:${Number(process.env.POC_FIXTURE_PORT || 3201)}`;
 const NEXT_BASE = (process.env.GATE0_NEXT_BASE || "").replace(/\/$/, "");
 const API_BASE = (process.env.GATE0_API_BASE || "").replace(/\/$/, "");
+const RUST_PROFILE = process.env.GATE0_RUST_PROFILE === "release" ? "release" : "debug";
 const RESULT_PATH = join(
   process.cwd(),
   "results",
@@ -65,7 +66,7 @@ test("Gate 0 Rust PoC 5 cold + 20 hot", async ({ browser }) => {
   test.skip(process.env.GATE0 !== "1", "set GATE0=1 to collect");
   const rust: SideResult = {
     side: "rust",
-    build_note: "target/debug/web-server + target/site (debug hydrate)",
+    build_note: `target/${RUST_PROFILE}/web-server + target/site (${RUST_PROFILE} hydrate)`,
     cold_nav: [],
     streams: [],
     discarded: [],
@@ -128,6 +129,7 @@ test("Gate 0 Rust PoC 5 cold + 20 hot", async ({ browser }) => {
   const payload = {
     charter: "docs/plans/2026-09-04-frontend-rust-phase-0-gate0-benchmark-charter.md",
     collected_at: new Date().toISOString(),
+    rust_profile: RUST_PROFILE,
     rust_web: WEB_BASE,
     fixture: FIXTURE_BASE,
     next_web: NEXT_BASE || null,

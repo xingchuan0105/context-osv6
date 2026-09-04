@@ -9,6 +9,7 @@ const WEB_PORT = Number(process.env.POC_WEB_PORT || 3200);
 const FIXTURE_PORT = Number(process.env.POC_FIXTURE_PORT || 3201);
 const WEB_BASE = `http://127.0.0.1:${WEB_PORT}`;
 const FIXTURE_BASE = `http://127.0.0.1:${FIXTURE_PORT}`;
+const RUST_PROFILE = process.env.GATE0_RUST_PROFILE === "release" ? "release" : "debug";
 
 export default defineConfig({
   testDir: ".",
@@ -35,10 +36,10 @@ export default defineConfig({
       timeout: 15_000,
     },
     {
-      command: join(frontendRustRoot, "target", "debug", "web-server"),
+      command: join(frontendRustRoot, "target", RUST_PROFILE, "web-server"),
       cwd: frontendRustRoot,
       url: `${WEB_BASE}/healthz`,
-      reuseExistingServer: true,
+      reuseExistingServer: false,
       env: {
         ...process.env,
         LEPTOS_SITE_ADDR: `127.0.0.1:${WEB_PORT}`,
