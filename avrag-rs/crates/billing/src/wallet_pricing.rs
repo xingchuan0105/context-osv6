@@ -169,15 +169,12 @@ impl RateRow {
     fn rates(&self, prompt_tokens: u32, at: DateTime<Utc>) -> Option<OfficialRates> {
         let sets = self.rate_sets()?;
         if self.tiers.is_some() {
-            let tier = self
-                .tiers
-                .as_ref()
-                .and_then(|tiers| {
-                    tiers
-                        .iter()
-                        .find(|t| prompt_tokens <= t.max_prompt_tokens)
-                        .or(tiers.last())
-                })?;
+            let tier = self.tiers.as_ref().and_then(|tiers| {
+                tiers
+                    .iter()
+                    .find(|t| prompt_tokens <= t.max_prompt_tokens)
+                    .or(tiers.last())
+            })?;
             return Some(
                 RateSet {
                     input: tier.input,
@@ -197,7 +194,6 @@ impl RateRow {
         }
         Some(sets[0].into())
     }
-
 }
 
 /// Parse configured rate rows from `PLATFORM_OFFICIAL_RATES_JSON`.
@@ -224,7 +220,19 @@ fn is_beijing_peak(at: DateTime<Utc>) -> bool {
         .any(|&(start, end)| hour >= start && hour < end)
 }
 
-/// First configured row matching provider+model that resolves to rates.
+/// First configured row matching provider+model whose shape is servable.
+///
+/// Every consumer starts from this selector so startup validation, Relay
+/// whitelisting, and runtime debit cannot drift on duplicate matching rows.
+fn first_servable_row<'a>(rows: &'a [RateRow], provider: &str, model: &str) -> Option<&'a RateRow> {
+    let p = provider.trim().to_ascii_lowercase();
+    let m = model.trim().to_ascii_lowercase();
+    rows.iter()
+        .filter(|row| row.matches(&p, &m))
+        .find(|row| row.rate_sets().is_some())
+}
+
+/// Resolve rates from the first servable configured row.
 fn resolve_in(
     rows: &[RateRow],
     provider: &str,
@@ -232,11 +240,7 @@ fn resolve_in(
     prompt_tokens: u32,
     at: DateTime<Utc>,
 ) -> Option<OfficialRates> {
-    let p = provider.trim().to_ascii_lowercase();
-    let m = model.trim().to_ascii_lowercase();
-    rows.iter()
-        .filter(|r| r.matches(&p, &m))
-        .find_map(|r| r.rates(prompt_tokens, at))
+    first_servable_row(rows, provider, model)?.rates(prompt_tokens, at)
 }
 
 /// Whitelist check used by relay / startup validation: resolve the FIRST
@@ -248,14 +252,8 @@ fn resolve_in(
 /// 0 fen from row 1 — unbilled relay call). A lone-peak, zero-price,
 /// negative-price, hybrid or empty-tiers first row → `None` = not whitelisted.
 pub fn official_rates_for(provider: &str, model: &str) -> Option<OfficialRates> {
-    let p = provider.trim().to_ascii_lowercase();
-    let m = model.trim().to_ascii_lowercase();
     let rows = configured_rate_rows();
-    let (row_sets, row) = rows
-        .iter()
-        .filter(|r| r.matches(&p, &m))
-        .find_map(|r| r.rate_sets().map(|sets| (sets, r)))?;
-    let _ = row;
+    let row_sets = first_servable_row(&rows, provider, model)?.rate_sets()?;
     row_sets
         .iter()
         .all(RateRow::billable_set)
@@ -320,14 +318,9 @@ pub fn rates_present_in(raw: &str, provider: &str, model: &str) -> bool {
     let Ok(rows) = serde_json::from_str::<Vec<RateRow>>(raw) else {
         return false;
     };
-    let p = provider.trim().to_ascii_lowercase();
-    let m = model.trim().to_ascii_lowercase();
-    rows.iter()
-        .filter(|r| r.matches(&p, &m))
-        .find_map(|r| {
-            r.all_rate_sets()
-                .map(|sets| sets.iter().all(RateRow::billable_set))
-        })
+    first_servable_row(&rows, provider, model)
+        .and_then(RateRow::all_rate_sets)
+        .map(|sets| sets.iter().all(RateRow::billable_set))
         .unwrap_or(false)
 }
 
@@ -371,7 +364,8 @@ mod tests {
 
     /// Mirror of the ops JSON shapes (values = the 2026-08-17 vendor prices).
     fn test_rows() -> Vec<RateRow> {
-        serde_json::from_str(r#"[
+        serde_json::from_str(
+            r#"[
             {"model_contains":"v4-flash",
              "peak":{"input":300,"cache":10,"output":900},
              "off_peak":{"input":150,"cache":5,"output":450}},
@@ -385,7 +379,8 @@ mod tests {
                {"max_prompt_tokens":1000000,"input":120,"cache":24,"output":480}]},
             {"model_contains":"bge-m3","input":7},
             {"model_contains":"bge-reranker","input":7}
-        ]"#)
+        ]"#,
+        )
         .unwrap()
     }
 
@@ -422,8 +417,14 @@ mod tests {
         let rows = test_rows();
         let m = "deepseek-ai/DeepSeek-V4-Flash";
         // peak: 1M input miss 300 → ×1.5 = 450; 1M output 900 → 1350
-        assert_eq!(price(&rows, "deepseek", m, 1_000_000, 0, 0, peak_time()), Some(450));
-        assert_eq!(price(&rows, "deepseek", m, 0, 1_000_000, 0, peak_time()), Some(1350));
+        assert_eq!(
+            price(&rows, "deepseek", m, 1_000_000, 0, 0, peak_time()),
+            Some(450)
+        );
+        assert_eq!(
+            price(&rows, "deepseek", m, 0, 1_000_000, 0, peak_time()),
+            Some(1350)
+        );
         // off-peak is half: 150 → 225; 450 → 675
         assert_eq!(
             price(&rows, "deepseek", m, 1_000_000, 0, 0, off_peak_time()),
@@ -440,15 +441,39 @@ mod tests {
         let rows = test_rows();
         // peak: input 900 → 1350; output 2700 → 4050; off-peak input 450 → 675
         assert_eq!(
-            price(&rows, "deepseek", "deepseek-v4-pro", 1_000_000, 0, 0, peak_time()),
+            price(
+                &rows,
+                "deepseek",
+                "deepseek-v4-pro",
+                1_000_000,
+                0,
+                0,
+                peak_time()
+            ),
             Some(1350)
         );
         assert_eq!(
-            price(&rows, "deepseek", "deepseek-v4-pro", 0, 1_000_000, 0, peak_time()),
+            price(
+                &rows,
+                "deepseek",
+                "deepseek-v4-pro",
+                0,
+                1_000_000,
+                0,
+                peak_time()
+            ),
             Some(4050)
         );
         assert_eq!(
-            price(&rows, "deepseek", "deepseek-v4-pro", 1_000_000, 0, 0, off_peak_time()),
+            price(
+                &rows,
+                "deepseek",
+                "deepseek-v4-pro",
+                1_000_000,
+                0,
+                0,
+                off_peak_time()
+            ),
             Some(675)
         );
     }
@@ -475,7 +500,15 @@ mod tests {
         // full cache hit peak: 10 → ×1.5 = 15; off-peak: 5 → 7.5 → ceil 8
         assert_eq!(hit, 15);
         assert_eq!(
-            price(&rows, "deepseek", m, 1_000_000, 0, 1_000_000, off_peak_time()),
+            price(
+                &rows,
+                "deepseek",
+                m,
+                1_000_000,
+                0,
+                1_000_000,
+                off_peak_time()
+            ),
             Some(8)
         );
     }
@@ -485,12 +518,28 @@ mod tests {
         let rows = test_rows();
         // peak: 1k in + 1k out flash = 0.3 + 0.9 = 1.2 official → ×1.5 = 1.8 → 2
         assert_eq!(
-            price(&rows, "deepseek", "deepseek-v4-flash", 1000, 1000, 0, peak_time()),
+            price(
+                &rows,
+                "deepseek",
+                "deepseek-v4-flash",
+                1000,
+                1000,
+                0,
+                peak_time()
+            ),
             Some(2)
         );
         // off-peak: 0.15 + 0.45 = 0.6 → ×1.5 = 0.9 → 1
         assert_eq!(
-            price(&rows, "deepseek", "deepseek-v4-flash", 1000, 1000, 0, off_peak_time()),
+            price(
+                &rows,
+                "deepseek",
+                "deepseek-v4-flash",
+                1000,
+                1000,
+                0,
+                off_peak_time()
+            ),
             Some(1)
         );
     }
@@ -500,9 +549,15 @@ mod tests {
         let rows = test_rows();
         let t = peak_time(); // time-independent row; any instant works
         // ≤32k tier: 32_000 in → 0.64 official → ×1.5 = 0.96 → 1
-        assert_eq!(price(&rows, "dashscope", "qwen3.7-flash", 32_000, 0, 0, t), Some(1));
+        assert_eq!(
+            price(&rows, "dashscope", "qwen3.7-flash", 32_000, 0, 0, t),
+            Some(1)
+        );
         // >32k tier: 32_001 in → ≈1.92 → ×1.5 ≈ 2.88 → 3
-        assert_eq!(price(&rows, "dashscope", "qwen3.7-flash", 32_001, 0, 0, t), Some(3));
+        assert_eq!(
+            price(&rows, "dashscope", "qwen3.7-flash", 32_001, 0, 0, t),
+            Some(3)
+        );
         // >256k tier: 1M in → 120 → 180; above the last tier bills at that tier
         assert_eq!(
             price(&rows, "dashscope", "qwen3.7-flash", 1_000_000, 0, 0, t),
@@ -519,7 +574,15 @@ mod tests {
         );
         // cache hits use the tier's cache rate: 1M cached at top tier → 24 → 36
         assert_eq!(
-            price(&rows, "dashscope", "qwen3.7-flash", 1_000_000, 0, 1_000_000, t),
+            price(
+                &rows,
+                "dashscope",
+                "qwen3.7-flash",
+                1_000_000,
+                0,
+                1_000_000,
+                t
+            ),
             Some(36)
         );
     }
@@ -529,7 +592,15 @@ mod tests {
         let rows = test_rows();
         // ¥0.070 / 1M = 7 fen → ×1.5 = 10.5 → ceil 11
         assert_eq!(
-            price(&rows, "siliconflow", "Pro/BAAI/bge-m3", 1_000_000, 0, 0, peak_time()),
+            price(
+                &rows,
+                "siliconflow",
+                "Pro/BAAI/bge-m3",
+                1_000_000,
+                0,
+                0,
+                peak_time()
+            ),
             Some(11)
         );
         assert_eq!(
@@ -555,7 +626,15 @@ mod tests {
         );
         // No rows at all → nothing billable.
         assert_eq!(
-            price(&[], "deepseek", "deepseek-v4-flash", 1000, 1000, 0, peak_time()),
+            price(
+                &[],
+                "deepseek",
+                "deepseek-v4-flash",
+                1000,
+                1000,
+                0,
+                peak_time()
+            ),
             None
         );
     }
@@ -563,10 +642,12 @@ mod tests {
     #[test]
     fn first_matching_row_with_rates_wins() {
         // A shapeless row does not shadow a later row that carries rates.
-        let rows: Vec<RateRow> = serde_json::from_str(r#"[
+        let rows: Vec<RateRow> = serde_json::from_str(
+            r#"[
             {"model_contains":"bge-m3"},
             {"model_contains":"bge-m3","input":7}
-        ]"#)
+        ]"#,
+        )
         .unwrap();
         assert_eq!(
             price(&rows, "siliconflow", "bge-m3", 1_000_000, 0, 0, peak_time()),
@@ -616,7 +697,8 @@ mod price_gate_tests {
     #[test]
     fn rates_present_in_rejects_non_billable_rates() {
         let zero = r#"[{"model_contains":"qwen3.8-flash","input":0,"output":0}]"#;
-        let zero_input_positive_output = r#"[{"model_contains":"qwen3.8-flash","input":0,"output":80}]"#;
+        let zero_input_positive_output =
+            r#"[{"model_contains":"qwen3.8-flash","input":0,"output":80}]"#;
         let negative = r#"[{"model_contains":"qwen3.8-flash","input":-20,"output":80}]"#;
         let zero_tier = r#"[{"model_contains":"qwen3.8-flash","tiers":[
             {"max_prompt_tokens":32000,"input":0,"cache":0,"output":0},
@@ -682,7 +764,8 @@ mod price_gate_tests {
     /// carrying a provider clause must not satisfy a different provider.
     #[test]
     fn rates_present_in_respects_provider_scope() {
-        let rows = r#"[{"provider":"dashscope","model_contains":"qwen3.8-flash","input":20,"output":80}]"#;
+        let rows =
+            r#"[{"provider":"dashscope","model_contains":"qwen3.8-flash","input":20,"output":80}]"#;
         assert!(rates_present_in(rows, "dashscope", "qwen3.8-flash"));
         assert!(
             !rates_present_in(rows, "deepseek", "qwen3.8-flash"),
@@ -737,8 +820,7 @@ mod price_gate_tests {
         let good = r#"[{"model_contains":"dup","input":20,"output":80}]"#;
         let rows: Vec<RateRow> = serde_json::from_str(good).unwrap();
         assert_eq!(
-            resolve_in(&rows, "any", "dup", 1000, at)
-                .map(|r| price_from_rates(&r, 1000, 1000, 0)),
+            resolve_in(&rows, "any", "dup", 1000, at).map(|r| price_from_rates(&r, 1000, 1000, 0)),
             Some(1)
         );
         assert!(rates_present_in(good, "any", "dup"));
@@ -808,7 +890,10 @@ mod price_gate_tests {
             assert!(official_rates_for("deepseek", "v4-flash").is_none());
             // Zero price resolves Some(0) fen at runtime → debit returns
             // Ok(None) = unbilled call. The whitelist must stop it upstream.
-            assert_eq!(list_price_fen("deepseek", "v4-flash", 1000, 1000, 0), Some(0));
+            assert_eq!(
+                list_price_fen("deepseek", "v4-flash", 1000, 1000, 0),
+                Some(0)
+            );
         });
     }
 
@@ -828,7 +913,10 @@ mod price_gate_tests {
                 "first resolvable row is zero → whitelist must refuse, not skip to row 2"
             );
             // The debit also stops at row 1 — both paths see the same row.
-            assert_eq!(list_price_fen("deepseek", "v4-flash", 1000, 1000, 0), Some(0));
+            assert_eq!(
+                list_price_fen("deepseek", "v4-flash", 1000, 1000, 0),
+                Some(0)
+            );
         });
 
         let negative_then_good = r#"[
@@ -839,10 +927,13 @@ mod price_gate_tests {
                 official_rates_for("deepseek", "v4-flash").is_none(),
                 "first resolvable row is non-billable → whitelist must refuse, not skip to row 2"
             );
-            // The debit also stops at row 1 (its odd -20/+80 mix yields an
-            // absurd ~1 fen) — same row, no divergence.
-            let debit = list_price_fen("deepseek", "v4-flash", 1000, 1000, 0);
-            assert_ne!(debit, None, "negative row is resolvable: debit does not skip it");
+            // 1M input makes the two candidate rows distinguishable: row 1
+            // clamps its negative total to 0, while row 2 would charge 150.
+            assert_eq!(
+                list_price_fen("deepseek", "v4-flash", 1_000_000, 0, 0),
+                Some(0),
+                "debit must stop at the negative first row, not row 2"
+            );
         });
 
         // Broken-shape first row: both paths skip it (shapeless ≠ resolvable)
@@ -865,7 +956,12 @@ mod price_gate_tests {
             {"model_contains":"v4-flash","input":100,"cache":2,"output":200},
             {"model_contains":"v4-flash","input":0,"output":0}]"#;
         with_rates(good_then_zero, || {
-            assert_eq!(official_rates_for("deepseek", "v4-flash").unwrap().input_fen_per_mtok, 100.0);
+            assert_eq!(
+                official_rates_for("deepseek", "v4-flash")
+                    .unwrap()
+                    .input_fen_per_mtok,
+                100.0
+            );
             assert!(list_price_fen("deepseek", "v4-flash", 1000, 1000, 0).unwrap() > 0);
         });
     }

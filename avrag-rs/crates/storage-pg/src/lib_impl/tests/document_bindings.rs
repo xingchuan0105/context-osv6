@@ -13,7 +13,9 @@ async fn create_document_writes_workspace_binding_and_lists_via_binding() {
     migration_role_context();
     let __bootstrap = BootstrapRepository::connect(&database_url).await.unwrap();
     __bootstrap.migrate().await.unwrap();
-    let repo = PgAppRepository { pool: __bootstrap.pool.clone() };
+    let repo = PgAppRepository {
+        pool: __bootstrap.pool.clone(),
+    };
     repo.bootstrap().migrate().await.unwrap();
 
     let owner_user_id = UserId::from(Uuid::new_v4());
@@ -21,12 +23,14 @@ async fn create_document_writes_workspace_binding_and_lists_via_binding() {
         .with_actor_id(ActorId::new(Uuid::new_v4()));
 
     let workspace = repo
-        .bootstrap().create_workspace(&ctx, "binding test workspace", "binding test")
+        .bootstrap()
+        .create_workspace(&ctx, "binding test workspace", "binding test")
         .await
         .unwrap();
     let workspace_id = Uuid::parse_str(&workspace.id).unwrap();
     let document = repo
-        .bootstrap().create_document(&ctx, workspace_id, "bound.txt", 42, "text/plain")
+        .bootstrap()
+        .create_document(&ctx, workspace_id, "bound.txt", 42, "text/plain")
         .await
         .unwrap();
     let document_id = Uuid::parse_str(&document.id).unwrap();
@@ -46,9 +50,15 @@ async fn create_document_writes_workspace_binding_and_lists_via_binding() {
     .await
     .unwrap();
     tx.commit().await.unwrap();
-    assert_eq!(binding_count, 1, "workspace binding must exist for a workspace upload");
+    assert_eq!(
+        binding_count, 1,
+        "workspace binding must exist for a workspace upload"
+    );
 
-    assert_eq!(document.workspace_id.as_deref(), Some(workspace.id.as_str()));
+    assert_eq!(
+        document.workspace_id.as_deref(),
+        Some(workspace.id.as_str())
+    );
 
     let listed = repo
         .list_documents(&ctx, Some(workspace_id), Some(document_id))
@@ -65,7 +75,9 @@ async fn workspace_document_bindings_reject_duplicate_scope_pair() {
     migration_role_context();
     let __bootstrap = BootstrapRepository::connect(&database_url).await.unwrap();
     __bootstrap.migrate().await.unwrap();
-    let repo = PgAppRepository { pool: __bootstrap.pool.clone() };
+    let repo = PgAppRepository {
+        pool: __bootstrap.pool.clone(),
+    };
     repo.bootstrap().migrate().await.unwrap();
 
     let owner_user_id = UserId::from(Uuid::new_v4());
@@ -73,12 +85,14 @@ async fn workspace_document_bindings_reject_duplicate_scope_pair() {
         .with_actor_id(ActorId::new(Uuid::new_v4()));
 
     let workspace = repo
-        .bootstrap().create_workspace(&ctx, "unique binding workspace", "unique binding")
+        .bootstrap()
+        .create_workspace(&ctx, "unique binding workspace", "unique binding")
         .await
         .unwrap();
     let workspace_id = Uuid::parse_str(&workspace.id).unwrap();
     let document = repo
-        .bootstrap().create_document(&ctx, workspace_id, "unique.txt", 42, "text/plain")
+        .bootstrap()
+        .create_document(&ctx, workspace_id, "unique.txt", 42, "text/plain")
         .await
         .unwrap();
     let document_id = Uuid::parse_str(&document.id).unwrap();
@@ -111,7 +125,9 @@ async fn deleting_workspace_cascades_binding_but_artifact_survives_for_gc() {
     migration_role_context();
     let __bootstrap = BootstrapRepository::connect(&database_url).await.unwrap();
     __bootstrap.migrate().await.unwrap();
-    let repo = PgAppRepository { pool: __bootstrap.pool.clone() };
+    let repo = PgAppRepository {
+        pool: __bootstrap.pool.clone(),
+    };
     repo.bootstrap().migrate().await.unwrap();
 
     let owner_user_id = UserId::from(Uuid::new_v4());
@@ -119,18 +135,21 @@ async fn deleting_workspace_cascades_binding_but_artifact_survives_for_gc() {
         .with_actor_id(ActorId::new(Uuid::new_v4()));
 
     let workspace = repo
-        .bootstrap().create_workspace(&ctx, "cascade workspace", "cascade")
+        .bootstrap()
+        .create_workspace(&ctx, "cascade workspace", "cascade")
         .await
         .unwrap();
     let workspace_id = Uuid::parse_str(&workspace.id).unwrap();
     let document = repo
-        .bootstrap().create_document(&ctx, workspace_id, "cascade.txt", 42, "text/plain")
+        .bootstrap()
+        .create_document(&ctx, workspace_id, "cascade.txt", 42, "text/plain")
         .await
         .unwrap();
     let document_id = Uuid::parse_str(&document.id).unwrap();
 
     let deleted = repo
-        .bootstrap().delete_workspace(&ctx, workspace_id)
+        .bootstrap()
+        .delete_workspace(&ctx, workspace_id)
         .await
         .unwrap();
     assert!(deleted);
@@ -151,7 +170,10 @@ async fn deleting_workspace_cascades_binding_but_artifact_survives_for_gc() {
         tx.commit().await.unwrap();
         count
     };
-    assert_eq!(bindings_left, 0, "workspace deletion must cascade the binding");
+    assert_eq!(
+        bindings_left, 0,
+        "workspace deletion must cascade the binding"
+    );
 
     // The artifact row itself survives; async zero-binding GC (W2e) owns its fate.
     let artifact_status = {
@@ -160,19 +182,20 @@ async fn deleting_workspace_cascades_binding_but_artifact_survives_for_gc() {
             .execute(tx.as_mut())
             .await
             .unwrap();
-        let status = sqlx::query_scalar::<_, String>(
-            "select status from documents where id = $1",
-        )
-        .bind(document_id)
-        .fetch_one(tx.as_mut())
-        .await
-        .unwrap();
+        let status = sqlx::query_scalar::<_, String>("select status from documents where id = $1")
+            .bind(document_id)
+            .fetch_one(tx.as_mut())
+            .await
+            .unwrap();
         tx.commit().await.unwrap();
         status
     };
     // W2e orphan sweep: zero-binding artifacts enter the async cleanup flow
     // (soft-deleted here; the worker performs the full cleanup).
-    assert_eq!(artifact_status, "deleting", "orphaned artifact must enter async GC");
+    assert_eq!(
+        artifact_status, "deleting",
+        "orphaned artifact must enter async GC"
+    );
     let listed = repo
         .list_documents(&ctx, Some(workspace_id), None)
         .await
@@ -188,7 +211,9 @@ async fn conversation_binding_keeps_artifact_when_workspace_binding_is_gone() {
     migration_role_context();
     let __bootstrap = BootstrapRepository::connect(&database_url).await.unwrap();
     __bootstrap.migrate().await.unwrap();
-    let repo = PgAppRepository { pool: __bootstrap.pool.clone() };
+    let repo = PgAppRepository {
+        pool: __bootstrap.pool.clone(),
+    };
     repo.bootstrap().migrate().await.unwrap();
 
     let owner_user_id = UserId::from(Uuid::new_v4());
@@ -196,19 +221,27 @@ async fn conversation_binding_keeps_artifact_when_workspace_binding_is_gone() {
         .with_actor_id(ActorId::new(Uuid::new_v4()));
 
     let workspace = repo
-        .bootstrap().create_workspace(&ctx, "dual binding workspace", "dual binding")
+        .bootstrap()
+        .create_workspace(&ctx, "dual binding workspace", "dual binding")
         .await
         .unwrap();
     let workspace_id = Uuid::parse_str(&workspace.id).unwrap();
     let document = repo
-        .bootstrap().create_document(&ctx, workspace_id, "dual.txt", 42, "text/plain")
+        .bootstrap()
+        .create_document(&ctx, workspace_id, "dual.txt", 42, "text/plain")
         .await
         .unwrap();
     let document_id = Uuid::parse_str(&document.id).unwrap();
 
     let session = repo
         .sessions()
-        .create_session(&ctx, None, Some("dual binding session"), "chat", "quick_chat")
+        .create_session(
+            &ctx,
+            None,
+            Some("dual binding session"),
+            "chat",
+            "quick_chat",
+        )
         .await
         .unwrap();
     let session_id = Uuid::parse_str(&session.id).unwrap();
@@ -233,7 +266,10 @@ async fn conversation_binding_keeps_artifact_when_workspace_binding_is_gone() {
 
     // Both scopes see the same artifact; deleting the workspace binding side
     // must not touch the artifact while the conversation binding remains.
-    repo.bootstrap().delete_workspace(&ctx, workspace_id).await.unwrap();
+    repo.bootstrap()
+        .delete_workspace(&ctx, workspace_id)
+        .await
+        .unwrap();
 
     let artifact_status = {
         let mut tx = repo.raw().begin().await.unwrap();
@@ -241,17 +277,18 @@ async fn conversation_binding_keeps_artifact_when_workspace_binding_is_gone() {
             .execute(tx.as_mut())
             .await
             .unwrap();
-        let status = sqlx::query_scalar::<_, String>(
-            "select status from documents where id = $1",
-        )
-        .bind(document_id)
-        .fetch_one(tx.as_mut())
-        .await
-        .unwrap();
+        let status = sqlx::query_scalar::<_, String>("select status from documents where id = $1")
+            .bind(document_id)
+            .fetch_one(tx.as_mut())
+            .await
+            .unwrap();
         tx.commit().await.unwrap();
         status
     };
-    assert_eq!(artifact_status, "pending", "session-bound artifact survives workspace deletion");
+    assert_eq!(
+        artifact_status, "pending",
+        "session-bound artifact survives workspace deletion"
+    );
 
     // Deleting the conversation cascades its binding; artifact is then
     // zero-bound and left for async GC (not deleted inline).
@@ -277,7 +314,10 @@ async fn conversation_binding_keeps_artifact_when_workspace_binding_is_gone() {
         (result.rows_affected(), bindings_left)
     };
     assert_eq!(deleted_sessions.0, 1);
-    assert_eq!(deleted_sessions.1, 0, "conversation deletion cascades its binding");
+    assert_eq!(
+        deleted_sessions.1, 0,
+        "conversation deletion cascades its binding"
+    );
 }
 
 #[tokio::test]
@@ -288,7 +328,9 @@ async fn binding_rows_are_invisible_to_other_owners() {
     migration_role_context();
     let __bootstrap = BootstrapRepository::connect(&database_url).await.unwrap();
     __bootstrap.migrate().await.unwrap();
-    let repo = PgAppRepository { pool: __bootstrap.pool.clone() };
+    let repo = PgAppRepository {
+        pool: __bootstrap.pool.clone(),
+    };
     repo.bootstrap().migrate().await.unwrap();
 
     let owner_user_id = UserId::from(Uuid::new_v4());
@@ -296,12 +338,14 @@ async fn binding_rows_are_invisible_to_other_owners() {
         .with_actor_id(ActorId::new(Uuid::new_v4()));
 
     let workspace = repo
-        .bootstrap().create_workspace(&ctx, "rls binding workspace", "rls binding")
+        .bootstrap()
+        .create_workspace(&ctx, "rls binding workspace", "rls binding")
         .await
         .unwrap();
     let workspace_id = Uuid::parse_str(&workspace.id).unwrap();
     let document = repo
-        .bootstrap().create_document(&ctx, workspace_id, "rls.txt", 42, "text/plain")
+        .bootstrap()
+        .create_document(&ctx, workspace_id, "rls.txt", 42, "text/plain")
         .await
         .unwrap();
     let document_id = Uuid::parse_str(&document.id).unwrap();
@@ -325,7 +369,10 @@ async fn binding_rows_are_invisible_to_other_owners() {
         .fetch_one(tx.as_mut())
         .await
         .unwrap();
-        eprintln!("PROBE current_user={} guc_user={:?} guc_role={:?}", probe.0, probe.1, probe.2);
+        eprintln!(
+            "PROBE current_user={} guc_user={:?} guc_role={:?}",
+            probe.0, probe.1, probe.2
+        );
         sqlx::query_scalar::<_, i64>(
             "select count(*)::bigint from workspace_document_bindings where artifact_id = $1",
         )
@@ -341,7 +388,10 @@ async fn binding_rows_are_invisible_to_other_owners() {
         .list_documents(&other_ctx, Some(workspace_id), Some(document_id))
         .await
         .unwrap();
-    assert!(listed_by_other.is_empty(), "cross-owner document reach must stay empty");
+    assert!(
+        listed_by_other.is_empty(),
+        "cross-owner document reach must stay empty"
+    );
 }
 
 #[tokio::test]
@@ -352,7 +402,9 @@ async fn session_file_roundtrip_creates_lists_and_deletes_bindings() {
     migration_role_context();
     let __bootstrap = BootstrapRepository::connect(&database_url).await.unwrap();
     __bootstrap.migrate().await.unwrap();
-    let repo = PgAppRepository { pool: __bootstrap.pool.clone() };
+    let repo = PgAppRepository {
+        pool: __bootstrap.pool.clone(),
+    };
     repo.bootstrap().migrate().await.unwrap();
 
     let owner_user_id = UserId::from(Uuid::new_v4());
@@ -372,7 +424,10 @@ async fn session_file_roundtrip_creates_lists_and_deletes_bindings() {
         .await
         .unwrap();
     let document_id = Uuid::parse_str(&document.id).unwrap();
-    assert!(document.workspace_id.is_none(), "session artifacts carry no workspace");
+    assert!(
+        document.workspace_id.is_none(),
+        "session artifacts carry no workspace"
+    );
 
     let files = repo
         .bootstrap()
@@ -386,8 +441,11 @@ async fn session_file_roundtrip_creates_lists_and_deletes_bindings() {
     let binding_id = Uuid::parse_str(&files[0].binding_id).unwrap();
 
     // Cross-owner list stays empty.
-    let other_ctx = AuthContext::new(UserId::from(Uuid::new_v4()), contracts::auth_runtime::SubjectKind::User)
-        .with_actor_id(ActorId::new(Uuid::new_v4()));
+    let other_ctx = AuthContext::new(
+        UserId::from(Uuid::new_v4()),
+        contracts::auth_runtime::SubjectKind::User,
+    )
+    .with_actor_id(ActorId::new(Uuid::new_v4()));
     let foreign = repo
         .bootstrap()
         .list_session_files(&other_ctx, session_id)
@@ -414,15 +472,17 @@ async fn session_file_roundtrip_creates_lists_and_deletes_bindings() {
         .execute(tx.as_mut())
         .await
         .unwrap();
-    let artifact_left = sqlx::query_scalar::<_, i64>(
-        "select count(*)::bigint from documents where id = $1",
-    )
-    .bind(document_id)
-    .fetch_one(tx.as_mut())
-    .await
-    .unwrap();
+    let artifact_left =
+        sqlx::query_scalar::<_, i64>("select count(*)::bigint from documents where id = $1")
+            .bind(document_id)
+            .fetch_one(tx.as_mut())
+            .await
+            .unwrap();
     tx.commit().await.unwrap();
-    assert_eq!(artifact_left, 1, "artifact deletion belongs to async GC, not binding delete");
+    assert_eq!(
+        artifact_left, 1,
+        "artifact deletion belongs to async GC, not binding delete"
+    );
 }
 
 #[tokio::test]
@@ -433,7 +493,9 @@ async fn deleting_last_session_binding_sends_unbound_artifact_to_cleanup() {
     migration_role_context();
     let __bootstrap = BootstrapRepository::connect(&database_url).await.unwrap();
     __bootstrap.migrate().await.unwrap();
-    let repo = PgAppRepository { pool: __bootstrap.pool.clone() };
+    let repo = PgAppRepository {
+        pool: __bootstrap.pool.clone(),
+    };
     repo.bootstrap().migrate().await.unwrap();
 
     let owner_user_id = UserId::from(Uuid::new_v4());
@@ -486,18 +548,19 @@ async fn deleting_last_session_binding_sends_unbound_artifact_to_cleanup() {
         .fetch_one(tx.as_mut())
         .await
         .unwrap();
-        let status = sqlx::query_scalar::<_, String>(
-            "select status from documents where id = $1",
-        )
-        .bind(document_id)
-        .fetch_one(tx.as_mut())
-        .await
-        .unwrap();
+        let status = sqlx::query_scalar::<_, String>("select status from documents where id = $1")
+            .bind(document_id)
+            .fetch_one(tx.as_mut())
+            .await
+            .unwrap();
         tx.commit().await.unwrap();
         (count, status)
     };
     assert_eq!(cleanup_tasks.0, 1, "exactly one idempotent cleanup task");
-    assert_eq!(cleanup_tasks.1, "deleting", "artifact soft-deleted for the worker");
+    assert_eq!(
+        cleanup_tasks.1, "deleting",
+        "artifact soft-deleted for the worker"
+    );
 
     // A second call finds nothing left to do (idempotent).
     let again = repo
@@ -516,7 +579,9 @@ async fn workspace_binding_keeps_artifact_out_of_session_delete_gc() {
     migration_role_context();
     let __bootstrap = BootstrapRepository::connect(&database_url).await.unwrap();
     __bootstrap.migrate().await.unwrap();
-    let repo = PgAppRepository { pool: __bootstrap.pool.clone() };
+    let repo = PgAppRepository {
+        pool: __bootstrap.pool.clone(),
+    };
     repo.bootstrap().migrate().await.unwrap();
 
     let owner_user_id = UserId::from(Uuid::new_v4());
@@ -524,7 +589,8 @@ async fn workspace_binding_keeps_artifact_out_of_session_delete_gc() {
         .with_actor_id(ActorId::new(Uuid::new_v4()));
 
     let workspace = repo
-        .bootstrap().create_workspace(&ctx, "dual gc workspace", "dual gc")
+        .bootstrap()
+        .create_workspace(&ctx, "dual gc workspace", "dual gc")
         .await
         .unwrap();
     let workspace_id = Uuid::parse_str(&workspace.id).unwrap();
@@ -581,17 +647,18 @@ async fn workspace_binding_keeps_artifact_out_of_session_delete_gc() {
             .execute(tx.as_mut())
             .await
             .unwrap();
-        let status = sqlx::query_scalar::<_, String>(
-            "select status from documents where id = $1",
-        )
-        .bind(document_uuid)
-        .fetch_one(tx.as_mut())
-        .await
-        .unwrap();
+        let status = sqlx::query_scalar::<_, String>("select status from documents where id = $1")
+            .bind(document_uuid)
+            .fetch_one(tx.as_mut())
+            .await
+            .unwrap();
         tx.commit().await.unwrap();
         status
     };
-    assert_eq!(status, "pending", "artifact stays untouched while any binding remains");
+    assert_eq!(
+        status, "pending",
+        "artifact stays untouched while any binding remains"
+    );
 }
 
 #[tokio::test]
@@ -602,7 +669,9 @@ async fn deleting_conversation_sweeps_unbound_artifacts_into_cleanup() {
     migration_role_context();
     let __bootstrap = BootstrapRepository::connect(&database_url).await.unwrap();
     __bootstrap.migrate().await.unwrap();
-    let repo = PgAppRepository { pool: __bootstrap.pool.clone() };
+    let repo = PgAppRepository {
+        pool: __bootstrap.pool.clone(),
+    };
     repo.bootstrap().migrate().await.unwrap();
 
     let owner_user_id = UserId::from(Uuid::new_v4());
@@ -622,7 +691,11 @@ async fn deleting_conversation_sweeps_unbound_artifacts_into_cleanup() {
         .unwrap();
     let document_id = Uuid::parse_str(&document.id).unwrap();
 
-    let deleted = repo.sessions().delete_session(&ctx, session_id).await.unwrap();
+    let deleted = repo
+        .sessions()
+        .delete_session(&ctx, session_id)
+        .await
+        .unwrap();
     assert!(deleted);
 
     let (status, tasks) = {
@@ -631,13 +704,11 @@ async fn deleting_conversation_sweeps_unbound_artifacts_into_cleanup() {
             .execute(tx.as_mut())
             .await
             .unwrap();
-        let status = sqlx::query_scalar::<_, String>(
-            "select status from documents where id = $1",
-        )
-        .bind(document_id)
-        .fetch_one(tx.as_mut())
-        .await
-        .unwrap();
+        let status = sqlx::query_scalar::<_, String>("select status from documents where id = $1")
+            .bind(document_id)
+            .fetch_one(tx.as_mut())
+            .await
+            .unwrap();
         let tasks = sqlx::query_scalar::<_, i64>(
             "select count(*)::bigint from document_cleanup_tasks where document_id = $1",
         )
@@ -664,7 +735,9 @@ async fn deleting_workspace_sweeps_session_only_artifacts_of_its_sessions() {
     migration_role_context();
     let __bootstrap = BootstrapRepository::connect(&database_url).await.unwrap();
     __bootstrap.migrate().await.unwrap();
-    let repo = PgAppRepository { pool: __bootstrap.pool.clone() };
+    let repo = PgAppRepository {
+        pool: __bootstrap.pool.clone(),
+    };
     repo.bootstrap().migrate().await.unwrap();
 
     let owner_user_id = UserId::from(Uuid::new_v4());
@@ -672,13 +745,20 @@ async fn deleting_workspace_sweeps_session_only_artifacts_of_its_sessions() {
         .with_actor_id(ActorId::new(Uuid::new_v4()));
 
     let workspace = repo
-        .bootstrap().create_workspace(&ctx, "sweep workspace", "sweep")
+        .bootstrap()
+        .create_workspace(&ctx, "sweep workspace", "sweep")
         .await
         .unwrap();
     let workspace_id = Uuid::parse_str(&workspace.id).unwrap();
     let session = repo
         .sessions()
-        .create_session(&ctx, Some(workspace_id), Some("sweep session"), "chat", "agent")
+        .create_session(
+            &ctx,
+            Some(workspace_id),
+            Some("sweep session"),
+            "chat",
+            "agent",
+        )
         .await
         .unwrap();
     let session_id = Uuid::parse_str(&session.id).unwrap();
@@ -691,13 +771,15 @@ async fn deleting_workspace_sweeps_session_only_artifacts_of_its_sessions() {
     let session_doc_id = Uuid::parse_str(&session_doc.id).unwrap();
     // A workspace-bound artifact in the same workspace for contrast.
     let ws_doc = repo
-        .bootstrap().create_document(&ctx, workspace_id, "ws-only.txt", 42, "text/plain")
+        .bootstrap()
+        .create_document(&ctx, workspace_id, "ws-only.txt", 42, "text/plain")
         .await
         .unwrap();
     let ws_doc_id = Uuid::parse_str(&ws_doc.id).unwrap();
 
     let deleted = repo
-        .bootstrap().delete_workspace(&ctx, workspace_id)
+        .bootstrap()
+        .delete_workspace(&ctx, workspace_id)
         .await
         .unwrap();
     assert!(deleted);
@@ -708,14 +790,13 @@ async fn deleting_workspace_sweeps_session_only_artifacts_of_its_sessions() {
             .execute(tx.as_mut())
             .await
             .unwrap();
-        let status = sqlx::query_scalar::<_, String>(
-            "select status from documents where id = $1",
-        )
-        .bind(session_doc_id)
-        .fetch_one(tx.as_mut())
-        .await
-        .unwrap();
-        let count_tasks = "select count(*)::bigint from document_cleanup_tasks where document_id = $1";
+        let status = sqlx::query_scalar::<_, String>("select status from documents where id = $1")
+            .bind(session_doc_id)
+            .fetch_one(tx.as_mut())
+            .await
+            .unwrap();
+        let count_tasks =
+            "select count(*)::bigint from document_cleanup_tasks where document_id = $1";
         let session_tasks = sqlx::query_scalar::<_, i64>(count_tasks)
             .bind(session_doc_id)
             .fetch_one(tx.as_mut())
@@ -737,7 +818,10 @@ async fn deleting_workspace_sweeps_session_only_artifacts_of_its_sessions() {
         session_doc_tasks, 1,
         "exactly one cleanup task for the session-only orphan"
     );
-    assert_eq!(ws_doc_tasks, 1, "workspace-bound orphan also swept exactly once");
+    assert_eq!(
+        ws_doc_tasks, 1,
+        "workspace-bound orphan also swept exactly once"
+    );
 }
 
 /// Review round-5 T1 / round-6+7+8 Spec-7: a dual-bound artifact (session +
@@ -748,8 +832,9 @@ async fn deleting_workspace_sweeps_session_only_artifacts_of_its_sessions() {
 /// does not control the lock queue, and a datname-wide waiter count can be
 /// satisfied by unrelated sessions):
 ///
-/// 1. Each deleter pool carries a unique `application_name`, and the barrier
-///    poll counts ONLY those two sessions.
+/// 1. Each race carries unique `application_name`s and records the two pool
+///    backend PIDs. The barrier poll counts only those PIDs while they wait
+///    for its binding-table lock.
 /// 2. The winner task is spawned first and the test WAITS until it is
 ///    observed waiting on the binding-table lock before the loser task is
 ///    even spawned — PostgreSQL grants table locks FIFO, so the winner is
@@ -790,7 +875,9 @@ async fn run_dual_deletion_barrier_race(winner: DualDeletionWinner) {
     migration_role_context();
     let __bootstrap = BootstrapRepository::connect(&database_url).await.unwrap();
     __bootstrap.migrate().await.unwrap();
-    let repo = PgAppRepository { pool: __bootstrap.pool.clone() };
+    let repo = PgAppRepository {
+        pool: __bootstrap.pool.clone(),
+    };
     repo.bootstrap().migrate().await.unwrap();
 
     let owner_user_id = UserId::from(Uuid::new_v4());
@@ -798,13 +885,20 @@ async fn run_dual_deletion_barrier_race(winner: DualDeletionWinner) {
         .with_actor_id(ActorId::new(Uuid::new_v4()));
 
     let workspace = repo
-        .bootstrap().create_workspace(&ctx, "dual delete workspace", "dual delete")
+        .bootstrap()
+        .create_workspace(&ctx, "dual delete workspace", "dual delete")
         .await
         .unwrap();
     let workspace_id = Uuid::parse_str(&workspace.id).unwrap();
     let session = repo
         .sessions()
-        .create_session(&ctx, Some(workspace_id), Some("dual delete session"), "chat", "agent")
+        .create_session(
+            &ctx,
+            Some(workspace_id),
+            Some("dual delete session"),
+            "chat",
+            "agent",
+        )
         .await
         .unwrap();
     let session_id = Uuid::parse_str(&session.id).unwrap();
@@ -837,11 +931,14 @@ async fn run_dual_deletion_barrier_race(winner: DualDeletionWinner) {
     // Barrier connection: holds SHARE ROW EXCLUSIVE on both binding tables.
     // The deleters block on the FIRST lock statement, before their capture
     // window — releasing it hands the grant to the FIFO-front deleter.
-    let mut barrier =
-        <sqlx::postgres::PgConnection as sqlx::Connection>::connect(&database_url)
-            .await
-            .unwrap();
+    let mut barrier = <sqlx::postgres::PgConnection as sqlx::Connection>::connect(&database_url)
+        .await
+        .unwrap();
     sqlx::query("begin").execute(&mut barrier).await.unwrap();
+    let barrier_pid = sqlx::query_scalar::<_, i32>("select pg_backend_pid()")
+        .fetch_one(&mut barrier)
+        .await
+        .unwrap();
     sqlx::query("lock table conversation_document_bindings in share row exclusive mode")
         .execute(&mut barrier)
         .await
@@ -851,25 +948,37 @@ async fn run_dual_deletion_barrier_race(winner: DualDeletionWinner) {
         .await
         .unwrap();
 
-    // One pool per deleter with a unique, poll-visible application_name
-    // (review round-8 S4: the waiter count must only ever see THESE two
-    // sessions, never other tests or clients on the same database).
-    let session_pool_name = "dual_delete_session_deleter";
-    let workspace_pool_name = "dual_delete_workspace_deleter";
+    // One single-connection pool per deleter. Names are unique per race for
+    // diagnostics; backend PIDs provide the actual barrier identity so a
+    // concurrent copy of this test cannot satisfy our waiter count.
+    let race_id = Uuid::new_v4().simple().to_string();
+    let session_pool_name = format!("dd_session_{race_id}");
+    let workspace_pool_name = format!("dd_workspace_{race_id}");
     let connect_opts = |name: &str| {
         sqlx::postgres::PgConnectOptions::from_str(&database_url)
             .unwrap()
             .application_name(name)
-            .log_slow_statements(log::LevelFilter::Warn, std::time::Duration::from_millis(500))
+            .log_slow_statements(
+                log::LevelFilter::Warn,
+                std::time::Duration::from_millis(500),
+            )
     };
     let session_pool = crate::pg_pool_options()
-        .max_connections(2)
-        .connect_with(connect_opts(session_pool_name))
+        .max_connections(1)
+        .connect_with(connect_opts(&session_pool_name))
         .await
         .unwrap();
     let workspace_pool = crate::pg_pool_options()
-        .max_connections(2)
-        .connect_with(connect_opts(workspace_pool_name))
+        .max_connections(1)
+        .connect_with(connect_opts(&workspace_pool_name))
+        .await
+        .unwrap();
+    let session_backend_pid = sqlx::query_scalar::<_, i32>("select pg_backend_pid()")
+        .fetch_one(&session_pool)
+        .await
+        .unwrap();
+    let workspace_backend_pid = sqlx::query_scalar::<_, i32>("select pg_backend_pid()")
+        .fetch_one(&workspace_pool)
         .await
         .unwrap();
     let session_repo = PgAppRepository::from_pool(session_pool);
@@ -878,15 +987,15 @@ async fn run_dual_deletion_barrier_race(winner: DualDeletionWinner) {
     // Winner first: spawn and WAIT until it is observed waiting on the
     // binding-table lock — this (not scheduler timing) is what fixes the
     // FIFO queue order.
-    let (first_name, first_repo, first_ctx, first_op) = match winner {
+    let (first_pid, first_repo, first_ctx, first_op) = match winner {
         DualDeletionWinner::SessionFirst => (
-            session_pool_name,
+            session_backend_pid,
             session_repo.clone(),
             ctx.clone(),
             DeleterOp::Session(session_id),
         ),
         DualDeletionWinner::WorkspaceFirst => (
-            workspace_pool_name,
+            workspace_backend_pid,
             workspace_repo.clone(),
             ctx.clone(),
             DeleterOp::Workspace(workspace_id),
@@ -899,7 +1008,7 @@ async fn run_dual_deletion_barrier_race(winner: DualDeletionWinner) {
     });
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
     loop {
-        let waiting = count_waiting_deleters(&repo, &[first_name]).await;
+        let waiting = count_waiting_deleters(&repo, &[first_pid], barrier_pid).await;
         if waiting >= 1 {
             break;
         }
@@ -911,15 +1020,15 @@ async fn run_dual_deletion_barrier_race(winner: DualDeletionWinner) {
     }
 
     // Loser second: now the queue order is already fixed (winner at front).
-    let (second_name, second_repo, second_ctx, second_op) = match winner {
+    let (second_pid, second_repo, second_ctx, second_op) = match winner {
         DualDeletionWinner::SessionFirst => (
-            workspace_pool_name,
+            workspace_backend_pid,
             workspace_repo.clone(),
             ctx.clone(),
             DeleterOp::Workspace(workspace_id),
         ),
         DualDeletionWinner::WorkspaceFirst => (
-            session_pool_name,
+            session_backend_pid,
             session_repo.clone(),
             ctx.clone(),
             DeleterOp::Session(session_id),
@@ -931,7 +1040,7 @@ async fn run_dual_deletion_barrier_race(winner: DualDeletionWinner) {
         async move { second_op.execute(&repo, &ctx).await }
     });
     loop {
-        let waiting = count_waiting_deleters(&repo, &[first_name, second_name]).await;
+        let waiting = count_waiting_deleters(&repo, &[first_pid, second_pid], barrier_pid).await;
         if waiting >= 2 {
             break;
         }
@@ -950,22 +1059,26 @@ async fn run_dual_deletion_barrier_race(winner: DualDeletionWinner) {
     let second_result = second_handle.await.unwrap().unwrap();
     match winner {
         DualDeletionWinner::SessionFirst => {
-            assert!(
-                first_result.session == Some(true),
+            assert_eq!(
+                first_result,
+                DeleterResult::Session(true),
                 "session-first winner must delete its scope row"
             );
-            assert!(
-                second_result.workspace == Some(true),
+            assert_eq!(
+                second_result,
+                DeleterResult::Workspace(true),
                 "workspace scope row survives the session cascade"
             );
         }
         DualDeletionWinner::WorkspaceFirst => {
-            assert!(
-                first_result.workspace == Some(true),
+            assert_eq!(
+                first_result,
+                DeleterResult::Workspace(true),
                 "workspace-first winner must delete its scope row"
             );
-            assert!(
-                second_result.session == Some(false),
+            assert_eq!(
+                second_result,
+                DeleterResult::Session(false),
                 "session delete must report false: the workspace cascade already removed it"
             );
         }
@@ -988,13 +1101,11 @@ async fn run_dual_deletion_barrier_race(winner: DualDeletionWinner) {
         .fetch_all(tx.as_mut())
         .await
         .unwrap();
-        let status = sqlx::query_scalar::<_, String>(
-            "select status from documents where id = $1",
-        )
-        .bind(document_id)
-        .fetch_one(tx.as_mut())
-        .await
-        .unwrap();
+        let status = sqlx::query_scalar::<_, String>("select status from documents where id = $1")
+            .bind(document_id)
+            .fetch_one(tx.as_mut())
+            .await
+            .unwrap();
         let tasks = sqlx::query_scalar::<_, i64>(
             "select count(*)::bigint from document_cleanup_tasks where document_id = $1",
         )
@@ -1029,10 +1140,10 @@ enum DeleterOp {
     Workspace(Uuid),
 }
 
-#[derive(Debug, Default)]
-struct DeleterResult {
-    session: Option<bool>,
-    workspace: Option<bool>,
+#[derive(Debug, PartialEq, Eq)]
+enum DeleterResult {
+    Session(bool),
+    Workspace(bool),
 }
 
 impl DeleterOp {
@@ -1041,35 +1152,48 @@ impl DeleterOp {
         repo: &PgAppRepository,
         ctx: &AuthContext,
     ) -> Result<DeleterResult, PgStorageError> {
-        let mut result = DeleterResult::default();
         match self {
-            DeleterOp::Session(session_id) => {
-                result.session = Some(repo.sessions().delete_session(ctx, *session_id).await?);
-            }
-            DeleterOp::Workspace(workspace_id) => {
-                result.workspace = Some(repo.bootstrap().delete_workspace(ctx, *workspace_id).await?);
-            }
+            DeleterOp::Session(session_id) => Ok(DeleterResult::Session(
+                repo.sessions().delete_session(ctx, *session_id).await?,
+            )),
+            DeleterOp::Workspace(workspace_id) => Ok(DeleterResult::Workspace(
+                repo.bootstrap()
+                    .delete_workspace(ctx, *workspace_id)
+                    .await?,
+            )),
         }
-        Ok(result)
     }
 }
 
-/// Count lock-waiting sessions among EXACTLY the named deleter connections
-/// (review round-8 S4: filter by application_name — a datname-wide count
-/// could be satisfied by any unrelated client waiting on any lock).
-async fn count_waiting_deleters(repo: &PgAppRepository, names: &[&str]) -> i64 {
+/// Count exactly the target backends waiting for this barrier's first binding
+/// table lock. PID + blocker + relation + mode prevent another test instance
+/// or an unrelated lock wait from satisfying the barrier.
+async fn count_waiting_deleters(
+    repo: &PgAppRepository,
+    backend_pids: &[i32],
+    barrier_pid: i32,
+) -> i64 {
     let mut tx = repo.raw().begin().await.unwrap();
     sqlx::query("select set_config('app.current_role', 'super_admin', true)")
         .execute(tx.as_mut())
         .await
         .unwrap();
     let n = sqlx::query_scalar::<_, i64>(
-        "select count(*)::bigint from pg_stat_activity
-         where datname = current_database()
-           and wait_event_type = 'Lock'
-           and application_name = any($1)",
+        "select count(distinct activity.pid)::bigint
+         from pg_stat_activity activity
+         join pg_locks waiting
+           on waiting.pid = activity.pid
+          and waiting.granted = false
+          and waiting.locktype = 'relation'
+          and waiting.mode = 'ShareRowExclusiveLock'
+          and waiting.relation = 'conversation_document_bindings'::regclass
+         where activity.datname = current_database()
+           and activity.pid = any($1)
+           and activity.wait_event_type = 'Lock'
+           and $2 = any(pg_blocking_pids(activity.pid))",
     )
-    .bind(names)
+    .bind(backend_pids)
+    .bind(barrier_pid)
     .fetch_one(tx.as_mut())
     .await
     .unwrap();

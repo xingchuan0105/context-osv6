@@ -56,11 +56,18 @@ async fn completed_workspace_binding_versions_carry_own_binding_id() {
         .await
         .unwrap();
 
-    let listed = store.list_documents(&auth, Some(workspace_id), None).await.unwrap();
+    let listed = store
+        .list_documents(&auth, Some(workspace_id), None)
+        .await
+        .unwrap();
     assert_eq!(listed.len(), 2, "both artifacts exist pre-completion");
 
     let _ = store
-        .set_document_status(&auth, doc.id.parse().unwrap(), contracts::documents::DocumentStatus::Completed)
+        .set_document_status(
+            &auth,
+            doc.id.parse().unwrap(),
+            contracts::documents::DocumentStatus::Completed,
+        )
         .await
         .unwrap();
     let versions = store
@@ -93,7 +100,10 @@ async fn session_files_carry_binding_id_and_delete_by_row() {
         .await
         .unwrap();
 
-    let files = store.list_session_files(&auth, conversation_id).await.unwrap();
+    let files = store
+        .list_session_files(&auth, conversation_id)
+        .await
+        .unwrap();
     assert_eq!(files.len(), 1);
     assert_ne!(
         files[0].binding_id, files[0].document_id,
@@ -106,8 +116,78 @@ async fn session_files_carry_binding_id_and_delete_by_row() {
         .await
         .unwrap();
     assert_eq!(removed.as_deref(), Some(doc.id.as_str()));
-    let files = store.list_session_files(&auth, conversation_id).await.unwrap();
+    let files = store
+        .list_session_files(&auth, conversation_id)
+        .await
+        .unwrap();
     assert!(files.is_empty());
+}
+
+/// Explicit orphan GC must report the shared unbound transition itself: a
+/// bound artifact is refused, the first unbound call marks it, and retries are
+/// idempotent once deletion has started.
+#[tokio::test]
+async fn explicit_unbound_delete_reports_shared_transition() {
+    let (store, chat, auth) = port_harness().await;
+
+    let conversation = chat
+        .create_session(&auth, None, None, "chat", "quick_chat")
+        .await
+        .unwrap();
+    let conversation_id = Uuid::parse_str(&conversation.id).unwrap();
+    let doc = store
+        .create_session_document(&auth, conversation_id, "orphan.txt", 4, "text/plain")
+        .await
+        .unwrap();
+    let document_id = Uuid::parse_str(&doc.id).unwrap();
+
+    assert!(
+        !store
+            .delete_document_if_unbound(&auth, document_id)
+            .await
+            .unwrap(),
+        "a conversation binding must keep the artifact alive"
+    );
+
+    let binding = store
+        .list_session_files(&auth, conversation_id)
+        .await
+        .unwrap()
+        .into_iter()
+        .next()
+        .unwrap();
+    store
+        .delete_session_file_binding(
+            &auth,
+            conversation_id,
+            Uuid::parse_str(&binding.binding_id).unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert!(
+        store
+            .delete_document_if_unbound(&auth, document_id)
+            .await
+            .unwrap(),
+        "the first unbound call must perform the Deleting transition"
+    );
+    assert!(
+        !store
+            .delete_document_if_unbound(&auth, document_id)
+            .await
+            .unwrap(),
+        "an already-deleting artifact must not report a second transition"
+    );
+
+    let states = store
+        .get_document_scope_states(&auth, &[document_id])
+        .await
+        .unwrap();
+    assert!(matches!(
+        states.as_slice(),
+        [state] if state.status == contracts::documents::DocumentStatus::Deleting
+    ));
 }
 
 /// Workspace deletion must drop its sessions' conversation bindings too —
@@ -136,9 +216,15 @@ async fn delete_workspace_drops_session_bindings_and_orphans_session_only_artifa
 
     // The conversation went with the workspace (SessionPort view).
     let sessions = chat.list_sessions(&auth, Some(workspace_id)).await.unwrap();
-    assert!(sessions.is_empty(), "workspace delete cascades its sessions");
+    assert!(
+        sessions.is_empty(),
+        "workspace delete cascades its sessions"
+    );
     // The artifact's conversation binding is gone → list_session_files is empty.
-    let files = store.list_session_files(&auth, conversation_id).await.unwrap();
+    let files = store
+        .list_session_files(&auth, conversation_id)
+        .await
+        .unwrap();
     assert!(files.is_empty());
     // Workspace bindings are gone → completed_workspace_binding_versions empty.
     let versions = store
@@ -155,7 +241,10 @@ async fn delete_workspace_drops_session_bindings_and_orphans_session_only_artifa
         .unwrap();
     assert_eq!(scope_states.len(), 1);
     assert!(
-        matches!(scope_states[0].status, contracts::documents::DocumentStatus::Deleting),
+        matches!(
+            scope_states[0].status,
+            contracts::documents::DocumentStatus::Deleting
+        ),
         "zero-binding session artifact must enter deletion: {:?}",
         scope_states[0]
     );

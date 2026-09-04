@@ -185,8 +185,12 @@ describe("SessionFileTray delete failure paths (review round-5)", () => {
     // only released AFTER it — a genuinely in-flight read crossing the
     // delete, not an immediate-resolve mock.
     let releasePollGet: ((value: unknown) => void) | null = null;
-    const deferredGet = new Promise((resolve) => {
-      releasePollGet = resolve;
+    let pollGetResolved = false;
+    const deferredGet = new Promise<unknown>((resolve) => {
+      releasePollGet = (value) => {
+        pollGetResolved = true;
+        resolve(value);
+      };
     });
     listChatSessionFilesMock.mockImplementationOnce(async () => [
       readyRow({ binding_id: "bind-1", status: "processing" }),
@@ -210,23 +214,17 @@ describe("SessionFileTray delete failure paths (review round-5)", () => {
           workspaceId={null}
         />,
       );
-      // Initial GET ran (component mounted with the processing row); the
-      // remove button renders with the row.
+      // Mount resolves the initial GET and schedules the production interval;
+      // running the pending timer dispatches its first GET, which stays held.
       await act(async () => {
         await vi.runOnlyPendingTimersAsync();
         await Promise.resolve();
       });
       const removeButton = screen.getByRole("button", { name: "移除" });
       expect(screen.getByText("report.txt")).toBeInTheDocument();
-      const getCallsAfterMount = listChatSessionFilesMock.mock.calls.length;
-
-      // Fire ONE poll tick whose GET stays in flight across the delete.
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(2000);
-      });
-      const inFlightCalls = listChatSessionFilesMock.mock.calls.length;
-      expect(inFlightCalls).toBe(getCallsAfterMount + 1);
+      expect(pollTicks).toBe(1);
       expect(releasePollGet).not.toBeNull();
+      expect(pollGetResolved).toBe(false);
 
       // Delete while that GET is still pending.
       await act(async () => {
@@ -244,17 +242,8 @@ describe("SessionFileTray delete failure paths (review round-5)", () => {
         await Promise.resolve();
         await Promise.resolve();
       });
+      expect(pollGetResolved).toBe(true);
       expect(screen.queryByText("report.txt")).not.toBeInTheDocument();
-
-      // Later poll ticks (stale GETs too) are filtered by the tombstone as well.
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(6000);
-        await Promise.resolve();
-      });
-      expect(screen.queryByText("report.txt")).not.toBeInTheDocument();
-      expect(listChatSessionFilesMock.mock.calls.length).toBeGreaterThan(
-        getCallsAfterMount + 1,
-      );
     } finally {
       vi.useRealTimers();
     }

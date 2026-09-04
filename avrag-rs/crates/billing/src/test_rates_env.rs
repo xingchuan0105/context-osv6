@@ -10,9 +10,9 @@ use std::sync::{Mutex, MutexGuard};
 
 static RATES_ENV_LOCK: Mutex<()> = Mutex::new(());
 
-/// Set `PLATFORM_OFFICIAL_RATES_JSON` (None = removed) while holding the
-/// crate-wide lock. The returned guard restores the prior value on drop,
-/// including through panic unwind.
+/// Set `PLATFORM_OFFICIAL_RATES_JSON` while holding the crate-wide lock. The
+/// returned guard restores the prior value on drop, including through panic
+/// unwind.
 pub fn set_rates_env(raw: &str) -> RatesEnvGuard {
     let guard = lock();
     let prev = std::env::var_os("PLATFORM_OFFICIAL_RATES_JSON");
@@ -41,5 +41,7 @@ impl Drop for RatesEnvGuard {
 fn lock() -> MutexGuard<'static, ()> {
     // Recover from a poisoned lock: the env-restore is idempotent and the
     // panic already failed its test — later tests still need serialization.
-    RATES_ENV_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    RATES_ENV_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }

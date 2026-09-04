@@ -3,9 +3,8 @@ use crate::{
     BillingQuotaPort, ConversationBindingRow, DocumentStorePort, MemoryState, WorkspaceBindingRow,
     current_owner_user_id, current_user_id,
     domain_rows::{
-        WorkspaceBindingVersion,
         DocumentDeletionOutcome, DocumentScopeState, DocumentTaskSeed,
-        DocumentUploadMutationOutcome, DocumentUploadQueueOutcome,
+        DocumentUploadMutationOutcome, DocumentUploadQueueOutcome, WorkspaceBindingVersion,
     },
 };
 use async_trait::async_trait;
@@ -265,10 +264,9 @@ impl DocumentStorePort for MemoryDocumentStore {
                 notebook_filter
                     .as_ref()
                     .map(|id| {
-                        state
-                            .workspace_document_bindings
-                            .iter()
-                            .any(|row| row.artifact_id == stored.document.id && row.workspace_id == *id)
+                        state.workspace_document_bindings.iter().any(|row| {
+                            row.artifact_id == stored.document.id && row.workspace_id == *id
+                        })
                     })
                     .unwrap_or(true)
             })
@@ -394,7 +392,10 @@ impl DocumentStorePort for MemoryDocumentStore {
         };
         let mut state = self.state.write().await;
         if !state.sessions.contains_key(&conversation_id.to_string()) {
-            return Err(AppError::not_found("session_not_found", "session not found"));
+            return Err(AppError::not_found(
+                "session_not_found",
+                "session not found",
+            ));
         }
         state.documents.insert(
             document.id.clone(),
@@ -405,12 +406,14 @@ impl DocumentStorePort for MemoryDocumentStore {
                 parsed_items: Vec::new(),
             },
         );
-        state.conversation_document_bindings.push(ConversationBindingRow {
-            binding_id: new_id(),
-            artifact_id: document.id.clone(),
-            conversation_id: conversation_id.to_string(),
-            parse_version: None,
-        });
+        state
+            .conversation_document_bindings
+            .push(ConversationBindingRow {
+                binding_id: new_id(),
+                artifact_id: document.id.clone(),
+                conversation_id: conversation_id.to_string(),
+                parse_version: None,
+            });
         Ok(document)
     }
 
@@ -494,10 +497,10 @@ impl DocumentStorePort for MemoryDocumentStore {
         {
             return Ok(None);
         }
-        let position = state
-            .conversation_document_bindings
-            .iter()
-            .position(|row| row.binding_id == binding_id.to_string() && row.conversation_id == conversation_id.to_string());
+        let position = state.conversation_document_bindings.iter().position(|row| {
+            row.binding_id == binding_id.to_string()
+                && row.conversation_id == conversation_id.to_string()
+        });
         let Some(position) = position else {
             return Ok(None);
         };
@@ -626,22 +629,11 @@ impl DocumentStorePort for MemoryDocumentStore {
         if is_deleting_or_deleted(&stored.document.status) {
             return Ok(false);
         }
-        // The zero-binding precondition is the shared single fact; this path
-        // only adds the eligibility checks and the success report (review
-        // round-8 S7).
-        let still_bound = state
-            .workspace_document_bindings
-            .iter()
-            .any(|row| row.artifact_id == key)
-            || state
-                .conversation_document_bindings
-                .iter()
-                .any(|row| row.artifact_id == key);
-        if still_bound {
-            return Ok(false);
-        }
-        crate::state_types::mark_artifact_if_unbound(&mut state, &key);
-        Ok(true)
+        // Owner and terminal-state checks are this port's eligibility boundary;
+        // the shared helper owns both the zero-binding judgment and transition.
+        Ok(crate::state_types::mark_artifact_if_unbound(
+            &mut state, &key,
+        ))
     }
 
     async fn update_document(

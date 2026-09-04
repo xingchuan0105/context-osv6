@@ -205,8 +205,16 @@ async fn relay_ingestion_chat_completions(
     body: axum::body::Bytes,
 ) -> Response {
     let upstream = service.ingestion.clone();
-    relay_chat_via_upstream(state, auth, service, upstream, "ingestion", "INGESTION_LLM", body)
-        .await
+    relay_chat_via_upstream(
+        state,
+        auth,
+        service,
+        upstream,
+        "ingestion",
+        "INGESTION_LLM",
+        body,
+    )
+    .await
 }
 
 async fn relay_chat_via_upstream(
@@ -257,7 +265,9 @@ async fn relay_chat_via_upstream(
         .post(&url)
         .bearer_auth(&upstream.api_key)
         .header(header::ACCEPT, "text/event-stream")
-        .timeout(std::time::Duration::from_millis(upstream.timeout_ms.max(30_000)))
+        .timeout(std::time::Duration::from_millis(
+            upstream.timeout_ms.max(30_000),
+        ))
         .json(&payload)
         .send()
         .await
@@ -409,7 +419,9 @@ async fn relay_embeddings(
         .http
         .post(&url)
         .bearer_auth(&upstream.api_key)
-        .timeout(std::time::Duration::from_millis(upstream.timeout_ms.max(15_000)))
+        .timeout(std::time::Duration::from_millis(
+            upstream.timeout_ms.max(15_000),
+        ))
         .json(&payload)
         .send()
         .await
@@ -497,7 +509,9 @@ async fn relay_rerank(
         .http
         .post(&url)
         .bearer_auth(&upstream.api_key)
-        .timeout(std::time::Duration::from_millis(upstream.timeout_ms.max(15_000)))
+        .timeout(std::time::Duration::from_millis(
+            upstream.timeout_ms.max(15_000),
+        ))
         .json(&payload)
         .send()
         .await
@@ -662,7 +676,9 @@ fn upstream_not_configured(kind: &str, env_prefix: &str) -> Response {
     relay_error(
         StatusCode::SERVICE_UNAVAILABLE,
         "relay_upstream_not_configured",
-        format!("platform {kind} upstream is not configured ({env_prefix}_API_KEY / {env_prefix}_BASE_URL)"),
+        format!(
+            "platform {kind} upstream is not configured ({env_prefix}_API_KEY / {env_prefix}_BASE_URL)"
+        ),
         "relay_config_error",
     )
 }
@@ -672,12 +688,7 @@ async fn verbatim_error_response(response: reqwest::Response) -> Response {
     let status =
         StatusCode::from_u16(response.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
     let bytes = response.bytes().await.unwrap_or_default();
-    (
-        status,
-        [(header::CONTENT_TYPE, "application/json")],
-        bytes,
-    )
-        .into_response()
+    (status, [(header::CONTENT_TYPE, "application/json")], bytes).into_response()
 }
 
 fn json_verbatim_response(bytes: axum::body::Bytes) -> Response {
@@ -795,8 +806,7 @@ fn parse_rerank_usage(bytes: &[u8]) -> Option<u32> {
         return Some(tokens);
     }
     let body = serde_json::from_slice::<serde_json::Value>(bytes).ok()?;
-    body
-        .get("meta")?
+    body.get("meta")?
         .get("tokens")?
         .get("input_tokens")?
         .as_u64()
@@ -881,6 +891,39 @@ mod tests {
     /// Serializes `PLATFORM_OFFICIAL_RATES_JSON` mutation across tests.
     static RATES_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
+    struct RatesEnvGuard {
+        previous: Option<std::ffi::OsString>,
+        _lock: std::sync::MutexGuard<'static, ()>,
+    }
+
+    impl RatesEnvGuard {
+        fn install(json: &str) -> Self {
+            let lock = RATES_ENV_LOCK
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            let previous = std::env::var_os("PLATFORM_OFFICIAL_RATES_JSON");
+            // SAFETY: every test in this module mutates the variable behind
+            // the same process-wide lock, which the guard holds until drop.
+            unsafe { std::env::set_var("PLATFORM_OFFICIAL_RATES_JSON", json) };
+            Self {
+                previous,
+                _lock: lock,
+            }
+        }
+    }
+
+    impl Drop for RatesEnvGuard {
+        fn drop(&mut self) {
+            // SAFETY: `_lock` is still held while the prior value is restored.
+            unsafe {
+                match self.previous.take() {
+                    Some(value) => std::env::set_var("PLATFORM_OFFICIAL_RATES_JSON", value),
+                    None => std::env::remove_var("PLATFORM_OFFICIAL_RATES_JSON"),
+                }
+            }
+        }
+    }
+
     /// Rates rows covering the platform defaults checked below (reranker +
     /// deepseek pro); gpt-4o stays unbillable on purpose.
     const TEST_RATES_JSON: &str = r#"[
@@ -890,19 +933,8 @@ mod tests {
 
     /// Run `f` with [`TEST_RATES_JSON`] configured, restoring the prior env.
     fn with_test_rates<T>(f: impl FnOnce() -> T) -> T {
-        let _guard = RATES_ENV_LOCK.lock().unwrap();
-        let prev = std::env::var_os("PLATFORM_OFFICIAL_RATES_JSON");
-        // SAFETY: serialized by RATES_ENV_LOCK; restored before unlock.
-        unsafe { std::env::set_var("PLATFORM_OFFICIAL_RATES_JSON", TEST_RATES_JSON) };
-        let out = f();
-        // SAFETY: serialized by RATES_ENV_LOCK.
-        unsafe {
-            match prev {
-                Some(v) => std::env::set_var("PLATFORM_OFFICIAL_RATES_JSON", v),
-                None => std::env::remove_var("PLATFORM_OFFICIAL_RATES_JSON"),
-            }
-        }
-        out
+        let _guard = RatesEnvGuard::install(TEST_RATES_JSON);
+        f()
     }
 
     fn deepseek_usage_chunk() -> String {
@@ -947,7 +979,10 @@ mod tests {
     fn openai_style_cached_tokens_split() {
         let body = br#"{"id":"x","usage":{"prompt_tokens":50,"completion_tokens":10,"total_tokens":60,"prompt_tokens_details":{"cached_tokens":30}}}"#;
         let usage = parse_chat_usage(body).expect("usage");
-        assert_eq!(usage.prompt_tokens_details.map(|d| d.cached_tokens), Some(30));
+        assert_eq!(
+            usage.prompt_tokens_details.map(|d| d.cached_tokens),
+            Some(30)
+        );
     }
 
     #[test]
@@ -981,15 +1016,20 @@ mod tests {
         let payload = json!({"model": "x", "query": "速冻", "documents": ["abcdefghij", "ab"]});
         assert_eq!(estimate_rerank_tokens(&payload), 4);
         // multimodal object documents count their text field
-        let mm = json!({"query": "q", "documents": [{"text": "abcd"}, {"image": "http://x/y.png"}]});
-        assert_eq!(estimate_rerank_tokens(&mm).cmp(&0), std::cmp::Ordering::Greater);
+        let mm =
+            json!({"query": "q", "documents": [{"text": "abcd"}, {"image": "http://x/y.png"}]});
+        assert_eq!(
+            estimate_rerank_tokens(&mm).cmp(&0),
+            std::cmp::Ordering::Greater
+        );
         assert_eq!(estimate_rerank_tokens(&json!({"documents": 42})), 0);
     }
 
     #[test]
     fn rerank_usage_reads_siliconflow_meta_tokens() {
         // SiliconFlow rerank carries usage in meta.tokens, not a usage envelope.
-        let body = br#"{"id":"x","results":[],"meta":{"tokens":{"input_tokens":58,"output_tokens":0}}}"#;
+        let body =
+            br#"{"id":"x","results":[],"meta":{"tokens":{"input_tokens":58,"output_tokens":0}}}"#;
         assert_eq!(parse_rerank_usage(body), Some(58));
         // usage envelope wins when both exist
         let both = br#"{"usage":{"total_tokens":7},"meta":{"tokens":{"input_tokens":58}}}"#;
@@ -1068,7 +1108,6 @@ mod tests {
     /// itself — not just the billing helper.
     #[test]
     fn whitelist_refuses_lone_peak_zero_and_negative_rate_rows() {
-        let base = r#"[{"model_contains":"v4-flash",<BODY>}]"#;
         let cases = [
             (
                 r#""peak":{"input":300,"cache":10,"output":900}"#,
@@ -1088,9 +1127,7 @@ mod tests {
             ),
         ];
         for (body, why) in cases {
-            let fixture = format!(
-                r#"[{{"model_contains":"v4-flash",{body}}}]"#
-            );
+            let fixture = format!(r#"[{{"model_contains":"v4-flash",{body}}}]"#);
             with_installed_rates(&fixture, || {
                 assert!(
                     avrag_billing::official_rates_for("deepseek", "v4-flash").is_none(),
@@ -1114,22 +1151,11 @@ mod tests {
     }
 
     /// Install `json` into `PLATFORM_OFFICIAL_RATES_JSON` (same env var the
-    /// production whitelist reads) and restore afterwards. Serialized by the
-    /// module's RATES_ENV_LOCK — the same lock `with_test_rates` uses, so
-    /// every relay test that mutates the env is serialized against the others.
+    /// production whitelist reads) and restore afterwards, including when an
+    /// assertion unwinds. The same RAII guard backs `with_test_rates`, so every
+    /// relay test that mutates the env is serialized against the others.
     fn with_installed_rates<T>(json: &str, f: impl FnOnce() -> T) -> T {
-        let _guard = RATES_ENV_LOCK.lock().unwrap();
-        let prev = std::env::var_os("PLATFORM_OFFICIAL_RATES_JSON");
-        // SAFETY: serialized by RATES_ENV_LOCK; restored before unlock.
-        unsafe { std::env::set_var("PLATFORM_OFFICIAL_RATES_JSON", json) };
-        let out = f();
-        // SAFETY: serialized by RATES_ENV_LOCK.
-        unsafe {
-            match prev {
-                Some(v) => std::env::set_var("PLATFORM_OFFICIAL_RATES_JSON", v),
-                None => std::env::remove_var("PLATFORM_OFFICIAL_RATES_JSON"),
-            }
-        }
-        out
+        let _guard = RatesEnvGuard::install(json);
+        f()
     }
 }

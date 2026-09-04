@@ -10,9 +10,10 @@ use std::collections::BTreeMap;
 /// cascade in the same file, and `MemoryChatPersistence::delete_session`;
 /// `MemoryDocumentStore::delete_document_if_unbound` shares this exact
 /// transition after its own eligibility checks): mark the artifact `Deleting`
-/// iff no workspace and no conversation binding remains (review round-7 S3
-/// extracted the duplicates; round-8 S7 folded in the explicit-GC path).
-pub(crate) fn mark_artifact_if_unbound(state: &mut MemoryState, artifact_id: &str) {
+/// iff no workspace and no conversation binding remains, returning whether a
+/// live artifact actually changed state (review round-7 S3 extracted the
+/// duplicates; round-9 made the explicit-GC result consume this same fact).
+pub(crate) fn mark_artifact_if_unbound(state: &mut MemoryState, artifact_id: &str) -> bool {
     let still_bound = state
         .workspace_document_bindings
         .iter()
@@ -22,12 +23,20 @@ pub(crate) fn mark_artifact_if_unbound(state: &mut MemoryState, artifact_id: &st
             .iter()
             .any(|row| row.artifact_id == artifact_id);
     if still_bound {
-        return;
+        return false;
     }
     if let Some(stored) = state.documents.get_mut(artifact_id) {
+        if matches!(
+            stored.document.status,
+            DocumentStatus::Deleting | DocumentStatus::Deleted
+        ) {
+            return false;
+        }
         stored.document.status = DocumentStatus::Deleting;
         stored.document.updated_at = common::now_rfc3339();
+        return true;
     }
+    false
 }
 
 #[derive(Debug, Default)]
