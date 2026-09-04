@@ -14,7 +14,7 @@ const FIXTURE_BASE = `http://127.0.0.1:${FIXTURE_PORT}`;
 export default defineConfig({
   testDir: '.',
   testMatch: '**/*.spec.ts',
-  testIgnore: 'chat-live-smoke.spec.ts',
+  testIgnore: ['chat-live-smoke.spec.ts', 'gate0-perf.spec.ts'],
   timeout: 120_000,
   retries: 0,
   workers: 1,

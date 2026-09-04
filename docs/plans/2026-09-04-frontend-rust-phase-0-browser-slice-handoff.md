@@ -3,7 +3,7 @@
 | 字段 | 内容 |
 |---|---|
 | 日期 | 2026-09-04 |
-| 状态 | 浏览器切片、live smoke、Tauri 垂直切片、会话列表 + 历史 **已完成**；Gate 0 仍 **NO-GO**；下一棒是性能对照 |
+| 状态 | 浏览器切片、live smoke、Tauri 垂直切片、会话列表 + 历史、Gate 0 **第一采集**已完成；Gate 0 仍 **NO-GO** |
 | 完成提交 | `1f39b4a3`（feat(frontend_rust): Phase 0 browser vertical slice） |
 | 上游任务 | [`2026-09-04-frontend-rust-phase-0-browser-vertical-slice-task.md`](2026-09-04-frontend-rust-phase-0-browser-vertical-slice-task.md)（§10 验证报告） |
 | 权威设计 | [`2026-09-03-frontend-rust-migration-design.md`](2026-09-03-frontend-rust-migration-design.md) |
@@ -17,7 +17,8 @@
 发送/流式/停止/错误/重试全旅程有自动化浏览器证据。`TauriIpcTransport` 已接既有
 `chat_stream` / `chat_cancel`，CSR 产物可构建。侧栏只读会话列表 + `/chat/:id` 历史恢复已接入
 同一 `ConversationManager` / reducer（浏览器 Fetch；桌面 REST IPC 未做）。**它不是产品前端**，
-不得部署；未切 `tauri.conf.json`；Gate 0 性能对照未开始。
+不得部署；未切 `tauri.conf.json`。Gate 0 已冻结 charter 并采到 Rust debug 5 冷 + 20 热；
+缺 Next / 30 分钟 / release-like，结论仍 **NO-GO**。
 
 ## 2. 架构地图（改造后）
 
@@ -91,6 +92,10 @@ cd tests/browser && pnpm exec playwright test
 cd tests/browser && LIVE_BACKEND=1 LIVE_API_BASE=http://127.0.0.1:<api-port> \
   pnpm exec playwright test --config playwright.live.config.ts
 
+# Gate 0 采集（需已有 target/debug/web-server；约 1 分钟；不自动 GO）
+GATE0=1 bash scripts/run-gate0-perf.sh
+# 可选 Next：GATE0_NEXT_BASE=http://127.0.0.1:8080 GATE0=1 bash scripts/run-gate0-perf.sh
+
 # Tauri CSR 产物（不改 desktop tauri.conf.json）
 bash scripts/build-tauri-csr.sh   # 产出 dist/tauri/
 ```
@@ -111,11 +116,13 @@ WSL 纪律：`jobs=2`，不要叠加并发全量 cargo 运行；长时间任务�
   `role="alert"` typed error；retry 新流隔离；SSR 双路由表单语义；hydration 无重复 root/无错误；
 - dev 与 release-like 产物均实际构建并启动。
 - live backend：无 token 的真实 401 → `unauthorized`；有 JWT 的一轮 Quick Chat 流式收束、URL 落地。
+- Gate 0 第一采集（debug）：Rust 5 冷 + 20 热，first token p95 235.5ms，complete p95 1545.9ms；Next / 30 分钟未采。
 
 未验证/未完成：
 
 - 真实 Tauri WebView 点验；桌面会话列表（需 REST IPC）；Session files、RAG/Web/Workspace/Share/BYOK；
-- Markdown 富渲染/代码高亮/虚拟列表；Next/Rust 同机性能与 30 分钟压力对照（Gate 0 必需）；
+- Markdown 富渲染/代码高亮/虚拟列表；
+- Gate 0 仍缺：Next 同机 5+20、`cargo leptos build --release` 再采、30 分钟堆斜率（且 `performance.memory` 10MB 分桶不可用）；
 - Nginx/systemd/部署脚本（Phase 6 之前禁止）。
 
 ## 5. 实施期踩坑记录（下一棒别再踩）
@@ -148,14 +155,30 @@ WSL 纪律：`jobs=2`，不要叠加并发全量 cargo 运行；长时间任务�
    `console.error` 收集会红。桌面 WebView 不能 Fetch `127.0.0.1`（PNA），历史只走浏览器。
 10. **历史 apply 必须带 epoch**。迟到的 GET 不得覆盖新会话或正在 streaming 的 turn。
     URL 回显仍不得 `switch_*`。`/chat` 仅在「未在流式且已有 session id」时 `new_personal_chat`。
+11. **Gate 0 计时必须在页内 `performance.now()`**。Node `Date.now()` + Playwright locator
+    会在 `/chat` → `/chat/:id` 重挂时读到上一轮 `live-answer`，出现负 first_token / ~400ms
+    假 complete。发送前必须 `chat-empty` 且无 live-answer；非增量样本丢弃。
+    Done 后 live-answer **仍在**（status ≠ Idle），热路径必须先「新对话」。
+12. **8080 上的 Next 不能靠 cookie stub 进 `/chat` 画布**。`app/(app)/chat/page.tsx` 是
+    `return null`，UI 在 layout。`workspace-chat-composer` 不可见就记 Blocked，不要编 Next 数字。
+    Chromium `performance.memory` 按 10MB 分桶，不能做 30 分钟斜率。
 
 ## 6. 建议的下一任务切片（按依赖排序）
 
-1. **Gate 0 性能对照**：冻结 benchmark charter 后同机采集 LCP/输入到绘制/掉帧/Heap/30 分钟
-   压力，Rust 与优化后 Next 同夹具对照；未达标即按设计 §3.3 停止迁移转优化 Next。
+1. **补齐 Gate 0 对照（仍不许 GO 直到 charter 全条满足）**：
+   - Next：真实登录（不要只 stub cookie）后对同一夹具采 5 冷 + 20 热；POST 必须 `route.continue` 保分块。
+   - Rust release-like：`cargo leptos build --release` 后再采一套，debug 数字不得 GO。
+   - 30 分钟：实现 `GATE0_STRESS=1`；不要用分桶的 `usedJSHeapSize` 当斜率。
+   - 未达标即按设计 §3.3 停迁移、转优化 Next。
 2. **真实 Tauri WebView 点验**（可选，Phase 5 之前）：用临时 `frontendDist` 或独立 window
    验证 IPC 一轮；不要把生产 `tauri.conf.json` 切走 Next。桌面会话列表需要 REST IPC 才能做。
 3. 之后才是 Phase 1 固化（route manifest、SEO/security/style 基线测试、Token 同步校验）。
+
+Gate 0 第一采集证据见
+[`2026-09-04-frontend-rust-phase-0-gate0-perf-task.md`](2026-09-04-frontend-rust-phase-0-gate0-perf-task.md) §4
+与 [`2026-09-03-phase-0-benchmark-report.md`](2026-09-03-phase-0-benchmark-report.md) §2.2。
+charter：[`2026-09-04-frontend-rust-phase-0-gate0-benchmark-charter.md`](2026-09-04-frontend-rust-phase-0-gate0-benchmark-charter.md)（已冻结）。
+复跑：`GATE0=1 bash frontend_rust/scripts/run-gate0-perf.sh`。
 
 会话列表 + 历史证据见
 [`2026-09-04-frontend-rust-phase-0-session-history-task.md`](2026-09-04-frontend-rust-phase-0-session-history-task.md) §5。
