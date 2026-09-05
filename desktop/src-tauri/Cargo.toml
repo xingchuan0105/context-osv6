@@ -27,6 +27,7 @@ tracing = "0.1"
 # 复用 avrag-rs 核心 crates（轻量 ports，不直接依赖 avrag-rag-core）
 common = { path = "../../avrag-rs/crates/common" }
 contracts = { path = "../../contracts" }
+desktop-core = { path = "../core" }
 storage-local = { path = "../../avrag-rs/crates/storage-local" }
 machineid-rs = "1.2"
 ed25519-dalek = "2"

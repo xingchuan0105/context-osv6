@@ -2,9 +2,6 @@ use contracts::chat::ChatEvent;
 
 use crate::commands::api::IpcApiError;
 
-pub const LICENSE_REQUIRED: &str =
-    "License required. Please activate Context-OS first.";
-
 pub fn chat_event_channel(request_id: &str) -> String {
     format!("chat://{request_id}")
 }
