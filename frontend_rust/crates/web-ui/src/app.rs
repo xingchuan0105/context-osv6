@@ -3,6 +3,9 @@ use crate::components::auth::{
     LoginPage, RegisterPage, ResetPasswordConfirmPage, ResetPasswordRequestPage,
     ResetPasswordVerifyPage,
 };
+use crate::components::billing::{
+    DesktopBuyPage, PaywallPage, PricingPage, UpgradeSuccessPage,
+};
 use crate::components::chat::ChatCanvasModel;
 use crate::components::chat::chat_page::ChatPage;
 use crate::components::dashboard::{
@@ -62,6 +65,10 @@ pub fn App() -> impl IntoView {
                 <Route path=path!("/reset-password/confirm") view=ResetPasswordConfirmPage/>
                 <Route path=path!("/settings") view=SettingsPage/>
                 <Route path=path!("/settings/usage") view=UsagePage/>
+                <Route path=path!("/pricing") view=PricingPage/>
+                <Route path=path!("/upgrade/paywall") view=PaywallPage/>
+                <Route path=path!("/upgrade/success") view=UpgradeSuccessPage/>
+                <Route path=path!("/desktop/buy") view=DesktopBuyPage/>
             </Routes>
         </Router>
     }

@@ -134,7 +134,7 @@ pub fn route_family(id: &str) -> Option<&'static RouteFamily> {
     ROUTE_FAMILIES.iter().find(|family| family.id == id)
 }
 
-/// Phase 0, E3.1, E3.2 & E3.3 已挂载路径。
+/// Phase 0, E3.1, E3.2, E3.3 & E3.4 已挂载路径。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AppRoute {
     Chat { session_id: Option<String> },
@@ -147,6 +147,10 @@ pub enum AppRoute {
     SharedKb { token: String },
     SharedUser { user_id: String },
     Invite { workspace_id: String, member_id: String },
+    Pricing,
+    UpgradePaywall,
+    UpgradeSuccess,
+    DesktopBuy,
     Login,
     Register,
     ResetPassword,
@@ -198,6 +202,10 @@ impl AppRoute {
                 workspace_id: wid.to_string(),
                 member_id: mid.to_string(),
             },
+            ["pricing"] => Self::Pricing,
+            ["upgrade", "paywall"] => Self::UpgradePaywall,
+            ["upgrade", "success"] => Self::UpgradeSuccess,
+            ["desktop", "buy"] => Self::DesktopBuy,
             ["login"] => Self::Login,
             ["register"] => Self::Register,
             ["reset-password"] => Self::ResetPassword,
@@ -271,6 +279,19 @@ mod tests {
                 workspace_id: "ws-1".to_string(),
                 member_id: "mem-1".to_string()
             }
+        );
+        assert_eq!(AppRoute::parse("/pricing"), AppRoute::Pricing);
+        assert_eq!(
+            AppRoute::parse("/upgrade/paywall"),
+            AppRoute::UpgradePaywall
+        );
+        assert_eq!(
+            AppRoute::parse("/upgrade/success"),
+            AppRoute::UpgradeSuccess
+        );
+        assert_eq!(
+            AppRoute::parse("/desktop/buy"),
+            AppRoute::DesktopBuy
         );
         assert_eq!(AppRoute::parse("/login"), AppRoute::Login);
         assert_eq!(AppRoute::parse("/register"), AppRoute::Register);

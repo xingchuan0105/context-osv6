@@ -239,6 +239,38 @@ impl BrowserRestClient {
     ) -> Result<serde_json::Value, TransportError> {
         self.unavailable()
     }
+
+    pub async fn get_billing_plans(
+        &self,
+    ) -> Result<crate::billing_api::BillingPlansResponse, TransportError> {
+        self.unavailable()
+    }
+
+    pub async fn get_wallet_balance(
+        &self,
+    ) -> Result<crate::billing_api::WalletBalanceResponse, TransportError> {
+        self.unavailable()
+    }
+
+    pub async fn list_topup_packs(
+        &self,
+    ) -> Result<Vec<crate::billing_api::TopupPack>, TransportError> {
+        self.unavailable()
+    }
+
+    pub async fn create_checkout_session(
+        &self,
+        _req: &crate::billing_api::CheckoutRequest,
+    ) -> Result<crate::billing_api::CheckoutResponse, TransportError> {
+        self.unavailable()
+    }
+
+    pub async fn get_order_status(
+        &self,
+        _order_id: &str,
+    ) -> Result<crate::billing_api::BillingOrderStatusResponse, TransportError> {
+        self.unavailable()
+    }
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -757,5 +789,63 @@ impl BrowserRestClient {
         )
         .await?;
         serde_json::from_slice(&bytes).map_err(TransportError::from)
+    }
+
+    pub async fn get_billing_plans(
+        &self,
+    ) -> Result<crate::billing_api::BillingPlansResponse, TransportError> {
+        crate::billing_api::parse_billing_plans(
+            &wasm_request::get_bytes(self, &crate::billing_api::billing_plans_url(&self.base_url))
+                .await?,
+        )
+    }
+
+    pub async fn get_wallet_balance(
+        &self,
+    ) -> Result<crate::billing_api::WalletBalanceResponse, TransportError> {
+        crate::billing_api::parse_wallet_balance(
+            &wasm_request::get_bytes(self, &crate::billing_api::wallet_balance_url(&self.base_url))
+                .await?,
+        )
+    }
+
+    pub async fn list_topup_packs(
+        &self,
+    ) -> Result<Vec<crate::billing_api::TopupPack>, TransportError> {
+        crate::billing_api::parse_topup_packs(
+            &wasm_request::get_bytes(self, &crate::billing_api::topup_packs_url(&self.base_url))
+                .await?,
+        )
+    }
+
+    pub async fn create_checkout_session(
+        &self,
+        req: &crate::billing_api::CheckoutRequest,
+    ) -> Result<crate::billing_api::CheckoutResponse, TransportError> {
+        let body = serde_json::to_vec(req)?;
+        crate::billing_api::parse_checkout_response(
+            &wasm_request::request_bytes(
+                self,
+                "POST",
+                &crate::billing_api::checkout_session_url(&self.base_url),
+                Some(&body),
+                Some("application/json"),
+                true,
+            )
+            .await?,
+        )
+    }
+
+    pub async fn get_order_status(
+        &self,
+        order_id: &str,
+    ) -> Result<crate::billing_api::BillingOrderStatusResponse, TransportError> {
+        crate::billing_api::parse_order_status(
+            &wasm_request::get_bytes(
+                self,
+                &crate::billing_api::order_status_url(&self.base_url, order_id),
+            )
+            .await?,
+        )
     }
 }

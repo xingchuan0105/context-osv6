@@ -538,6 +538,56 @@ const server = http.createServer((req, res) => {
       });
       return;
     }
+    const billingOrderMatch = pathname.match(/\/api\/v1\/billing\/orders\/([^/]+)$/);
+    if (billingOrderMatch) {
+      const oid = decodeURIComponent(billingOrderMatch[1]);
+      jsonOk(res, {
+        order_id: oid,
+        status: 'paid',
+        plan_id: 'pro',
+      });
+      return;
+    }
+    if (pathname.endsWith('/api/v1/billing/plans')) {
+      jsonOk(res, {
+        plans: [
+          {
+            plan_id: 'free',
+            name: '免费体验版',
+            description: '个人基础问答',
+            price_label_cny: '¥0',
+            interval: 'month',
+            current: true,
+          },
+          {
+            plan_id: 'pro',
+            name: 'Pro 专业版',
+            description: '深度知识库与高速 Agent',
+            price_label_cny: '¥99/月',
+            interval: 'month',
+            current: false,
+          },
+        ],
+        current_plan_id: 'free',
+      });
+      return;
+    }
+    if (pathname.endsWith('/api/v1/billing/wallet')) {
+      jsonOk(res, {
+        user_id: 'fixture-user',
+        balance_fen: 2500,
+        lifetime_paid_topup_fen: 5000,
+      });
+      return;
+    }
+    if (pathname.endsWith('/api/v1/billing/wallet/topup-packs')) {
+      jsonOk(res, [
+        { pack_id: 'topup_50', amount_fen: 5000, amount_yuan: 50, label_cny: '50元' },
+        { pack_id: 'topup_100', amount_fen: 10000, amount_yuan: 100, label_cny: '100元' },
+        { pack_id: 'topup_200', amount_fen: 20000, amount_yuan: 200, label_cny: '200元' },
+      ]);
+      return;
+    }
     const shareSettingsMatch = pathname.match(/\/api\/v1\/workspaces\/([^/]+)\/share\/settings$/);
     if (shareSettingsMatch) {
       jsonOk(res, {
@@ -868,6 +918,17 @@ const server = http.createServer((req, res) => {
         };
         workspaceNotesState.push(newNote);
         jsonOk(res, { note: newNote });
+      });
+      return;
+    }
+    if (pathname.endsWith('/api/v1/billing/checkout-session')) {
+      readBody(req).then((buf) => {
+        const body = JSON.parse(buf.toString('utf8') || '{}');
+        jsonOk(res, {
+          url: `http://127.0.0.1:${PORT}/mock-pay?session=cs_test_999`,
+          session_id: 'cs_test_999',
+          order_id: 'ord_test_888',
+        });
       });
       return;
     }

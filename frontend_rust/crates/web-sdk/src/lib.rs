@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod billing_api;
 pub mod browser_auth;
 pub mod browser_rest;
 pub mod browser_transport;
@@ -24,6 +25,12 @@ pub use auth::{
     has_auth_session_hint, parse_auth_me_json, parse_cookie_value, parse_persisted_auth_cookie,
     parse_persisted_auth_json, persisted_clear_cookie, persisted_set_cookie,
     session_hint_clear_cookie, session_hint_set_cookie,
+};
+pub use billing_api::{
+    BillingOrderStatusResponse, BillingPlan, BillingPlansResponse, CheckoutRequest,
+    CheckoutResponse, TopupPack, WalletBalanceResponse, billing_plans_url, checkout_session_url,
+    order_status_url, parse_billing_plans, parse_checkout_response, parse_order_status,
+    parse_topup_packs, parse_wallet_balance, topup_packs_url, wallet_balance_url,
 };
 pub use browser_auth::{
     auth_login, auth_register, auth_reset_confirm, auth_reset_send_code, auth_reset_verify_code,
