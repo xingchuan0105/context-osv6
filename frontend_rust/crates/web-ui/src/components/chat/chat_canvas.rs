@@ -2,7 +2,10 @@ use crate::reducer::{ChatTurnState, TurnStatus, reduce_chat_event};
 use crate::session::{ConversationManager, ConversationMessage, MessageRole};
 use contracts::chat::{ChatEvent, ChatRequest};
 use contracts::workspaces::ChatSession;
-use web_sdk::{Cancellation, TransportError};
+use web_sdk::{
+    Cancellation, TransportError, capabilities_to_wire, derive_agent_type_label,
+    normalize_capabilities,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct StreamScope {
@@ -49,6 +52,15 @@ impl ChatCanvasModel {
 
     /// 用户发起提问
     pub fn prepare_user_turn(&mut self, query: &str) -> PreparedUserTurn {
+        self.prepare_user_turn_with(query, &[])
+    }
+
+    /// 带当前能力标签发问。空切片保持 `agent_type=chat` / `capabilities=[]`。
+    pub fn prepare_user_turn_with(
+        &mut self,
+        query: &str,
+        capabilities: &[String],
+    ) -> PreparedUserTurn {
         self.invalidate_active_stream();
         self.manager.append_user_message(query);
         self.live_turn = ChatTurnState {
@@ -65,14 +77,15 @@ impl ChatCanvasModel {
         let cancellation = Cancellation::new();
         self.cancellation = Some(cancellation.clone());
         self.active_stream_scope = Some(stream_scope);
+        let caps = normalize_capabilities(capabilities.iter().map(String::as_str));
 
         PreparedUserTurn {
             request: ChatRequest {
                 query: query.to_string(),
                 workspace_id: self.manager.active.workspace_id.clone(),
                 session_id: self.manager.active.session_id.clone(),
-                agent_type: "chat".to_string(),
-                capabilities: Some(vec![]),
+                agent_type: derive_agent_type_label(&caps).to_string(),
+                capabilities: Some(capabilities_to_wire(&caps)),
                 client_context: None,
                 client_ip: None,
                 source_type: None,
@@ -213,6 +226,11 @@ impl ChatCanvasModel {
 
     /// 重试上一轮提问
     pub fn retry_last(&mut self) -> Option<PreparedUserTurn> {
+        self.retry_last_with(&[])
+    }
+
+    /// 重试时用当前芯片，不冻结上一轮 capabilities。
+    pub fn retry_last_with(&mut self, capabilities: &[String]) -> Option<PreparedUserTurn> {
         let last_user_query = self
             .manager
             .active
@@ -236,7 +254,7 @@ impl ChatCanvasModel {
             }
         }
 
-        Some(self.prepare_user_turn(&last_user_query))
+        Some(self.prepare_user_turn_with(&last_user_query, capabilities))
     }
 
     /// Transport 层失败（HTTP 非 2xx、断流、坏帧、取消）进入可恢复终态。

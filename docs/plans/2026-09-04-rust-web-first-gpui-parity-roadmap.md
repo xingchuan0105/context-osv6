@@ -97,6 +97,8 @@ contracts + web-sdk（SseDecoder / reducer / 会话 REST；无 DOM、无 GPUI、
 - **W2.1 Markdown：已做。** `web-sdk::render_assistant_markdown`：丢掉原始 HTML 事件，链接只留 http(s)。不引入 ammonia（html5ever + ICU 对 wasm / target 过重）。Playwright 恶意 fixture 绿。
 - **W2.2 引用 marker / 来源卡：已做。** `[[cite:]]` / `[[web:n]]` / `[[n]]` → chip；来源卡可点选高亮。不打开原文查看器。`[[image:]]` 仍是下一层。
 - **W2.3 进度 / 推理终态折叠：已做。** 流式展开；Done/Cancelled/Error 收成「思考完成」一行，推理走 `<details>`。不迁 elapsed / 九宫格动画。
+- **W2.4 Session files：已做。** 签名上传 + 托盘状态 + 未就绪挡发送。不打开原文查看器，不迁 workspace ingest。
+- **W2.5 Scope bar：已做。** 个人 `/chat` 两枚芯片（知识库 / 网络搜索）写入 `capabilities` + 派生 `agent_type`；就绪会话文件自动挂上/摘掉 rag。不迁 workspace 来源轨、`doc_scope`、`model_role` / BYOK。
 **Gate 2**：Chat-first 验收矩阵（fixture Playwright + live smoke）全绿；`stream-long-3000` 流式对照复采（观察）。
 
 ### W3 应用与交易面 → W4 公共 SSR / SEO / 双语 → W5 切流与清理

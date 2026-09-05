@@ -32,8 +32,7 @@ pub fn App() -> impl IntoView {
                 }
             }>
                 <Route path=path!("/") view=RedirectToChat/>
-                <Route path=path!("/chat") view=ChatPage/>
-                <Route path=path!("/chat/:session_id") view=ChatPage/>
+                <Route path=path!("/chat/:session_id?") view=ChatPage/>
             </Routes>
         </Router>
     }

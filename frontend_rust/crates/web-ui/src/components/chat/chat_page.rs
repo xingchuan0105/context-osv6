@@ -1,5 +1,5 @@
 use crate::api_base::poc_api_base;
-use crate::components::chat::{ChatCanvasModel, PreparedUserTurn};
+use crate::components::chat::{ChatCanvasModel, PreparedUserTurn, ScopeBar, SessionFileTray};
 use crate::reducer::{ActivityEntry, TurnStatus};
 use crate::session::{ConversationMessage, MessageRole, messages_from_wire};
 use contracts::workspaces::ChatSession;
@@ -9,8 +9,9 @@ use leptos_router::NavigateOptions;
 use leptos_router::hooks::{use_navigate, use_params};
 use leptos_router::params::Params;
 use web_sdk::{
-    BrowserHttpTransport, BrowserRestClient, ChatClient, CitationView, SourceCard,
-    activities_for_display, progress_folded, progress_summary_label, render_assistant_answer,
+    BrowserHttpTransport, BrowserRestClient, Capability, ChatClient, CitationView, SourceCard,
+    activities_for_display, capabilities_to_wire, progress_folded, progress_summary_label,
+    reconcile_session_rag, render_assistant_answer,
 };
 
 #[derive(Params, PartialEq, Clone, Debug)]
@@ -35,6 +36,11 @@ pub fn ChatPage() -> impl IntoView {
     let active_cite = RwSignal::new(None::<String>);
     provide_context(active_cite);
     let progress_expanded = RwSignal::new(false);
+    let files_blocked = RwSignal::new(false);
+    let ready_count = RwSignal::new(0_usize);
+    let capabilities = RwSignal::new(Vec::<Capability>::new());
+    let capabilities_manual = RwSignal::new(false);
+    let last_scope = RwSignal::new(None::<Option<String>>);
 
     Effect::new(move |_| {
         if model.with(|m| matches!(m.live_turn().status, TurnStatus::Streaming)) {
@@ -143,16 +149,48 @@ pub fn ChatPage() -> impl IntoView {
         (!value.is_empty()).then_some(value)
     };
 
+    Effect::new(move |_| {
+        let next = params
+            .read()
+            .as_ref()
+            .ok()
+            .and_then(|p| p.session_id.clone());
+        let prev = last_scope.get_untracked();
+        if prev.as_ref() == Some(&next) {
+            return;
+        }
+        if let Some(prev_sid) = prev {
+            let landing_from_new = prev_sid.is_none() && next.is_some();
+            if !landing_from_new {
+                capabilities.set(Vec::new());
+                capabilities_manual.set(false);
+                ready_count.set(0);
+            }
+        }
+        last_scope.set(Some(next));
+    });
+
+    Effect::new(move |_| {
+        let ready = ready_count.get();
+        let manual = capabilities_manual.get_untracked();
+        let current = capabilities.get_untracked();
+        let next = reconcile_session_rag(&current, manual, ready);
+        if next != current {
+            capabilities.set(next);
+        }
+    });
+
     let try_prepare_turn = move |query: &str| {
         let query = query.trim().to_string();
-        if query.is_empty() || history_loading.get_untracked() {
+        if query.is_empty() || history_loading.get_untracked() || files_blocked.get_untracked() {
             return None;
         }
+        let caps = capabilities_to_wire(&capabilities.get_untracked());
         let mut model = model.write();
         if model.is_streaming() {
             None
         } else {
-            Some(model.prepare_user_turn(&query))
+            Some(model.prepare_user_turn_with(&query, &caps))
         }
     };
 
@@ -193,10 +231,11 @@ pub fn ChatPage() -> impl IntoView {
     let retry = {
         let navigate = navigate.clone();
         move |_| {
-            if history_loading.get_untracked() {
+            if history_loading.get_untracked() || files_blocked.get_untracked() {
                 return;
             }
-            let turn = model.write().retry_last();
+            let caps = capabilities_to_wire(&capabilities.get_untracked());
+            let turn = model.write().retry_last_with(&caps);
             if let Some(turn) = turn {
                 spawn_chat_stream(model, turn, current_token(), navigate.clone());
             }
@@ -208,6 +247,9 @@ pub fn ChatPage() -> impl IntoView {
         let navigate = navigate.clone();
         move |_| {
             model.update(|m| m.new_personal_chat(None));
+            capabilities.set(Vec::new());
+            capabilities_manual.set(false);
+            ready_count.set(0);
             history_error.set(None);
             history_loading.set(false);
             history_load_gen.update(|n| *n += 1);
@@ -235,11 +277,15 @@ pub fn ChatPage() -> impl IntoView {
     };
 
     let is_streaming = move || model.with(|m| m.is_streaming());
-    let composer_locked = move || is_streaming() || history_loading.get();
+    let composer_locked = move || is_streaming() || history_loading.get() || files_blocked.get();
+    let attach_disabled = Signal::derive(move || {
+        token.get().is_empty() || is_streaming() || history_loading.get()
+    });
     let can_retry = move || {
         model.with(|m| {
             !m.is_streaming()
                 && !history_loading.get()
+                && !files_blocked.get()
                 && m.manager()
                     .active
                     .messages
@@ -496,7 +542,18 @@ pub fn ChatPage() -> impl IntoView {
                     </p>
                 </section>
 
+                <SessionFileTray
+                    files_blocked=files_blocked
+                    ready_count=ready_count
+                    disabled=attach_disabled
+                />
                 <form class="chat-composer" aria-label="发送消息" on:submit=send>
+                    <ScopeBar
+                        capabilities=capabilities
+                        capabilities_manual=capabilities_manual
+                        ready_count=Signal::derive(move || ready_count.get())
+                        disabled=Signal::derive(move || composer_locked())
+                    />
                     <label for="chat-composer-input">"输入消息"</label>
                     <textarea
                         id="chat-composer-input"

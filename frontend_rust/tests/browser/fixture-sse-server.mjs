@@ -7,7 +7,9 @@
 // - POST /case/markdown/api/v1/chat → 含标题/列表/恶意 HTML 的短答案（W2 Markdown）
 // - POST /case/citations/api/v1/chat → 含 [[1]] marker 与 citations 事件（W2 引用）
 // - POST /case/progress/api/v1/chat → 一条 activity + reasoning，短答案（W2 终态折叠）
-// - GET  /admin/state            → { aborted, requests, bytesWritten }
+// - /case/files/*                → Session files 签名上传（W2.4）
+// - /case/files-busy/*           → 列表里有一条 processing，发送闸
+// - GET  /admin/state            → { aborted, requests, bytesWritten, lastChatBody }
 // - POST /admin/reset            → 重置上述状态
 // CORS 全放行（页面与夹具不同源，Authorization 头触发预检）。
 import http from 'node:http';
@@ -26,7 +28,18 @@ const wireBytes = Buffer.from(wire, 'utf8');
 const PORT = Number(process.env.FIXTURE_PORT || 3201);
 const CHUNK_DELAY_MS = Number(process.env.CHUNK_DELAY_MS || 15);
 
-const state = { aborted: false, requests: 0, bytesWritten: 0, lastAuthorization: null };
+const state = {
+  aborted: false,
+  requests: 0,
+  bytesWritten: 0,
+  lastAuthorization: null,
+  lastChatBody: null,
+};
+const filesState = { file: null, events: [] };
+
+function fileEvent(kind) {
+  filesState.events.push(kind);
+}
 
 function jsonOk(res, body) {
   cors(res);
@@ -37,7 +50,40 @@ function jsonOk(res, body) {
 function cors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, GET, PUT, DELETE, OPTIONS');
+}
+
+function sessionJson(id, title) {
+  return {
+    id,
+    owner_user_id: 'fixture-user',
+    scope_kind: 'personal',
+    title: title || null,
+    agent_type: 'chat',
+    model_role: 'quick_chat',
+    created_at: '2026-09-04T00:00:00Z',
+    updated_at: '2026-09-04T00:00:00Z',
+  };
+}
+
+function busyFileRow() {
+  return {
+    binding_id: 'bind-busy-1',
+    document_id: 'doc-busy-1',
+    file_name: 'busy.pdf',
+    mime_type: 'application/pdf',
+    file_size: 12,
+    status: 'processing',
+    created_at: '2026-09-04T00:00:00Z',
+  };
+}
+
+function readBody(req) {
+  return new Promise((resolve) => {
+    const chunks = [];
+    req.on('data', (chunk) => chunks.push(chunk));
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+  });
 }
 
 function sseHead(res) {
@@ -56,12 +102,13 @@ function writePiece(res, piece) {
 }
 
 function watchAbort(req, res, isDone) {
-  req.on('close', () => {
+  // 请求体读完后 IncomingMessage 可能已经 close；客户端停流要看响应/socket。
+  const mark = () => {
     if (!isDone()) state.aborted = true;
-  });
-  res.on('error', () => {
-    state.aborted = true;
-  });
+  };
+  res.on('close', mark);
+  res.on('error', mark);
+  req.on('aborted', mark);
 }
 
 function streamFixture(req, res, url) {
@@ -146,6 +193,50 @@ function streamMarkdown(req, res) {
         answer: body,
         answer_blocks: [],
         session_id: 'sess-md-1',
+        agent_type: 'chat',
+        sources: [],
+        citations: [],
+        trace: { mode: 'chat' },
+        degrade_trace: [],
+      },
+    })}\n\n`,
+  );
+  res.end();
+}
+
+function streamShortOk(req, res, sessionId) {
+  sseHead(res);
+  writePiece(
+    res,
+    `event: start\ndata: ${JSON.stringify({ request_id: 'req-scope-1', session_id: sessionId })}\n\n`,
+  );
+  writePiece(
+    res,
+    `event: answer_start\ndata: ${JSON.stringify({
+      request_id: 'req-scope-1',
+      session_id: sessionId,
+      message_id: 51,
+      agent_type: 'chat',
+    })}\n\n`,
+  );
+  writePiece(
+    res,
+    `event: token\ndata: ${JSON.stringify({
+      request_id: 'req-scope-1',
+      message_id: 51,
+      content: '已收到。',
+    })}\n\n`,
+  );
+  writePiece(
+    res,
+    `event: done\ndata: ${JSON.stringify({
+      request_id: 'req-scope-1',
+      session_id: sessionId,
+      message_id: 51,
+      payload: {
+        answer: '已收到。',
+        answer_blocks: [],
+        session_id: sessionId,
         agent_type: 'chat',
         sources: [],
         citations: [],
@@ -319,7 +410,7 @@ const server = http.createServer((req, res) => {
 
   if (req.method === 'GET' && url.pathname === '/admin/state') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(state));
+    res.end(JSON.stringify({ ...state, filesEvents: filesState.events, hasFile: Boolean(filesState.file) }));
     return;
   }
   if (req.method === 'GET') {
@@ -340,6 +431,20 @@ const server = http.createServer((req, res) => {
         },
         error: null,
       });
+      return;
+    }
+    const filesMatch = pathname.match(/\/api\/v1\/chat\/sessions\/([^/]+)\/files$/);
+    if (filesMatch) {
+      if (pathname.includes('/case/files-busy/')) {
+        jsonOk(res, { files: [busyFileRow()] });
+        return;
+      }
+      if (pathname.includes('/case/files/') && filesState.file) {
+        fileEvent('list');
+        jsonOk(res, { files: [filesState.file] });
+        return;
+      }
+      jsonOk(res, { files: [] });
       return;
     }
     if (pathname.endsWith('/api/v1/chat/sessions')) {
@@ -385,15 +490,110 @@ const server = http.createServer((req, res) => {
     state.requests = 0;
     state.bytesWritten = 0;
     state.lastAuthorization = null;
+    state.lastChatBody = null;
+    filesState.file = null;
+    filesState.events = [];
     res.writeHead(204);
     res.end();
     return;
   }
 
-  if (req.method === 'POST') {
-    // 读取请求体但不依赖其内容（保持确定性）
+  if (req.method === 'PUT' && /\/upload\//.test(url.pathname)) {
+    fileEvent('put');
     req.resume();
     req.on('end', () => {
+      cors(res);
+      res.writeHead(204);
+      res.end();
+    });
+    return;
+  }
+
+  if (req.method === 'DELETE') {
+    const delMatch = url.pathname.match(/\/api\/v1\/chat\/sessions\/[^/]+\/files\/([^/]+)$/);
+    if (delMatch) {
+      const bindingId = decodeURIComponent(delMatch[1]);
+      if (filesState.file && filesState.file.binding_id === bindingId) {
+        filesState.file = null;
+      }
+      jsonOk(res, { status: 'deleted' });
+      return;
+    }
+  }
+
+  if (req.method === 'POST') {
+    const pathname = url.pathname;
+    if (pathname.endsWith('/api/v1/chat/sessions')) {
+      req.resume();
+      req.on('end', () => {
+        const id = pathname.includes('/case/files/') ? 'sess-file-1' : 'sess-900';
+        jsonOk(res, sessionJson(id, '夹具会话'));
+      });
+      return;
+    }
+    const createFile = pathname.match(/\/api\/v1\/chat\/sessions\/([^/]+)\/files$/);
+    if (createFile) {
+      readBody(req).then((buf) => {
+        let filename = 'notes.txt';
+        let mimeType = 'text/plain';
+        let fileSize = 5;
+        try {
+          const parsed = JSON.parse(buf.toString('utf8') || '{}');
+          filename = parsed.filename || filename;
+          mimeType = parsed.mime_type || mimeType;
+          fileSize = Number(parsed.file_size || fileSize);
+        } catch {
+          // keep defaults
+        }
+        fileEvent('presign');
+        filesState.file = {
+          binding_id: 'bind-file-1',
+          document_id: 'doc-file-1',
+          file_name: filename,
+          mime_type: mimeType,
+          file_size: fileSize,
+          status: 'pending',
+          created_at: '2026-09-04T00:00:00Z',
+        };
+        jsonOk(res, {
+          document_id: 'doc-file-1',
+          upload_url: `http://127.0.0.1:${PORT}${pathname.includes('/case/files/') ? '/case/files' : ''}/upload/doc-file-1`,
+          status: 'pending',
+        });
+      });
+      return;
+    }
+    const completeMatch = pathname.match(/\/api\/v1\/documents\/([^/]+)\/complete-upload$/);
+    if (completeMatch) {
+      req.resume();
+      req.on('end', () => {
+        fileEvent('complete');
+        if (filesState.file && filesState.file.document_id === decodeURIComponent(completeMatch[1])) {
+          filesState.file = { ...filesState.file, status: 'completed' };
+        }
+        jsonOk(res, { status: 'completed' });
+      });
+      return;
+    }
+    const reindexMatch = pathname.match(/\/api\/v1\/documents\/([^/]+)\/reindex$/);
+    if (reindexMatch) {
+      req.resume();
+      req.on('end', () => {
+        if (filesState.file && filesState.file.document_id === decodeURIComponent(reindexMatch[1])) {
+          filesState.file = { ...filesState.file, status: 'completed' };
+        }
+        jsonOk(res, { status: 'queued' });
+      });
+      return;
+    }
+
+    // 读出 chat JSON，供 scope bar 断言 capabilities / agent_type
+    readBody(req).then((buf) => {
+      try {
+        state.lastChatBody = JSON.parse(buf.toString('utf8') || '{}');
+      } catch {
+        state.lastChatBody = null;
+      }
       state.requests += 1;
       state.lastAuthorization = req.headers.authorization || null;
       if (url.pathname === '/case/401/api/v1/chat') {
@@ -421,6 +621,10 @@ const server = http.createServer((req, res) => {
       }
       if (url.pathname === '/case/progress/api/v1/chat') {
         streamProgress(req, res);
+        return;
+      }
+      if (url.pathname === '/case/files/api/v1/chat') {
+        streamShortOk(req, res, 'sess-file-1');
         return;
       }
       if (url.pathname === '/api/v1/chat') {

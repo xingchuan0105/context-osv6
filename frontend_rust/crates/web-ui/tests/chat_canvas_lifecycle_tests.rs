@@ -613,6 +613,31 @@ fn test_quick_chat_request_contract_shape() {
     assert!(json.get("request_id").is_none());
 }
 
+#[test]
+fn test_prepare_user_turn_with_search_capability() {
+    let mut canvas = ChatCanvasModel::new();
+    let turn = canvas.prepare_user_turn_with(
+        "检索网页",
+        &["search".to_string(), "unknown".to_string()],
+    );
+    assert_eq!(turn.request.agent_type, "search");
+    assert_eq!(turn.request.capabilities, Some(vec!["search".to_string()]));
+}
+
+#[test]
+fn test_retry_last_uses_current_capabilities() {
+    let mut canvas = ChatCanvasModel::new();
+    let first = canvas.prepare_user_turn("需要重试的问题");
+    assert_eq!(first.request.capabilities, Some(vec![]));
+    assert!(canvas.cancel());
+    let retry = canvas
+        .retry_last_with(&["search".to_string()])
+        .expect("retry");
+    assert_eq!(retry.request.agent_type, "search");
+    assert_eq!(retry.request.capabilities, Some(vec!["search".to_string()]));
+    assert_eq!(retry.request.query, "需要重试的问题");
+}
+
 fn sample_session(id: &str) -> ChatSession {
     ChatSession {
         id: id.to_string(),

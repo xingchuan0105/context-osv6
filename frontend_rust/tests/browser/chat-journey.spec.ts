@@ -36,6 +36,11 @@ async function fixtureState(request: import('@playwright/test').APIRequestContex
     requests: number;
     bytesWritten: number;
     lastAuthorization: string | null;
+    lastChatBody: {
+      capabilities?: string[];
+      agent_type?: string;
+      query?: string;
+    } | null;
   }>;
 }
 
@@ -51,6 +56,8 @@ test.describe('SSR smoke（Gate D）', () => {
       expect(html).toContain('发送');
       expect(html).toContain('停止');
       expect(html).toContain('重试');
+      expect(html).toContain('知识库');
+      expect(html).toContain('网络搜索');
       // 不再是占位壳，且带 hydration 接线
       expect(html).not.toContain('Context-OS Chat PoC');
       expect(html).toMatch(/\/pkg\/web_ui[^"']*\.js/);
@@ -151,6 +158,118 @@ test.describe('进度与推理终态折叠（W2）', () => {
   });
 });
 
+test.describe('会话文件（W2.4）', () => {
+  test.beforeEach(async ({ request }) => {
+    await request.post(`${FIXTURE_BASE}/admin/reset`);
+  });
+
+  test('上传后出现就绪文件，URL 落到新会话，发送可用', async ({ page, request }) => {
+    const errors = collectPageErrors(page);
+    await gotoChat(page, `${FIXTURE_BASE}/case/files`, '/chat', 'poc-test-token');
+    await expect(page.getByTestId('session-file-attach')).toBeEnabled();
+    const fileInput = page.getByTestId('session-file-input');
+    await expect(fileInput).toHaveAttribute('data-listening', 'true', { timeout: 15_000 });
+
+    await fileInput.setInputFiles({
+      name: 'notes.txt',
+      mimeType: 'text/plain',
+      buffer: Buffer.from('hello'),
+    });
+    await fileInput.dispatchEvent('change');
+
+    await expect(page).toHaveURL(/\/chat\/sess-file-1$/, { timeout: 15_000 });
+    const item = page.getByTestId('session-file-item');
+    await expect(item).toContainText('notes.txt', { timeout: 15_000 });
+    await expect(page.getByTestId('session-file-status')).toHaveText('就绪', { timeout: 15_000 });
+    await expect(page.getByTestId('session-file-blocked')).toHaveCount(0);
+
+    await expect(page.getByTestId('scope-cap-rag')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByTestId('scope-mode-line')).toContainText('知识库');
+
+    await page.getByTestId('composer-input').fill('文件已就绪');
+    await expect(page.getByTestId('send-button')).toBeEnabled();
+    await page.getByTestId('send-button').click();
+    await expect(page.getByTestId('status-line')).toHaveText('已完成', { timeout: 15_000 });
+    const state = await fixtureState(request);
+    expect(state.lastChatBody?.capabilities).toEqual(['rag']);
+    expect(state.lastChatBody?.agent_type).toBe('rag');
+    expect(errors).toEqual([]);
+  });
+
+  test('移除最后一份就绪文件后自动关掉知识库', async ({ page }) => {
+    const errors = collectPageErrors(page);
+    await gotoChat(page, `${FIXTURE_BASE}/case/files`, '/chat', 'poc-test-token');
+    const fileInput = page.getByTestId('session-file-input');
+    await expect(fileInput).toHaveAttribute('data-listening', 'true', { timeout: 15_000 });
+    await fileInput.setInputFiles({
+      name: 'notes.txt',
+      mimeType: 'text/plain',
+      buffer: Buffer.from('hello'),
+    });
+    await fileInput.dispatchEvent('change');
+    await expect(page.getByTestId('session-file-status')).toHaveText('就绪', { timeout: 15_000 });
+    await expect(page.getByTestId('scope-cap-rag')).toHaveAttribute('aria-pressed', 'true');
+
+    await page.getByTestId('session-file-remove').click();
+    await expect(page.getByTestId('session-file-item')).toHaveCount(0, { timeout: 15_000 });
+    await expect(page.getByTestId('scope-cap-rag')).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.getByTestId('scope-mode-line')).toContainText('未添加会话文件');
+    expect(errors).toEqual([]);
+  });
+
+  test('解析中的会话文件挡住发送', async ({ page }) => {
+    const errors = collectPageErrors(page);
+    await gotoChat(page, `${FIXTURE_BASE}/case/files-busy`, '/chat/sess-busy', 'poc-test-token');
+    await expect(page.getByTestId('session-file-item')).toContainText('busy.pdf');
+    await expect(page.getByTestId('session-file-status')).toHaveText('解析中');
+    await expect(page.getByTestId('session-file-blocked')).toBeVisible();
+    await page.getByTestId('composer-input').fill('还不能发');
+    await expect(page.getByTestId('send-button')).toBeDisabled();
+    expect(errors).toEqual([]);
+  });
+});
+
+test.describe('能力标签（W2.5）', () => {
+  test.beforeEach(async ({ request }) => {
+    await request.post(`${FIXTURE_BASE}/admin/reset`);
+  });
+
+  test('默认发送仍是空 capabilities / chat', async ({ page, request }) => {
+    const errors = collectPageErrors(page);
+    await gotoChat(page, `${FIXTURE_BASE}/case/markdown`);
+    await expect(page.getByTestId('scope-cap-rag')).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.getByTestId('scope-cap-search')).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.getByTestId('scope-mode-line')).toContainText('未添加会话文件');
+
+    await page.getByTestId('scope-cap-rag').click();
+    await expect(page.getByTestId('scope-cap-rag')).toHaveAttribute('aria-pressed', 'false');
+
+    await page.getByTestId('composer-input').fill('默认聊天');
+    await page.getByTestId('send-button').click();
+    await expect(page.getByTestId('status-line')).toHaveText('已完成', { timeout: 15_000 });
+    const state = await fixtureState(request);
+    expect(state.lastChatBody?.capabilities).toEqual([]);
+    expect(state.lastChatBody?.agent_type).toBe('chat');
+    expect(errors).toEqual([]);
+  });
+
+  test('点开网络搜索后发送带 search', async ({ page, request }) => {
+    const errors = collectPageErrors(page);
+    await gotoChat(page, `${FIXTURE_BASE}/case/markdown`);
+    await page.getByTestId('scope-cap-search').click();
+    await expect(page.getByTestId('scope-cap-search')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByTestId('scope-mode-line')).toContainText('网络搜索');
+
+    await page.getByTestId('composer-input').fill('开搜索');
+    await page.getByTestId('send-button').click();
+    await expect(page.getByTestId('status-line')).toHaveText('已完成', { timeout: 15_000 });
+    const state = await fixtureState(request);
+    expect(state.lastChatBody?.capabilities).toEqual(['search']);
+    expect(state.lastChatBody?.agent_type).toBe('search');
+    expect(errors).toEqual([]);
+  });
+});
+
 test.describe('浏览器聊天旅程（Gate C/D）', () => {
   test.beforeEach(async ({ request }) => {
     await request.post(`${FIXTURE_BASE}/admin/reset`);
@@ -190,6 +309,8 @@ test.describe('浏览器聊天旅程（Gate C/D）', () => {
     // Bearer 头只在 token 非空时注入
     const state = await fixtureState(request);
     expect(state.lastAuthorization).toBe('Bearer poc-test-token');
+    expect(state.lastChatBody?.capabilities).toEqual([]);
+    expect(state.lastChatBody?.agent_type).toBe('chat');
 
     expect(errors).toEqual([]);
   });

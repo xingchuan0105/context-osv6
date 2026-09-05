@@ -8,6 +8,8 @@ pub mod fixture_transport;
 pub mod citations;
 pub mod markdown;
 pub mod progress;
+pub mod scope;
+pub mod session_files;
 pub mod reducer;
 pub mod sse_decoder;
 pub mod transport;
@@ -32,6 +34,16 @@ pub use fixture_transport::FixtureTransport;
 pub use citations::{CitationView, RenderedAnswer, SourceCard, render_assistant_answer};
 pub use markdown::render_assistant_markdown;
 pub use progress::{activities_for_display, progress_folded, progress_summary_label};
+pub use scope::{
+    Capability, capabilities_to_wire, derive_agent_type_label, mode_line, normalize_capabilities,
+    reconcile_session_rag, toggle_capability,
+};
+pub use session_files::{
+    SESSION_FILE_ACCEPT, TrayFileStatus, complete_upload_url, create_session_json, create_upload_json,
+    files_block_send, parse_session_files, parse_upload_response, ready_file_count,
+    reindex_document_url, resolve_upload_url, session_file_url, session_files_url, tray_status,
+    tray_status_attr, tray_status_label,
+};
 pub use reducer::{
     ActivityEntry, ChatTurnState, TurnStatus, event_request_id, reduce_chat_event,
 };

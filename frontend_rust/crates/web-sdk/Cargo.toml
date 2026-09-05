@@ -33,6 +33,7 @@ web-sys = { workspace = true, features = [
     "HtmlDocument",
     "Location",
     "Window",
+    "Blob",
 ] }
 wasm-streams = { workspace = true }
 

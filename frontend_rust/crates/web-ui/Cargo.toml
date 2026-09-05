@@ -23,7 +23,19 @@ wasm-bindgen = { workspace = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 js-sys = { workspace = true }
-web-sys = { workspace = true, features = ["Window", "Location", "Document", "Element"] }
+wasm-bindgen-futures = { workspace = true }
+web-sys = { workspace = true, features = [
+    "Window",
+    "Location",
+    "Document",
+    "Element",
+    "HtmlInputElement",
+    "File",
+    "FileList",
+    "Blob",
+    "Event",
+    "EventTarget",
+] }
 
 [features]
 default = []
