@@ -38,4 +38,4 @@
 | E3.4.3 | 实现拦截墙与成功回跳页 (`/upgrade/paywall`, `/upgrade/success`) | 已完成 | `paywall_page.rs`, `success_page.rs` |
 | E3.4.4 | 实现桌面端购买引导页 (`/desktop/buy`) | 已完成 | `desktop_buy_page.rs` 免费客户端与云端升级说明 |
 | E3.4.5 | 路由挂载、样式集成与自动化测试断言 | 已完成 | `billing-journey.spec.ts` 3/3, 全量 38/38 passed |
-| E3.4.6 | 验证收敛、图谱更新与本地提交 | 进行中 | 待提交本地 commit |
+| E3.4.6 | 验证收敛、图谱更新与本地提交 | 已完成 | 图谱已更新 (19 files)，本地提交 `82076d9b` (E3.4 达成) |
