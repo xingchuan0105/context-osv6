@@ -35,4 +35,4 @@
 | W2.6.2 | UI 模型标牌与模型角色呈现：`ModelRoleBadge` | 已完成 | `web-ui/src/components/chat/model_badge.rs` 与 CSS 集成 |
 | W2.6.3 | 历史恢复与切换一致性测试 | 已完成 | `chat_canvas_lifecycle_tests.rs` 31/31 passed |
 | W2.6.4 | Playwright 浏览器旅程与 Mock SSE 扩展 | 已完成 | `chat-journey.spec.ts` 19/19 passed |
-| W2.6.5 | 验证收敛、图谱更新与本地提交 | 进行中 | 待执行提交 |
+| W2.6.5 | 验证收敛、图谱更新与本地提交 | 已完成 | 图谱已更新 (20 files)，本地提交 `774c3b3a` (W2.6 达成) |
