@@ -1,14 +1,14 @@
-# Rust 前端与桌面宿主库交接文档 (E0–E3.4 交付与下一棒指引)
+# Rust 前端与桌面宿主库交接文档 (E0–E3.5 交付与下一棒指引)
 
 | 字段 | 内容 |
 |---|---|
 | 日期 | 2026-09-05 |
 | 状态 | **Active（现行有效交接文档）** |
-| 当前 HEAD | `81de3587`（相对本地 origin 领先 60 个提交） |
+| 当前 HEAD | `81de3587`（E3.4 时点；E3.5 已在其上完成，见 git log 与任务记录） |
 | 权威计划 | [`2026-09-05-development-execution-plan.md`](2026-09-05-development-execution-plan.md) |
 | 全量路由矩阵 | [`docs/design/ROUTE_MIGRATION_MATRIX.md`](../design/ROUTE_MIGRATION_MATRIX.md) (71 个真实端点) |
-| 达成门禁 | **Gate 0 (G0)**、**Gate 1 (G1)**、**Gate 2 (G2)** 达成；**D0.1** 完成；**E3.1–E3.4** 完成 |
-| 下一棒任务 | **E3.5**（`/admin/*` 管理后台运维 13 端点与应用内帮助 2 端点，冲刺 **Gate 3**） |
+| 达成门禁 | **Gate 0 (G0)**、**Gate 1 (G1)**、**Gate 2 (G2)** 达成；**D0.1** 完成；**E3.1–E3.5 完成，G3 达成** |
+| 下一棒任务 | **E4**（W4 公共 SSR / SEO / 双语） |
 
 ---
 
@@ -29,12 +29,13 @@
 | **E3.2** | `03bb02a6` | `/dashboard` 概览与弹窗建库、`/dashboard/:id` 工作台与右侧轨（持久资料+笔记）、分析与统计两端点 | [`2026-09-05-e3-2-dashboard-workspace-task.md`](2026-09-05-e3-2-dashboard-workspace-task.md) |
 | **E3.3** | `65ab035a` | 工作区分享中心三端点、公开只读知识库问答 (`/shared/kb/:token`)、分享者公开主页与工作区邀请加入页面 | [`2026-09-05-e3-3-share-invite-task.md`](2026-09-05-e3-3-share-invite-task.md) |
 | **E3.4** | `82076d9b` | 套餐定价对比 (`/pricing`)、钱包充值面板 (`#topup`)、拦截墙 (`/upgrade/paywall`)、成功回跳与桌面购买说明 | [`2026-09-05-e3-4-billing-pricing-task.md`](2026-09-05-e3-4-billing-pricing-task.md) |
+| **E3.5** | 本切片提交 | `/admin/*` 管理后台 13 端点（门禁 401→login?next / 403→无权面板、分页、空态、CSV 导出、变更请求复核闭环）与 `/help`、`/help/write` 应用内帮助；**G3 达成** | [`2026-09-05-e3-5-admin-help-task.md`](2026-09-05-e3-5-admin-help-task.md) |
 
 ---
 
 ## 2. 架构现状与已挂载路由清单
 
-当前 `frontend_rust` 已挂载并实现 **24 个产品端点**，涵盖对话、工作区、分享、公开知识库、主页、邀请、认证、设置、定价与交易全链路：
+当前 `frontend_rust` 已挂载并实现 **39 个产品端点**，涵盖对话、工作区、分享、公开知识库、主页、邀请、认证、设置、定价与交易、管理后台运维与应用内帮助全链路：
 
 ```text
 /                                   -> Redirect to /chat
@@ -57,6 +58,21 @@
 /settings                           -> SettingsPage (设置主页与退出登录)
 /settings?tab=providers             -> ProvidersPanel (四大模型 BYOK 密钥配置与撤销)
 /settings/usage                     -> UsagePage (用量总览只读页)
+/admin                              -> AdminOverviewPage (管理后台概览入口网格)
+/admin/accounts                     -> AdminAccountsPage (账户列表与客户端分页)
+/admin/accounts/:owner_user_id      -> AdminAccountDetailPage (账户详情与封禁/解封)
+/admin/users                        -> AdminUsersPage (按 owner 查询用户与两步确认删除)
+/admin/usage                        -> AdminUsagePage (账户用量监控 owner+period)
+/admin/billing                      -> AdminBillingPage (全平台计费概览)
+/admin/health                       -> AdminHealthPage (服务健康检查)
+/admin/rag-health                   -> AdminRagHealthPage (RAG 检索质量与降级指标)
+/admin/system/workers               -> AdminWorkersPage (后台队列与 Worker 状态)
+/admin/system/degradation           -> AdminDegradationPage (服务降级观测)
+/admin/broadcast                    -> AdminBroadcastPage (全平台公告广播)
+/admin/audit-logs                   -> AdminAuditLogsPage (审计日志过滤/分页/CSV 导出)
+/admin/feature-flags                -> AdminFeatureFlagsPage (功能开关与变更请求复核)
+/help                               -> HelpPage (应用内帮助中心)
+/help/write                         -> HelpWritePage (长文与提示词编写建议)
 /pricing                            -> PricingPage (套餐对比与钱包充值面板)
 /upgrade/paywall                    -> PaywallPage (配额与高级会员拦截墙说明)
 /upgrade/success                    -> UpgradeSuccessPage (支付成功回跳与订单查询)
@@ -77,44 +93,22 @@
 
 | 验证维度 | 命令与覆盖 | 结果 |
 |---|---|:---:|
-| **Rust 模型与集成测试** | `CARGO_BUILD_JOBS=2 cargo test -p web-sdk -p web-ui` | **14 个测试套件，101 passed / 0 failed** |
+| **Rust 模型与集成测试** | `CARGO_BUILD_JOBS=2 cargo test -p web-sdk -p web-ui` | **24 个测试套件，120 passed / 0 failed** |
 | **desktop-core 单元测试** | `CARGO_BUILD_JOBS=2 cargo test --manifest-path desktop/core/Cargo.toml` | **4 passed / 0 failed** (中文跨 chunk 切片测试通过) |
 | **SSR 检查** | `cargo check -p web-server --features ssr` | **exit code 0** |
 | **WASM Hydrate 检查** | `cargo check -p web-ui --target wasm32-unknown-unknown --features hydrate` | **exit code 0** |
 | **Tauri 宿主检查** | `cargo +1.96.1 check --manifest-path desktop/src-tauri/Cargo.toml` | **exit code 0** |
 | **设计系统样式守卫** | `cargo test -p web-ui --test style_baseline_guard` | **1 passed** (无字重 ≥500、无裸十六进制、无未授权阴影) |
-| **Playwright 端到端旅程** | `pnpm exec playwright test (4 个 spec 文件)` | **全量 38 项测试 100% passed** (耗时 33.7s) |
+| **Playwright 端到端旅程** | `pnpm exec playwright test (9 个 spec 文件)` | **全量 48 项测试 100% passed** |
 | **Live Backend Smoke** | `LIVE_BACKEND=1 LIVE_API_BASE=http://127.0.0.1:18081 pnpm exec playwright test --config playwright.live.config.ts` | **2 passed / 0 failed** (真实 API 对接通过) |
 
 ---
 
-## 4. 下一棒执行指南：E3.5 (管理后台运维与应用内帮助)
+## 4. 下一棒执行指南：E4 (W4 公共 SSR / SEO / 双语)
 
-### 4.1 目标任务与范围
-依据全量路由矩阵（`ROUTE_MIGRATION_MATRIX.md`），E3.5 负责交付剩余的 15 个端点，达成 **Gate 3 (G3)**：
-1. **管理后台路由族 (13 端点)**：
-   - `/admin`：管理后台概览
-   - `/admin/users`：用户管理列表
-   - `/admin/accounts` 与 `/admin/accounts/:owner_user_id`：账户详情与管理
-   - `/admin/billing`：全平台计费账单
-   - `/admin/usage`：全平台模型 Token 消耗监控
-   - `/admin/health`：基础设施与服务健康检查
-   - `/admin/rag-health`：RAG 检索质量与降级指标
-   - `/admin/system/workers`：后台异步队列与 Worker 节点状态
-   - `/admin/system/degradation`：服务降级策略配置
-   - `/admin/broadcast`：全平台系统公告广播
-   - `/admin/audit-logs`：管理审计操作日志
-   - `/admin/feature-flags`：功能灰度开关配置
-2. **应用内帮助路由族 (2 端点)**：
-   - `/help`：应用内使用帮助中心
-   - `/help/write`：长文与提示词编写建议指引
+E3.5 已完成并达成 **G3**（见 §1 任务记录与 [`2026-09-05-e3-5-admin-help-task.md`](2026-09-05-e3-5-admin-help-task.md)）。下一棒为 E4：公共 SSR 页面族（`/help/faq`、`/help/compare`、`/help/api-access*`、`/integrations/*`）、SEO/sitemap 与双语（`/en/*`）迁移，范围以权威计划 §6 E4 与 `ROUTE_MIGRATION_MATRIX.md` §8/§9 为准。
 
-### 4.2 核心完成标准与门禁要求 (Gate 3)
-- **非 Admin 权限拦截**：未登录用户导向 `/login?next=...`，非 admin 角色返回 403 友好无权访问提示；
-- **空态与分页**：所有管理列表支持空态呈现与基本分页；
-- **不留死路径**：管理后台所有入口形成闭环，达成 **Gate 3 (G3)** 后即可开启 **E4 (W4 公共 SSR / SEO / 双语)**。
-
-### 4.3 常用命令与操作提示
+### 4.1 常用命令与操作提示
 - **构建工作目录**：`frontend_rust`
 - **WASM bindgen CLI 锁定版本**：构建前必须确保使用 0.2.127：
   ```bash
@@ -130,3 +124,4 @@
   code-review-graph update
   ```
 - **Time-cost consent 准则**：在启动耗时编译或测试脚本前，先向用户呈报时间预算并取得授权。
+- **遗留问题**：`contracts::admin` 与后端 `admin_domain.rs` 的 DTO 分叉（OrgRow/UserRow/AdminUsageResponse/WorkerStatusResponse/RagHealthStatus/HealthResponse）待另立切片修复；web-sdk 管理端 DTO 目前本地定义于 `web-sdk/src/admin_api.rs`。

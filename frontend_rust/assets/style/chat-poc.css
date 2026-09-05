@@ -1795,3 +1795,407 @@
     border-radius: var(--cos-radius-sm);
     margin: 0;
 }
+
+/* ---------- E3.5 管理后台 (admin) ---------- */
+
+.admin-shell {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    max-width: 64rem;
+    margin: 0 auto;
+    padding: 1.5rem 1rem 3rem;
+}
+
+.admin-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.admin-header-left {
+    display: flex;
+    align-items: baseline;
+    gap: 1rem;
+}
+
+.admin-back-link {
+    color: var(--cos-text-secondary);
+    font-size: 0.875rem;
+    text-decoration: none;
+}
+
+.admin-back-link:hover {
+    color: var(--cos-text);
+}
+
+.admin-title {
+    font-size: 1.25rem;
+    margin: 0;
+}
+
+.admin-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.admin-nav-item {
+    border: 1px solid var(--cos-border);
+    background: var(--cos-surface);
+    color: var(--cos-text-secondary);
+    border-radius: var(--cos-radius-sm);
+    padding: 0.375rem 0.75rem;
+    font-size: 0.8125rem;
+    text-decoration: none;
+}
+
+.admin-nav-item:hover {
+    color: var(--cos-text);
+    border-color: var(--cos-border-strong, var(--cos-border));
+}
+
+.admin-nav-item.is-active {
+    background: var(--cos-accent-soft, var(--cos-bg-secondary));
+    color: var(--cos-text);
+    border-color: var(--cos-accent, var(--cos-border));
+}
+
+.admin-content {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.admin-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    background: var(--cos-surface);
+    border: 1px solid var(--cos-border);
+    border-radius: var(--cos-radius-md);
+    padding: 1rem;
+}
+
+.admin-forbidden {
+    align-items: center;
+    text-align: center;
+    gap: 1rem;
+    padding: 2rem 1rem;
+}
+
+.admin-panel-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.admin-panel-title {
+    font-size: 1rem;
+    margin: 0;
+}
+
+.admin-panel-desc {
+    font-size: 0.8125rem;
+    color: var(--cos-text-secondary);
+    margin: 0;
+    width: 100%;
+}
+
+.admin-panel-meta {
+    font-size: 0.8125rem;
+    color: var(--cos-text-secondary);
+}
+
+.admin-panel-btn,
+.admin-table-link,
+.admin-table-danger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--cos-border);
+    background: var(--cos-bg-secondary);
+    color: var(--cos-text);
+    border-radius: var(--cos-radius-sm);
+    padding: 0.375rem 0.75rem;
+    font-size: 0.8125rem;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.admin-table-link {
+    background: var(--cos-surface);
+}
+
+.admin-table-danger {
+    color: var(--cos-danger, var(--cos-text));
+}
+
+.admin-panel-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.admin-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.admin-error {
+    color: var(--cos-danger, var(--cos-text));
+    font-size: 0.875rem;
+    margin: 0;
+}
+
+.admin-success {
+    color: var(--cos-success, var(--cos-text));
+    font-size: 0.875rem;
+    margin: 0;
+}
+
+.admin-loading,
+.admin-empty,
+.admin-empty-text {
+    color: var(--cos-text-secondary);
+    font-size: 0.875rem;
+    margin: 0;
+}
+
+.admin-link-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+    gap: 0.75rem;
+}
+
+.admin-link-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    border: 1px solid var(--cos-border);
+    background: var(--cos-bg-secondary);
+    border-radius: var(--cos-radius-md);
+    padding: 0.75rem;
+    text-decoration: none;
+}
+
+.admin-link-card:hover {
+    border-color: var(--cos-accent, var(--cos-border));
+}
+
+.admin-link-card-label {
+    color: var(--cos-text);
+    font-size: 0.875rem;
+}
+
+.admin-link-card-href {
+    color: var(--cos-text-subtle);
+    font-family: monospace;
+    font-size: 0.75rem;
+}
+
+.admin-table-wrap {
+    overflow-x: auto;
+}
+
+.admin-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8125rem;
+}
+
+.admin-table th,
+.admin-table td {
+    text-align: left;
+    border-bottom: 1px solid var(--cos-border);
+    padding: 0.5rem 0.625rem;
+    white-space: nowrap;
+}
+
+.admin-table th {
+    color: var(--cos-text-secondary);
+}
+
+.admin-table-mono {
+    font-family: monospace;
+}
+
+.admin-stat-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.admin-stat-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    border-bottom: 1px solid var(--cos-border);
+    padding: 0.5rem 0;
+}
+
+.admin-stat-row:last-child {
+    border-bottom: none;
+}
+
+.admin-stat-label {
+    color: var(--cos-text-secondary);
+    font-size: 0.8125rem;
+}
+
+.admin-stat-value {
+    color: var(--cos-text);
+    font-size: 0.875rem;
+}
+
+.admin-filter-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.admin-filter-input {
+    border: 1px solid var(--cos-border);
+    background: var(--cos-surface);
+    color: var(--cos-text);
+    border-radius: var(--cos-radius-sm);
+    padding: 0.375rem 0.625rem;
+    font-size: 0.8125rem;
+}
+
+.admin-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    max-width: 32rem;
+}
+
+.admin-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.admin-field-label {
+    color: var(--cos-text-secondary);
+    font-size: 0.8125rem;
+}
+
+.admin-field input,
+.admin-field textarea {
+    border: 1px solid var(--cos-border);
+    background: var(--cos-surface);
+    color: var(--cos-text);
+    border-radius: var(--cos-radius-sm);
+    padding: 0.5rem 0.625rem;
+    font-size: 0.875rem;
+}
+
+.admin-pager {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.admin-pager-btn {
+    border: 1px solid var(--cos-border);
+    background: var(--cos-bg-secondary);
+    color: var(--cos-text);
+    border-radius: var(--cos-radius-sm);
+    padding: 0.3125rem 0.625rem;
+    font-size: 0.8125rem;
+    cursor: pointer;
+}
+
+.admin-pager-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.admin-pager-label {
+    color: var(--cos-text-secondary);
+    font-size: 0.8125rem;
+}
+
+/* ---------- E3.5 应用内帮助 (help) ---------- */
+
+.help-shell {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    max-width: 48rem;
+    margin: 0 auto;
+    padding: 1.5rem 1rem 3rem;
+}
+
+.help-header {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.help-title {
+    font-size: 1.25rem;
+    margin: 0;
+}
+
+.help-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.875rem;
+}
+
+.help-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    border: 1px solid var(--cos-border);
+    background: var(--cos-surface);
+    border-radius: var(--cos-radius-md);
+    padding: 1rem;
+}
+
+.help-card-title {
+    font-size: 1rem;
+    margin: 0;
+}
+
+.help-card-desc {
+    color: var(--cos-text-secondary);
+    font-size: 0.875rem;
+    line-height: 1.6;
+    margin: 0;
+}
+
+.help-article-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    border: 1px solid var(--cos-border);
+    background: var(--cos-surface);
+    border-radius: var(--cos-radius-md);
+    padding: 1rem;
+}
+
+.help-article-section h2 {
+    font-size: 1rem;
+    margin: 0;
+}
+
+.help-article-section p {
+    color: var(--cos-text-secondary);
+    font-size: 0.875rem;
+    line-height: 1.7;
+    margin: 0;
+}
+
+.help-article-section ul {
+    color: var(--cos-text-secondary);
+    font-size: 0.875rem;
+    line-height: 1.7;
+    margin: 0;
+    padding-left: 1.25rem;
+}

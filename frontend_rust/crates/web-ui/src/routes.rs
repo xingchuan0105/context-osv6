@@ -134,7 +134,25 @@ pub fn route_family(id: &str) -> Option<&'static RouteFamily> {
     ROUTE_FAMILIES.iter().find(|family| family.id == id)
 }
 
-/// Phase 0, E3.1, E3.2, E3.3 & E3.4 已挂载路径。
+/// E3.5 已挂载的管理后台路由（admin 不属导航权威，见 PRODUCT_IA；仅登记路由解析）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AdminSection {
+    Overview,
+    Accounts,
+    AccountDetail,
+    Users,
+    Usage,
+    Billing,
+    Health,
+    RagHealth,
+    Workers,
+    Degradation,
+    Broadcast,
+    AuditLogs,
+    FeatureFlags,
+}
+
+/// Phase 0, E3.1, E3.2, E3.3, E3.4 & E3.5 已挂载路径。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AppRoute {
     Chat { session_id: Option<String> },
@@ -147,6 +165,9 @@ pub enum AppRoute {
     SharedKb { token: String },
     SharedUser { user_id: String },
     Invite { workspace_id: String, member_id: String },
+    Admin { section: AdminSection },
+    Help,
+    HelpWrite,
     Pricing,
     UpgradePaywall,
     UpgradeSuccess,
@@ -202,6 +223,47 @@ impl AppRoute {
                 workspace_id: wid.to_string(),
                 member_id: mid.to_string(),
             },
+            ["admin"] => Self::Admin {
+                section: AdminSection::Overview,
+            },
+            ["admin", "accounts"] => Self::Admin {
+                section: AdminSection::Accounts,
+            },
+            ["admin", "accounts", _] => Self::Admin {
+                section: AdminSection::AccountDetail,
+            },
+            ["admin", "users"] => Self::Admin {
+                section: AdminSection::Users,
+            },
+            ["admin", "usage"] => Self::Admin {
+                section: AdminSection::Usage,
+            },
+            ["admin", "billing"] => Self::Admin {
+                section: AdminSection::Billing,
+            },
+            ["admin", "health"] => Self::Admin {
+                section: AdminSection::Health,
+            },
+            ["admin", "rag-health"] => Self::Admin {
+                section: AdminSection::RagHealth,
+            },
+            ["admin", "system", "workers"] => Self::Admin {
+                section: AdminSection::Workers,
+            },
+            ["admin", "system", "degradation"] => Self::Admin {
+                section: AdminSection::Degradation,
+            },
+            ["admin", "broadcast"] => Self::Admin {
+                section: AdminSection::Broadcast,
+            },
+            ["admin", "audit-logs"] => Self::Admin {
+                section: AdminSection::AuditLogs,
+            },
+            ["admin", "feature-flags"] => Self::Admin {
+                section: AdminSection::FeatureFlags,
+            },
+            ["help"] => Self::Help,
+            ["help", "write"] => Self::HelpWrite,
             ["pricing"] => Self::Pricing,
             ["upgrade", "paywall"] => Self::UpgradePaywall,
             ["upgrade", "success"] => Self::UpgradeSuccess,
@@ -220,7 +282,92 @@ impl AppRoute {
 
 #[cfg(test)]
 mod tests {
-    use super::AppRoute;
+    use super::{AdminSection, AppRoute};
+
+    #[test]
+    fn admin_and_help_routes_are_canonical() {
+        assert_eq!(
+            AppRoute::parse("/admin"),
+            AppRoute::Admin {
+                section: AdminSection::Overview
+            }
+        );
+        assert_eq!(
+            AppRoute::parse("/admin/accounts"),
+            AppRoute::Admin {
+                section: AdminSection::Accounts
+            }
+        );
+        assert_eq!(
+            AppRoute::parse("/admin/accounts/ow-1"),
+            AppRoute::Admin {
+                section: AdminSection::AccountDetail
+            }
+        );
+        assert_eq!(
+            AppRoute::parse("/admin/users"),
+            AppRoute::Admin {
+                section: AdminSection::Users
+            }
+        );
+        assert_eq!(
+            AppRoute::parse("/admin/usage"),
+            AppRoute::Admin {
+                section: AdminSection::Usage
+            }
+        );
+        assert_eq!(
+            AppRoute::parse("/admin/billing"),
+            AppRoute::Admin {
+                section: AdminSection::Billing
+            }
+        );
+        assert_eq!(
+            AppRoute::parse("/admin/health"),
+            AppRoute::Admin {
+                section: AdminSection::Health
+            }
+        );
+        assert_eq!(
+            AppRoute::parse("/admin/rag-health"),
+            AppRoute::Admin {
+                section: AdminSection::RagHealth
+            }
+        );
+        assert_eq!(
+            AppRoute::parse("/admin/system/workers"),
+            AppRoute::Admin {
+                section: AdminSection::Workers
+            }
+        );
+        assert_eq!(
+            AppRoute::parse("/admin/system/degradation"),
+            AppRoute::Admin {
+                section: AdminSection::Degradation
+            }
+        );
+        assert_eq!(
+            AppRoute::parse("/admin/broadcast"),
+            AppRoute::Admin {
+                section: AdminSection::Broadcast
+            }
+        );
+        assert_eq!(
+            AppRoute::parse("/admin/audit-logs"),
+            AppRoute::Admin {
+                section: AdminSection::AuditLogs
+            }
+        );
+        assert_eq!(
+            AppRoute::parse("/admin/feature-flags"),
+            AppRoute::Admin {
+                section: AdminSection::FeatureFlags
+            }
+        );
+        assert_eq!(AppRoute::parse("/help"), AppRoute::Help);
+        assert_eq!(AppRoute::parse("/help/write"), AppRoute::HelpWrite);
+        assert_eq!(AppRoute::parse("/admin/nope"), AppRoute::NotFound);
+    }
 
     #[test]
     fn chat_routes_are_canonical_and_root_is_not_chat() {

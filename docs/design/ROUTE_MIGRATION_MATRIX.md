@@ -75,19 +75,19 @@
 
 | # | 规范路径 (Canonical URL) | Next.js 源文件 | 鉴权 (Auth) | 渲染 (Render) | SEO / noindex | Rust 挂载状态 | 归属阶段 |
 |---|---|---|---|---|---|---|---|
-| 24 | `/admin` | `app/admin/page.tsx` | 必需 (admin) | SSR + Hydrate | noindex | 待挂载 | E3.5 |
-| 25 | `/admin/accounts` | `app/admin/accounts/page.tsx` | 必需 (admin) | SSR + Hydrate | noindex | 待挂载 | E3.5 |
-| 26 | `/admin/accounts/:owner_user_id` | `app/admin/accounts/[owner_user_id]/page.tsx` | 必需 (admin) | SSR + Hydrate | noindex | 待挂载 | E3.5 |
-| 27 | `/admin/audit-logs` | `app/admin/audit-logs/page.tsx` | 必需 (admin) | SSR + Hydrate | noindex | 待挂载 | E3.5 |
-| 28 | `/admin/billing` | `app/admin/billing/page.tsx` | 必需 (admin) | SSR + Hydrate | noindex | 待挂载 | E3.5 |
-| 29 | `/admin/broadcast` | `app/admin/broadcast/page.tsx` | 必需 (admin) | SSR + Hydrate | noindex | 待挂载 | E3.5 |
-| 30 | `/admin/feature-flags` | `app/admin/feature-flags/page.tsx` | 必需 (admin) | SSR + Hydrate | noindex | 待挂载 | E3.5 |
-| 31 | `/admin/health` | `app/admin/health/page.tsx` | 必需 (admin) | SSR + Hydrate | noindex | 待挂载 | E3.5 |
-| 32 | `/admin/rag-health` | `app/admin/rag-health/page.tsx` | 必需 (admin) | SSR + Hydrate | noindex | 待挂载 | E3.5 |
-| 33 | `/admin/system/degradation` | `app/admin/system/degradation/page.tsx` | 必需 (admin) | SSR + Hydrate | noindex | 待挂载 | E3.5 |
-| 34 | `/admin/system/workers` | `app/admin/system/workers/page.tsx` | 必需 (admin) | SSR + Hydrate | noindex | 待挂载 | E3.5 |
-| 35 | `/admin/usage` | `app/admin/usage/page.tsx` | 必需 (admin) | SSR + Hydrate | noindex | 待挂载 | E3.5 |
-| 36 | `/admin/users` | `app/admin/users/page.tsx` | 必需 (admin) | SSR + Hydrate | noindex | 待挂载 | E3.5 |
+| 24 | `/admin` | `app/admin/page.tsx` | 必需 (admin) | SSR + Hydrate | noindex | 已挂载 | E3.5 |
+| 25 | `/admin/accounts` | `app/admin/accounts/page.tsx` | 必需 (admin) | SSR + Hydrate | noindex | 已挂载 | E3.5 |
+| 26 | `/admin/accounts/:owner_user_id` | `app/admin/accounts/[owner_user_id]/page.tsx` | 必需 (admin) | SSR + Hydrate | noindex | 已挂载 | E3.5 |
+| 27 | `/admin/audit-logs` | `app/admin/audit-logs/page.tsx` | 必需 (admin) | SSR + Hydrate | noindex | 已挂载 | E3.5 |
+| 28 | `/admin/billing` | `app/admin/billing/page.tsx` | 必需 (admin) | SSR + Hydrate | noindex | 已挂载 | E3.5 |
+| 29 | `/admin/broadcast` | `app/admin/broadcast/page.tsx` | 必需 (admin) | SSR + Hydrate | noindex | 已挂载 | E3.5 |
+| 30 | `/admin/feature-flags` | `app/admin/feature-flags/page.tsx` | 必需 (admin) | SSR + Hydrate | noindex | 已挂载 | E3.5 |
+| 31 | `/admin/health` | `app/admin/health/page.tsx` | 必需 (admin) | SSR + Hydrate | noindex | 已挂载 | E3.5 |
+| 32 | `/admin/rag-health` | `app/admin/rag-health/page.tsx` | 必需 (admin) | SSR + Hydrate | noindex | 已挂载 | E3.5 |
+| 33 | `/admin/system/degradation` | `app/admin/system/degradation/page.tsx` | 必需 (admin) | SSR + Hydrate | noindex | 已挂载 | E3.5 |
+| 34 | `/admin/system/workers` | `app/admin/system/workers/page.tsx` | 必需 (admin) | SSR + Hydrate | noindex | 已挂载 | E3.5 |
+| 35 | `/admin/usage` | `app/admin/usage/page.tsx` | 必需 (admin) | SSR + Hydrate | noindex | 已挂载 | E3.5 |
+| 36 | `/admin/users` | `app/admin/users/page.tsx` | 必需 (admin) | SSR + Hydrate | noindex | 已挂载 | E3.5 |
 
 ---
 
@@ -95,8 +95,8 @@
 
 | # | 规范路径 (Canonical URL) | Next.js 源文件 | 鉴权 (Auth) | 渲染 (Render) | SEO / noindex | Rust 挂载状态 | 归属阶段 |
 |---|---|---|---|---|---|---|---|
-| 37 | `/help` | `app/(app)/help/page.tsx` | 公开/应用内 | SSR | indexable | 待挂载 | E3.5 |
-| 38 | `/help/write` | `app/(app)/help/write/page.tsx` | 公开/应用内 | SSR | indexable | 待挂载 | E3.5 |
+| 37 | `/help` | `app/(app)/help/page.tsx` | 公开/应用内 | SSR | indexable | 已挂载 | E3.5 |
+| 38 | `/help/write` | `app/(app)/help/write/page.tsx` | 公开/应用内 | SSR | indexable | 已挂载 | E3.5 |
 | 39 | `/help/faq` | `app/(open)/help/faq/page.tsx` | 公开 | SSR | indexable | 待挂载 | E4 |
 | 40 | `/help/compare` | `app/(open)/help/compare/page.tsx` | 公开 | SSR | indexable | 待挂载 | E4 |
 | 41 | `/help/api-access` | `app/(open)/help/api-access/page.tsx` | 公开 | SSR | indexable | 待挂载 | E4 |

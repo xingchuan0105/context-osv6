@@ -271,6 +271,130 @@ impl BrowserRestClient {
     ) -> Result<crate::billing_api::BillingOrderStatusResponse, TransportError> {
         self.unavailable()
     }
+
+    pub async fn list_admin_accounts(
+        &self,
+        _page: usize,
+        _per_page: usize,
+    ) -> Result<Vec<crate::admin_api::AdminAccountInfo>, TransportError> {
+        self.unavailable()
+    }
+
+    pub async fn get_admin_account(
+        &self,
+        _owner_user_id: &str,
+    ) -> Result<crate::admin_api::AdminAccountInfo, TransportError> {
+        self.unavailable()
+    }
+
+    pub async fn list_admin_users(
+        &self,
+        _owner_user_id: &str,
+    ) -> Result<Vec<crate::admin_api::AdminUserInfo>, TransportError> {
+        self.unavailable()
+    }
+
+    pub async fn delete_admin_user(&self, _user_id: &str) -> Result<(), TransportError> {
+        self.unavailable()
+    }
+
+    pub async fn get_admin_usage(
+        &self,
+        _owner_user_id: &str,
+        _period: &str,
+    ) -> Result<crate::admin_api::AdminUsageStats, TransportError> {
+        self.unavailable()
+    }
+
+    pub async fn block_admin_account(
+        &self,
+        _owner_user_id: &str,
+        _blocked: bool,
+    ) -> Result<(), TransportError> {
+        self.unavailable()
+    }
+
+    pub async fn get_admin_health(
+        &self,
+    ) -> Result<crate::admin_api::AdminHealthStatus, TransportError> {
+        self.unavailable()
+    }
+
+    pub async fn get_admin_billing_overview(
+        &self,
+    ) -> Result<crate::admin_api::AdminBillingOverview, TransportError> {
+        self.unavailable()
+    }
+
+    pub async fn get_admin_rag_health(
+        &self,
+    ) -> Result<crate::admin_api::AdminRagHealthStatus, TransportError> {
+        self.unavailable()
+    }
+
+    pub async fn get_admin_worker_status(
+        &self,
+    ) -> Result<crate::admin_api::AdminWorkerStatus, TransportError> {
+        self.unavailable()
+    }
+
+    pub async fn get_admin_degradation_status(
+        &self,
+    ) -> Result<crate::admin_api::AdminDegradationStatus, TransportError> {
+        self.unavailable()
+    }
+
+    pub async fn list_admin_feature_flags(
+        &self,
+    ) -> Result<Vec<crate::admin_api::AdminFeatureFlagEntry>, TransportError> {
+        self.unavailable()
+    }
+
+    pub async fn list_admin_feature_flag_change_requests(
+        &self,
+        _status: Option<&str>,
+    ) -> Result<Vec<crate::admin_api::AdminFeatureFlagChangeRequest>, TransportError> {
+        self.unavailable()
+    }
+
+    pub async fn create_admin_feature_flag_change_request(
+        &self,
+        _flag_key: &str,
+        _enabled: bool,
+        _reason: &str,
+    ) -> Result<crate::admin_api::AdminFeatureFlagChangeRequest, TransportError> {
+        self.unavailable()
+    }
+
+    pub async fn review_admin_feature_flag_change_request(
+        &self,
+        _request_id: &str,
+        _approved: bool,
+        _review_note: Option<&str>,
+    ) -> Result<crate::admin_api::AdminFeatureFlagChangeRequest, TransportError> {
+        self.unavailable()
+    }
+
+    pub async fn list_admin_audit_logs(
+        &self,
+        _query: &crate::admin_api::AdminAuditLogQuery,
+    ) -> Result<crate::admin_api::AdminAuditLogPage, TransportError> {
+        self.unavailable()
+    }
+
+    pub async fn get_admin_audit_logs_csv(
+        &self,
+        _query: &crate::admin_api::AdminAuditLogQuery,
+    ) -> Result<Vec<u8>, TransportError> {
+        self.unavailable()
+    }
+
+    pub async fn broadcast_admin_notification(
+        &self,
+        _req: &crate::admin_api::AdminBroadcastRequest,
+    ) -> Result<crate::admin_api::AdminBroadcastResult, TransportError> {
+        self.unavailable()
+    }
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -844,6 +968,273 @@ impl BrowserRestClient {
             &wasm_request::get_bytes(
                 self,
                 &crate::billing_api::order_status_url(&self.base_url, order_id),
+            )
+            .await?,
+        )
+    }
+
+    pub async fn list_admin_accounts(
+        &self,
+        page: usize,
+        per_page: usize,
+    ) -> Result<Vec<crate::admin_api::AdminAccountInfo>, TransportError> {
+        crate::admin_api::parse_admin_accounts(
+            &wasm_request::get_bytes(
+                self,
+                &crate::admin_api::admin_accounts_url(&self.base_url, page, per_page),
+            )
+            .await?,
+        )
+    }
+
+    pub async fn get_admin_account(
+        &self,
+        owner_user_id: &str,
+    ) -> Result<crate::admin_api::AdminAccountInfo, TransportError> {
+        crate::admin_api::parse_admin_account(
+            &wasm_request::get_bytes(
+                self,
+                &crate::admin_api::admin_account_url(&self.base_url, owner_user_id),
+            )
+            .await?,
+        )
+    }
+
+    pub async fn list_admin_users(
+        &self,
+        owner_user_id: &str,
+    ) -> Result<Vec<crate::admin_api::AdminUserInfo>, TransportError> {
+        crate::admin_api::parse_admin_users(
+            &wasm_request::get_bytes(
+                self,
+                &crate::admin_api::admin_users_url(&self.base_url, owner_user_id),
+            )
+            .await?,
+        )
+    }
+
+    pub async fn delete_admin_user(&self, user_id: &str) -> Result<(), TransportError> {
+        wasm_request::request_bytes(
+            self,
+            "DELETE",
+            &crate::admin_api::admin_user_url(&self.base_url, user_id),
+            None,
+            None,
+            true,
+        )
+        .await?;
+        Ok(())
+    }
+
+    pub async fn get_admin_usage(
+        &self,
+        owner_user_id: &str,
+        period: &str,
+    ) -> Result<crate::admin_api::AdminUsageStats, TransportError> {
+        crate::admin_api::parse_admin_usage(
+            &wasm_request::get_bytes(
+                self,
+                &crate::admin_api::admin_usage_url(&self.base_url, owner_user_id, period),
+            )
+            .await?,
+        )
+    }
+
+    pub async fn block_admin_account(
+        &self,
+        owner_user_id: &str,
+        blocked: bool,
+    ) -> Result<(), TransportError> {
+        let payload = serde_json::json!({
+            "owner_user_id": owner_user_id,
+            "blocked": blocked,
+        });
+        let body = serde_json::to_vec(&payload)?;
+        wasm_request::request_bytes(
+            self,
+            "POST",
+            &crate::admin_api::admin_billing_block_url(&self.base_url),
+            Some(&body),
+            Some("application/json"),
+            true,
+        )
+        .await?;
+        Ok(())
+    }
+
+    pub async fn get_admin_health(
+        &self,
+    ) -> Result<crate::admin_api::AdminHealthStatus, TransportError> {
+        crate::admin_api::parse_admin_health(
+            &wasm_request::get_bytes(self, &crate::admin_api::admin_health_url(&self.base_url))
+                .await?,
+        )
+    }
+
+    pub async fn get_admin_billing_overview(
+        &self,
+    ) -> Result<crate::admin_api::AdminBillingOverview, TransportError> {
+        crate::admin_api::parse_admin_billing(
+            &wasm_request::get_bytes(self, &crate::admin_api::admin_billing_url(&self.base_url))
+                .await?,
+        )
+    }
+
+    pub async fn get_admin_rag_health(
+        &self,
+    ) -> Result<crate::admin_api::AdminRagHealthStatus, TransportError> {
+        crate::admin_api::parse_admin_rag_health(
+            &wasm_request::get_bytes(self, &crate::admin_api::admin_rag_health_url(&self.base_url))
+                .await?,
+        )
+    }
+
+    pub async fn get_admin_worker_status(
+        &self,
+    ) -> Result<crate::admin_api::AdminWorkerStatus, TransportError> {
+        crate::admin_api::parse_admin_workers(
+            &wasm_request::get_bytes(self, &crate::admin_api::admin_workers_url(&self.base_url))
+                .await?,
+        )
+    }
+
+    pub async fn get_admin_degradation_status(
+        &self,
+    ) -> Result<crate::admin_api::AdminDegradationStatus, TransportError> {
+        crate::admin_api::parse_admin_degradation(
+            &wasm_request::get_bytes(
+                self,
+                &crate::admin_api::admin_degradation_url(&self.base_url),
+            )
+            .await?,
+        )
+    }
+
+    pub async fn list_admin_feature_flags(
+        &self,
+    ) -> Result<Vec<crate::admin_api::AdminFeatureFlagEntry>, TransportError> {
+        crate::admin_api::parse_admin_feature_flags(
+            &wasm_request::get_bytes(
+                self,
+                &crate::admin_api::admin_feature_flags_url(&self.base_url),
+            )
+            .await?,
+        )
+    }
+
+    pub async fn list_admin_feature_flag_change_requests(
+        &self,
+        status: Option<&str>,
+    ) -> Result<Vec<crate::admin_api::AdminFeatureFlagChangeRequest>, TransportError> {
+        crate::admin_api::parse_admin_feature_flag_change_requests(
+            &wasm_request::get_bytes(
+                self,
+                &crate::admin_api::admin_feature_flag_change_requests_url(
+                    &self.base_url,
+                    status,
+                ),
+            )
+            .await?,
+        )
+    }
+
+    pub async fn create_admin_feature_flag_change_request(
+        &self,
+        flag_key: &str,
+        enabled: bool,
+        reason: &str,
+    ) -> Result<crate::admin_api::AdminFeatureFlagChangeRequest, TransportError> {
+        let payload = serde_json::json!({
+            "enabled": enabled,
+            "reason": reason,
+        });
+        let body = serde_json::to_vec(&payload)?;
+        crate::admin_api::parse_admin_feature_flag_change_request(
+            &wasm_request::request_bytes(
+                self,
+                "POST",
+                &crate::admin_api::admin_feature_flag_change_request_create_url(
+                    &self.base_url,
+                    flag_key,
+                ),
+                Some(&body),
+                Some("application/json"),
+                true,
+            )
+            .await?,
+        )
+    }
+
+    pub async fn review_admin_feature_flag_change_request(
+        &self,
+        request_id: &str,
+        approved: bool,
+        review_note: Option<&str>,
+    ) -> Result<crate::admin_api::AdminFeatureFlagChangeRequest, TransportError> {
+        let payload = serde_json::json!({
+            "approved": approved,
+            "review_note": review_note,
+        });
+        let body = serde_json::to_vec(&payload)?;
+        crate::admin_api::parse_admin_feature_flag_change_request(
+            &wasm_request::request_bytes(
+                self,
+                "POST",
+                &crate::admin_api::admin_feature_flag_change_request_review_url(
+                    &self.base_url,
+                    request_id,
+                ),
+                Some(&body),
+                Some("application/json"),
+                true,
+            )
+            .await?,
+        )
+    }
+
+    pub async fn list_admin_audit_logs(
+        &self,
+        query: &crate::admin_api::AdminAuditLogQuery,
+    ) -> Result<crate::admin_api::AdminAuditLogPage, TransportError> {
+        crate::admin_api::parse_admin_audit_logs(
+            &wasm_request::get_bytes(
+                self,
+                &crate::admin_api::admin_audit_logs_url(&self.base_url, query),
+            )
+            .await?,
+        )
+    }
+
+    pub async fn get_admin_audit_logs_csv(
+        &self,
+        query: &crate::admin_api::AdminAuditLogQuery,
+    ) -> Result<Vec<u8>, TransportError> {
+        let mut export_query = query.clone();
+        export_query.page = 0;
+        export_query.per_page = 0;
+        let list_url =
+            crate::admin_api::admin_audit_logs_url(&self.base_url, &export_query);
+        let url = if list_url.contains('?') {
+            format!("{list_url}&format=csv")
+        } else {
+            format!("{list_url}?format=csv")
+        };
+        wasm_request::get_bytes(self, &url).await
+    }
+
+    pub async fn broadcast_admin_notification(
+        &self,
+        req: &crate::admin_api::AdminBroadcastRequest,
+    ) -> Result<crate::admin_api::AdminBroadcastResult, TransportError> {
+        let body = serde_json::to_vec(req)?;
+        crate::admin_api::parse_admin_broadcast(
+            &wasm_request::request_bytes(
+                self,
+                "POST",
+                &crate::admin_api::admin_broadcast_url(&self.base_url),
+                Some(&body),
+                Some("application/json"),
+                true,
             )
             .await?,
         )

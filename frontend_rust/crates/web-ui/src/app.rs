@@ -1,4 +1,9 @@
 use crate::auth::AuthBootstrap;
+use crate::components::admin::{
+    AdminAccountDetailPage, AdminAccountsPage, AdminAuditLogsPage, AdminBillingPage,
+    AdminBroadcastPage, AdminDegradationPage, AdminFeatureFlagsPage, AdminHealthPage,
+    AdminOverviewPage, AdminRagHealthPage, AdminUsagePage, AdminUsersPage, AdminWorkersPage,
+};
 use crate::components::auth::{
     LoginPage, RegisterPage, ResetPasswordConfirmPage, ResetPasswordRequestPage,
     ResetPasswordVerifyPage,
@@ -11,6 +16,7 @@ use crate::components::chat::chat_page::ChatPage;
 use crate::components::dashboard::{
     DashboardOverviewPage, GlobalAnalyticsPage, WorkspaceAnalyzePage, WorkspaceWorkbenchPage,
 };
+use crate::components::help::{HelpPage, HelpWritePage};
 use crate::components::settings::{SettingsPage, UsagePage};
 use crate::components::share::{
     InvitePage, SharedKbPage, SharedUserPage, WorkspaceShareAnalyticsPage,
@@ -65,6 +71,21 @@ pub fn App() -> impl IntoView {
                 <Route path=path!("/reset-password/confirm") view=ResetPasswordConfirmPage/>
                 <Route path=path!("/settings") view=SettingsPage/>
                 <Route path=path!("/settings/usage") view=UsagePage/>
+                <Route path=path!("/admin") view=AdminOverviewPage/>
+                <Route path=path!("/admin/accounts") view=AdminAccountsPage/>
+                <Route path=path!("/admin/accounts/:owner_user_id") view=AdminAccountDetailPage/>
+                <Route path=path!("/admin/users") view=AdminUsersPage/>
+                <Route path=path!("/admin/usage") view=AdminUsagePage/>
+                <Route path=path!("/admin/billing") view=AdminBillingPage/>
+                <Route path=path!("/admin/health") view=AdminHealthPage/>
+                <Route path=path!("/admin/rag-health") view=AdminRagHealthPage/>
+                <Route path=path!("/admin/system/workers") view=AdminWorkersPage/>
+                <Route path=path!("/admin/system/degradation") view=AdminDegradationPage/>
+                <Route path=path!("/admin/broadcast") view=AdminBroadcastPage/>
+                <Route path=path!("/admin/audit-logs") view=AdminAuditLogsPage/>
+                <Route path=path!("/admin/feature-flags") view=AdminFeatureFlagsPage/>
+                <Route path=path!("/help") view=HelpPage/>
+                <Route path=path!("/help/write") view=HelpWritePage/>
                 <Route path=path!("/pricing") view=PricingPage/>
                 <Route path=path!("/upgrade/paywall") view=PaywallPage/>
                 <Route path=path!("/upgrade/success") view=UpgradeSuccessPage/>

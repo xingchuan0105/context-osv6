@@ -79,6 +79,117 @@ let workspaceNotesState = [
   },
 ];
 
+// E3.5 管理后台夹具：accounts / users / flags / change-requests / audit-logs / broadcasts。
+function seedAdminState() {
+  const accounts = [];
+  for (let i = 1; i <= 12; i += 1) {
+    const id = `ow-${i}`;
+    accounts.push({
+      id,
+      name: i === 1 ? 'Acme 研发中心' : `测试账户 ${String(i).padStart(2, '0')}`,
+      created_at: 1725148800,
+      blocked: i === 2,
+      user_count: i,
+      document_count: i * 3,
+      query_count: i * 11,
+    });
+  }
+  return {
+    accounts,
+    users: {
+      'ow-1': [
+        { id: 'u-1', email: 'alice@acme.dev', role: 'super_admin', created_at: 1725148800 },
+        { id: 'u-2', email: 'bob@acme.dev', role: 'member', created_at: 1725235200 },
+      ],
+      'ow-3': [
+        { id: 'u-3', email: 'carol@nano.dev', role: 'member', created_at: 1725321600 },
+      ],
+    },
+    flags: [
+      {
+        key: 'rag.offline',
+        category: 'rag',
+        description: '离线检索降级开关',
+        enabled: true,
+        effective_enabled: true,
+        config_ready: true,
+        requires_config: false,
+        source: 'default',
+        updated_at: null,
+        has_pending_request: false,
+      },
+      {
+        key: 'agent.heavytail',
+        category: 'agent',
+        description: '重尾任务专用 Agent',
+        enabled: false,
+        effective_enabled: false,
+        config_ready: true,
+        requires_config: true,
+        source: 'db',
+        updated_at: 1725148800,
+        has_pending_request: true,
+      },
+    ],
+    requests: [
+      {
+        id: 'req-1',
+        flag_key: 'agent.heavytail',
+        current_enabled: false,
+        requested_enabled: true,
+        reason: '灰度上线',
+        status: 'pending',
+        requested_by: 'ow-1',
+        reviewed_by: null,
+        review_note: null,
+        created_at: 1725148800,
+        reviewed_at: null,
+        executed_at: null,
+      },
+    ],
+    auditLogs: [
+      {
+        id: 1,
+        actor_id: 'adm-1',
+        action: 'account.block',
+        resource_type: 'account',
+        resource_id: 'ow-2',
+        owner_user_id: 'ow-2',
+        created_at: 1725485000,
+      },
+      {
+        id: 2,
+        actor_id: 'adm-1',
+        action: 'user.delete',
+        resource_type: 'user',
+        resource_id: 'u-9',
+        owner_user_id: 'ow-1',
+        created_at: 1725484000,
+      },
+      {
+        id: 3,
+        actor_id: 'adm-2',
+        action: 'flag.review',
+        resource_type: 'feature_flag',
+        resource_id: 'agent.heavytail',
+        owner_user_id: null,
+        created_at: 1720000000,
+      },
+    ],
+    broadcasts: [],
+  };
+}
+let adminState = seedAdminState();
+
+function adminOk(res, data) {
+  jsonOk(res, { data, ok: true });
+}
+
+function adminErr(res, status, code, message) {
+  res.writeHead(status, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ data: null, error: { code, message }, ok: false }));
+}
+
 function fileEvent(kind) {
   filesState.events.push(kind);
 }
@@ -441,6 +552,132 @@ function streamSlow(req, res) {
   }, 180);
 }
 
+function handleAdminGet(pathname, url, res) {
+  if (pathname.endsWith('/api/v1/admin/accounts')) {
+    adminOk(res, adminState.accounts);
+    return;
+  }
+  const accountMatch = pathname.match(/\/api\/v1\/admin\/accounts\/([^/]+)$/);
+  if (accountMatch) {
+    const id = decodeURIComponent(accountMatch[1]);
+    const acc = adminState.accounts.find((a) => a.id === id);
+    if (!acc) {
+      adminErr(res, 404, 'admin_not_found', 'account not found');
+      return;
+    }
+    adminOk(res, acc);
+    return;
+  }
+  if (pathname.endsWith('/api/v1/admin/users')) {
+    const owner = url.searchParams.get('owner_user_id') || '';
+    adminOk(res, adminState.users[owner] || []);
+    return;
+  }
+  if (pathname.endsWith('/api/v1/admin/usage')) {
+    adminOk(res, {
+      owner_user_id: url.searchParams.get('owner_user_id') || 'ow-1',
+      period: url.searchParams.get('period') || '30d',
+      query_count: 120,
+      document_count: 34,
+      chunk_count: 512,
+      storage_bytes: 1048576,
+    });
+    return;
+  }
+  if (pathname.endsWith('/api/v1/admin/health')) {
+    adminOk(res, { status: 'ok', version: '0.4.2', uptime_secs: 86400 });
+    return;
+  }
+  if (pathname.endsWith('/api/v1/admin/billing')) {
+    adminOk(res, {
+      active_subscriptions: 5,
+      past_due_subscriptions: 1,
+      unpaid_subscriptions: 0,
+      canceled_subscriptions: 2,
+    });
+    return;
+  }
+  if (pathname.endsWith('/api/v1/admin/rag-health')) {
+    adminOk(res, {
+      failed_documents: 1,
+      queued_tasks: 2,
+      processing_tasks: 3,
+      dead_letter_tasks: 0,
+      recent_guard_events: 4,
+    });
+    return;
+  }
+  if (pathname.endsWith('/api/v1/admin/system/workers')) {
+    adminOk(res, {
+      runtime_mode: 'standalone',
+      queued_tasks: 2,
+      processing_tasks: 1,
+      dead_letter_tasks: 0,
+      failed_documents: 3,
+    });
+    return;
+  }
+  if (pathname.endsWith('/api/v1/admin/system/degradation')) {
+    adminOk(res, { failed_documents: 0, recent_guard_events: 1, share_access_events: 7 });
+    return;
+  }
+  if (pathname.endsWith('/api/v1/admin/feature-flags/change-requests')) {
+    const status = url.searchParams.get('status');
+    const list = status
+      ? adminState.requests.filter((r) => r.status === status)
+      : adminState.requests;
+    adminOk(res, list);
+    return;
+  }
+  if (pathname.endsWith('/api/v1/admin/feature-flags')) {
+    adminOk(res, adminState.flags);
+    return;
+  }
+  if (pathname.endsWith('/api/v1/admin/audit-logs')) {
+    const like = (value) => (value || '').toLowerCase();
+    const q = like(url.searchParams.get('query'));
+    const action = url.searchParams.get('action') || '';
+    const resourceType = url.searchParams.get('resource_type') || '';
+    const actor = url.searchParams.get('actor') || '';
+    const window = url.searchParams.get('window') || '';
+    const cutoffs = { '24h': 1725484800, '7d': 1724880000, '30d': 1722633600, '90d': 1717276800 };
+    const cutoff = cutoffs[window] || 0;
+    const filtered = adminState.auditLogs.filter((entry) => {
+      if (entry.created_at < cutoff) return false;
+      if (action && entry.action !== action) return false;
+      if (resourceType && entry.resource_type !== resourceType) return false;
+      if (actor && entry.actor_id !== actor) return false;
+      if (q) {
+        const haystack = like(
+          `${entry.action} ${entry.resource_id} ${entry.actor_id || ''} ${entry.owner_user_id || ''}`,
+        );
+        if (!haystack.includes(q)) return false;
+      }
+      return true;
+    });
+    if (url.searchParams.get('format') === 'csv') {
+      cors(res);
+      res.writeHead(200, { 'Content-Type': 'text/csv' });
+      const rows = filtered.map(
+        (e) =>
+          `"${e.id}","${e.action}","${e.resource_type}","${e.resource_id}","${e.actor_id || ''}","${e.owner_user_id || ''}","${e.created_at}"`,
+      );
+      res.end(['id,action,resource_type,resource_id,actor_id,owner_user_id,created_at', ...rows].join('\n'));
+      return;
+    }
+    const page = Math.max(1, Number(url.searchParams.get('page') || 1));
+    const perPage = Math.min(200, Math.max(1, Number(url.searchParams.get('per_page') || 50)));
+    adminOk(res, {
+      items: filtered.slice((page - 1) * perPage, page * perPage),
+      total: filtered.length,
+      page,
+      per_page: perPage,
+    });
+    return;
+  }
+  adminErr(res, 404, 'admin_not_found', 'unknown admin endpoint');
+}
+
 const server = http.createServer((req, res) => {
   cors(res);
   if (req.method === 'OPTIONS') {
@@ -473,6 +710,14 @@ const server = http.createServer((req, res) => {
         },
         error: null,
       });
+      return;
+    }
+    if (pathname.includes('/api/v1/admin/')) {
+      if (pathname.includes('/case/403-admin/')) {
+        adminErr(res, 403, 'admin_access_denied', 'admin access denied');
+        return;
+      }
+      handleAdminGet(pathname, url, res);
       return;
     }
     const filesMatch = pathname.match(/\/api\/v1\/chat\/sessions\/([^/]+)\/files$/);
@@ -770,6 +1015,7 @@ const server = http.createServer((req, res) => {
     filesState.file = null;
     filesState.events = [];
     secretsState = [];
+    adminState = seedAdminState();
     workspacesState = [
       {
         id: 'ws-materials',
@@ -845,6 +1091,15 @@ const server = http.createServer((req, res) => {
   }
 
   if (req.method === 'DELETE') {
+    const adminUserMatch = url.pathname.match(/\/api\/v1\/admin\/users\/([^/]+)$/);
+    if (adminUserMatch) {
+      const userId = decodeURIComponent(adminUserMatch[1]);
+      for (const owner of Object.keys(adminState.users)) {
+        adminState.users[owner] = adminState.users[owner].filter((u) => u.id !== userId);
+      }
+      adminOk(res, null);
+      return;
+    }
     const wsDocMatch = url.pathname.match(/\/api\/v1\/workspaces\/([^/]+)\/documents\/([^/]+)$/);
     if (wsDocMatch) {
       const docId = decodeURIComponent(wsDocMatch[2]);
@@ -929,6 +1184,90 @@ const server = http.createServer((req, res) => {
           session_id: 'cs_test_999',
           order_id: 'ord_test_888',
         });
+      });
+      return;
+    }
+    if (pathname.endsWith('/api/v1/admin/billing/block')) {
+      readBody(req).then((buf) => {
+        const body = JSON.parse(buf.toString('utf8') || '{}');
+        const acc = adminState.accounts.find((a) => a.id === body.owner_user_id);
+        if (!acc) {
+          adminErr(res, 404, 'admin_not_found', 'account not found');
+          return;
+        }
+        acc.blocked = Boolean(body.blocked);
+        adminOk(res, null);
+      });
+      return;
+    }
+    if (pathname.endsWith('/api/v1/admin/notifications/broadcast')) {
+      readBody(req).then((buf) => {
+        const body = JSON.parse(buf.toString('utf8') || '{}');
+        adminState.broadcasts.push({
+          event_type: body.event_type || 'admin.broadcast',
+          title: body.title,
+          body: body.body,
+        });
+        adminOk(res, { created: adminState.broadcasts.length });
+      });
+      return;
+    }
+    const flagReqReview = pathname.match(
+      /\/api\/v1\/admin\/feature-flags\/change-requests\/([^/]+)\/review$/,
+    );
+    if (flagReqReview) {
+      const reqId = decodeURIComponent(flagReqReview[1]);
+      readBody(req).then((buf) => {
+        const body = JSON.parse(buf.toString('utf8') || '{}');
+        const request = adminState.requests.find((r) => r.id === reqId);
+        if (!request) {
+          adminErr(res, 404, 'admin_not_found', 'change request not found');
+          return;
+        }
+        request.status = body.approved ? 'approved' : 'rejected';
+        request.reviewed_by = 'fixture-user';
+        request.review_note = body.review_note || null;
+        request.reviewed_at = 1725485100;
+        if (body.approved) {
+          request.executed_at = 1725485100;
+          const flag = adminState.flags.find((f) => f.key === request.flag_key);
+          if (flag) {
+            flag.enabled = request.requested_enabled;
+            flag.effective_enabled = request.requested_enabled;
+            flag.has_pending_request = false;
+          }
+        }
+        adminOk(res, request);
+      });
+      return;
+    }
+    const flagReqCreate = pathname.match(/\/api\/v1\/admin\/feature-flags\/([^/]+)\/change-requests$/);
+    if (flagReqCreate) {
+      const flagKey = decodeURIComponent(flagReqCreate[1]);
+      readBody(req).then((buf) => {
+        const body = JSON.parse(buf.toString('utf8') || '{}');
+        const flag = adminState.flags.find((f) => f.key === flagKey);
+        if (!flag) {
+          adminErr(res, 404, 'admin_not_found', 'flag not found');
+          return;
+        }
+        const request = {
+          id: `req-${adminState.requests.length + 1}-${Date.now()}`,
+          flag_key: flagKey,
+          current_enabled: flag.enabled,
+          requested_enabled: Boolean(body.enabled),
+          reason: body.reason || '',
+          status: 'pending',
+          requested_by: 'fixture-user',
+          reviewed_by: null,
+          review_note: null,
+          created_at: 1725485000,
+          reviewed_at: null,
+          executed_at: null,
+        };
+        adminState.requests.push(request);
+        flag.has_pending_request = true;
+        adminOk(res, request);
       });
       return;
     }

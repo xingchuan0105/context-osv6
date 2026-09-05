@@ -1,3 +1,4 @@
+pub mod admin_api;
 pub mod auth;
 pub mod billing_api;
 pub mod browser_auth;
@@ -18,6 +19,21 @@ pub mod sse_decoder;
 pub mod transport;
 pub mod workspace_api;
 
+pub use admin_api::{
+    AdminAccountInfo, AdminApiError, AdminAuditLogEntry, AdminAuditLogPage, AdminAuditLogQuery,
+    AdminBillingOverview, AdminBroadcastRequest, AdminBroadcastResult, AdminDegradationStatus,
+    AdminEnvelope, AdminFeatureFlagChangeRequest, AdminFeatureFlagEntry, AdminHealthStatus,
+    AdminRagHealthStatus, AdminUsageStats, AdminUserInfo, AdminWorkerStatus,
+    admin_accounts_url, admin_account_url, admin_audit_logs_url, admin_billing_block_url,
+    admin_billing_url, admin_broadcast_url, admin_degradation_url, admin_feature_flags_url,
+    admin_feature_flag_change_request_create_url, admin_feature_flag_change_request_review_url,
+    admin_feature_flag_change_requests_url, admin_health_url, admin_rag_health_url,
+    admin_usage_url, admin_user_url, admin_users_url, admin_workers_url, parse_admin_account,
+    parse_admin_accounts, parse_admin_audit_logs, parse_admin_billing, parse_admin_broadcast,
+    parse_admin_degradation, parse_admin_feature_flag_change_request,
+    parse_admin_feature_flag_change_requests, parse_admin_feature_flags, parse_admin_health,
+    parse_admin_rag_health, parse_admin_usage, parse_admin_users, parse_admin_workers,
+};
 pub use auth::{
     AUTH_BOOTSTRAP_TIMEOUT_MS, AUTH_PERSISTED_COOKIE_NAME, AUTH_SESSION_COOKIE_MAX_AGE,
     AUTH_SESSION_COOKIE_NAME, AUTH_SESSION_COOKIE_VALUE, AUTH_STORAGE_KEY, AuthUser, PersistedAuth,
