@@ -25,8 +25,10 @@ fn collect_files_with_ext(dir: &Path, exts: &[&str]) -> Vec<PathBuf> {
 fn test_style_baseline_guard_rules() {
     let root_ui = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
     let style_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../style");
+    let assets_style_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/style");
 
     let mut css_files = collect_files_with_ext(&style_dir, &["css"]);
+    css_files.extend(collect_files_with_ext(&assets_style_dir, &["css"]));
     css_files.extend(collect_files_with_ext(&root_ui, &["css"]));
 
     let rs_files = collect_files_with_ext(&root_ui, &["rs"]);
@@ -60,9 +62,20 @@ fn test_style_baseline_guard_rules() {
             }
         }
     }
+    for file in &css_files {
+        if file.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.contains("token")) {
+            continue;
+        }
+        let content = fs::read_to_string(file).unwrap_or_default();
+        for (i, line) in content.lines().enumerate() {
+            if hex_regex.is_match(line) {
+                hex_violations.push(format!("{}:{} -> {}", file.display(), i + 1, line.trim()));
+            }
+        }
+    }
     assert!(
         hex_violations.is_empty(),
-        "Found bare hex color violations in Rust UI components:\n{:#?}",
+        "Found bare hex color violations in Rust UI components or styles:\n{:#?}",
         hex_violations
     );
 }

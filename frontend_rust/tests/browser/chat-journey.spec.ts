@@ -90,6 +90,32 @@ test.describe('浏览器凭据（W1）', () => {
   });
 });
 
+test.describe('静态资源交付与缓存头（W1）', () => {
+  test('WASM 带有 application/wasm MIME 与预压缩支持，pkg 资源带 immutable 缓存，未 hash 样式无 immutable', async ({
+    request,
+  }) => {
+    const chatRes = await request.get(`${WEB_BASE}/chat`);
+    const html = await chatRes.text();
+    const jsMatch = html.match(/\/pkg\/[a-zA-Z0-9_.-]+\.js/);
+    expect(jsMatch).toBeTruthy();
+
+    const jsUrl = `${WEB_BASE}${jsMatch![0]}`;
+    const jsRes = await request.get(jsUrl, {
+      headers: { 'Accept-Encoding': 'br, gzip' },
+    });
+    expect(jsRes.status()).toBe(200);
+    expect(jsRes.headers()['cache-control']).toContain('immutable');
+    expect(jsRes.headers()['cache-control']).toContain('max-age=31536000');
+    expect(['br', 'gzip']).toContain(jsRes.headers()['content-encoding']);
+
+    // 验证普通未 hash 样式 (/style/chat-poc.css) 不被误设永久 immutable
+    const unhashedCss = await request.get(`${WEB_BASE}/style/chat-poc.css`);
+    expect(unhashedCss.status()).toBe(200);
+    const unhashedCache = unhashedCss.headers()['cache-control'] || '';
+    expect(unhashedCache).not.toContain('immutable');
+  });
+});
+
 test.describe('助手 Markdown（W2）', () => {
   test('标题与列表渲染，恶意 script / javascript: 不进 DOM', async ({ page }) => {
     const errors = collectPageErrors(page);
