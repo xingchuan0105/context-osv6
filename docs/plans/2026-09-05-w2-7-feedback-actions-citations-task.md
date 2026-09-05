@@ -32,4 +32,4 @@
 | W2.7.2 | UI 组件：消息操作栏（复制、赞、踩）与已删除来源卡标记 | 已完成 | `web-ui/src/components/chat/message_actions.rs` 集成 |
 | W2.7.3 | 样式支持：操作栏按钮、复制反馈提示、已删除来源样式 | 已完成 | `chat-poc.css` 变量遵循 `--cos-*`，字重 400 |
 | W2.7.4 | Playwright 浏览器用例与 Mock 服务端扩展 | 已完成 | `chat-journey.spec.ts` 21/21 passed |
-| W2.7.5 | 验证收敛、图谱更新与本地提交 | 进行中 | 待执行提交 |
+| W2.7.5 | 验证收敛、图谱更新与本地提交 | 已完成 | 图谱已更新 (25 files)，本地提交 `b2ba620d` (W2.7 达成) |
