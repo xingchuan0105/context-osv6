@@ -30,4 +30,4 @@
 | W2.8.3 | 会话列表归属标记：`session_label` 区分个人与工作区会话 | 已完成 | `[材料研发] 合金强度分析` 归属徽标呈现 |
 | W2.8.4 | 切库防串流与生命周期测试：`chat_canvas_lifecycle_tests.rs` | 已完成 | `chat_canvas_lifecycle_tests.rs` 32/32 passed |
 | W2.8.5 | Playwright 自动化：覆盖 `/dashboard/:ws?session=:sid` 恢复与归属隔离 | 已完成 | `chat-journey.spec.ts` 22/22 passed |
-| W2.8.6 | 验证收敛、图谱更新与本地提交 | 进行中 | 待执行提交 |
+| W2.8.6 | 验证收敛、图谱更新与本地提交 | 已完成 | 图谱已更新 (14 files)，本地提交 `93533806` (W2.8 达成) |
