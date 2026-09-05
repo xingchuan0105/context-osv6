@@ -38,4 +38,4 @@
 | E3.3.3 | 实现公开知识库问答页面 (`/shared/kb/:token`) | 已完成 | `shared_kb_page.rs` 正常与失效路径覆盖 |
 | E3.3.4 | 实现分享者主页与工作区邀请页面 (`/shared/u/:userId`, `/invite/*`) | 已完成 | `shared_user_page.rs`, `invite_page.rs` 就位 |
 | E3.3.5 | 路由挂载、样式集成与自动化测试断言 | 已完成 | `share-invite-journey.spec.ts` 4/4, 全量 35/35 passed |
-| E3.3.6 | 验证收敛、图谱更新与本地提交 | 进行中 | 待提交本地 commit |
+| E3.3.6 | 验证收敛、图谱更新与本地提交 | 已完成 | 图谱已更新 (19 files)，本地提交 `65ab035a` (E3.3 达成) |
