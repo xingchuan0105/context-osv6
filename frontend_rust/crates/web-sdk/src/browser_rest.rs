@@ -100,6 +100,12 @@ impl BrowserRestClient {
     pub async fn reindex_document(&self, _document_id: &str) -> Result<(), TransportError> {
         self.unavailable()
     }
+
+    pub async fn list_provider_secrets(
+        &self,
+    ) -> Result<crate::providers::ProviderSecretsResponse, TransportError> {
+        self.unavailable()
+    }
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -337,5 +343,14 @@ impl BrowserRestClient {
         )
         .await?;
         Ok(())
+    }
+
+    pub async fn list_provider_secrets(
+        &self,
+    ) -> Result<crate::providers::ProviderSecretsResponse, TransportError> {
+        crate::providers::parse_provider_secrets(
+            &wasm_request::get_bytes(self, &crate::providers::provider_secrets_url(&self.base_url))
+                .await?,
+        )
     }
 }

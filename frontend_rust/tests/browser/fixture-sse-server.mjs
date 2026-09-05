@@ -447,6 +447,23 @@ const server = http.createServer((req, res) => {
       jsonOk(res, { files: [] });
       return;
     }
+    if (pathname.endsWith('/api/v1/settings/provider-secrets')) {
+      const hasByok = pathname.includes('/case/byok');
+      jsonOk(res, {
+        secrets: hasByok
+          ? [
+              {
+                id: 'sec-quick-1',
+                purpose: 'quick_chat',
+                provider: 'bailian',
+                model_hint: 'qwen3.8-flash',
+                is_active: true,
+              },
+            ]
+          : [],
+      });
+      return;
+    }
     if (pathname.endsWith('/api/v1/chat/sessions')) {
       const authed = Boolean(req.headers.authorization);
       jsonOk(res, {

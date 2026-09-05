@@ -809,3 +809,19 @@ fn test_messages_from_wire_skips_unknown_roles() {
     assert_eq!(mapped[0].content, "可见");
     assert!(mapped[0].reasoning.is_none());
 }
+
+#[test]
+fn test_default_model_role_is_quick_chat_and_workspace_is_agent() {
+    let mut canvas = ChatCanvasModel::new();
+    assert_eq!(canvas.manager().active.model_role, "quick_chat");
+
+    let mut session = sample_session("sess-ws");
+    session.model_role = "agent".to_string();
+    session.workspace_id = Some("ws-1".to_string());
+    canvas.switch_to_session(&session);
+    assert_eq!(canvas.manager().active.model_role, "agent");
+
+    canvas.new_personal_chat(None);
+    assert_eq!(canvas.manager().active.model_role, "quick_chat");
+}
+

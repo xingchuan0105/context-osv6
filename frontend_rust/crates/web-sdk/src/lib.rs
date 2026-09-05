@@ -8,6 +8,7 @@ pub mod fixture_transport;
 pub mod citations;
 pub mod markdown;
 pub mod progress;
+pub mod providers;
 pub mod scope;
 pub mod session_files;
 pub mod reducer;
@@ -34,6 +35,10 @@ pub use fixture_transport::FixtureTransport;
 pub use citations::{CitationView, RenderedAnswer, SourceCard, render_assistant_answer};
 pub use markdown::render_assistant_markdown;
 pub use progress::{activities_for_display, progress_folded, progress_summary_label};
+pub use providers::{
+    ProviderSecretRow, ProviderSecretsResponse, has_quick_chat_byok, model_role_label,
+    parse_provider_secrets, provider_secrets_url,
+};
 pub use scope::{
     Capability, capabilities_to_wire, derive_agent_type_label, mode_line, normalize_capabilities,
     reconcile_session_rag, toggle_capability,

@@ -1,5 +1,7 @@
 use crate::api_base::poc_api_base;
-use crate::components::chat::{ChatCanvasModel, PreparedUserTurn, ScopeBar, SessionFileTray};
+use crate::components::chat::{
+    ChatCanvasModel, ModelRoleBadge, PreparedUserTurn, ScopeBar, SessionFileTray,
+};
 use crate::reducer::{ActivityEntry, TurnStatus};
 use crate::session::{ConversationMessage, MessageRole, messages_from_wire};
 use contracts::workspaces::ChatSession;
@@ -41,6 +43,9 @@ pub fn ChatPage() -> impl IntoView {
     let capabilities = RwSignal::new(Vec::<Capability>::new());
     let capabilities_manual = RwSignal::new(false);
     let last_scope = RwSignal::new(None::<Option<String>>);
+    let has_byok = RwSignal::new(false);
+    let current_model_role =
+        Signal::derive(move || model.with(|m| m.manager().active.model_role.clone()));
 
     Effect::new(move |_| {
         if model.with(|m| matches!(m.live_turn().status, TurnStatus::Streaming)) {
@@ -115,9 +120,11 @@ pub fn ChatPage() -> impl IntoView {
         let token_value = token.get();
         if token_value.is_empty() {
             model.update(|m| m.replace_session_list(Vec::new()));
+            has_byok.set(false);
             return;
         }
         spawn_refresh_sessions(model, Some(token_value.clone()));
+        spawn_check_byok(has_byok, token_value.clone());
         let session_id = params
             .get_untracked()
             .ok()
@@ -355,6 +362,10 @@ pub fn ChatPage() -> impl IntoView {
             <main class="chat-canvas" aria-label="对话画布" data-testid="chat-canvas">
                 <header class="chat-header">
                     <h1 class="chat-title">"Context-OS 对话"</h1>
+                    <ModelRoleBadge
+                        model_role=current_model_role
+                        has_byok=Signal::derive(move || has_byok.get())
+                    />
                 </header>
 
                 <section class="chat-transcript" aria-label="消息列表" data-testid="chat-transcript">
@@ -886,3 +897,15 @@ fn current_path() -> Option<String> {
 fn current_path() -> Option<String> {
     None
 }
+
+fn spawn_check_byok(has_byok: RwSignal<bool>, token: String) {
+    leptos::task::spawn_local(async move {
+        let client = BrowserRestClient::new(&poc_api_base(), Some(token));
+        if let Ok(resp) = client.list_provider_secrets().await {
+            has_byok.set(web_sdk::has_quick_chat_byok(&resp.secrets));
+        } else {
+            has_byok.set(false);
+        }
+    });
+}
+

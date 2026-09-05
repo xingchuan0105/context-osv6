@@ -77,6 +77,19 @@
     margin: 0;
 }
 
+.chat-model-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.625rem;
+    border-radius: var(--cos-radius-sm);
+    border: 1px solid var(--cos-border);
+    background: var(--cos-bg-secondary);
+    color: var(--cos-text-secondary);
+    font-size: 0.8125rem;
+    line-height: 1.4;
+    font-weight: 400;
+}
+
 .chat-transcript {
     display: flex;
     flex-direction: column;

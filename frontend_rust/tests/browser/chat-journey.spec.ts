@@ -296,6 +296,26 @@ test.describe('能力标签（W2.5）', () => {
   });
 });
 
+test.describe('模型角色与 BYOK 状态（W2.6）', () => {
+  test('个人默认显示对话 · qwen3.8-flash (默认)', async ({ page }) => {
+    const errors = collectPageErrors(page);
+    await gotoChat(page, FIXTURE_BASE, '/chat', 'poc-test-token');
+    const badge = page.getByTestId('model-role-badge');
+    await expect(badge).toBeVisible();
+    await expect(badge).toContainText('对话 · qwen3.8-flash (默认)');
+    expect(errors).toEqual([]);
+  });
+
+  test('检测到 quick_chat 自备密钥时显示 (自定义密钥)', async ({ page }) => {
+    const errors = collectPageErrors(page);
+    await gotoChat(page, `${FIXTURE_BASE}/case/byok`, '/chat', 'poc-test-token');
+    const badge = page.getByTestId('model-role-badge');
+    await expect(badge).toBeVisible();
+    await expect(badge).toContainText('对话 · qwen3.8-flash (自定义密钥)');
+    expect(errors).toEqual([]);
+  });
+});
+
 test.describe('浏览器聊天旅程（Gate C/D）', () => {
   test.beforeEach(async ({ request }) => {
     await request.post(`${FIXTURE_BASE}/admin/reset`);
