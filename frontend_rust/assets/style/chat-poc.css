@@ -127,6 +127,43 @@
     margin-bottom: 0.25rem;
 }
 
+.chat-message-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px dashed var(--cos-border);
+}
+
+.chat-action-button {
+    background: transparent;
+    border: 1px solid var(--cos-border);
+    border-radius: var(--cos-radius-sm);
+    color: var(--cos-text-secondary);
+    font-size: 0.75rem;
+    padding: 0.125rem 0.5rem;
+    cursor: pointer;
+    font-weight: 400;
+}
+
+.chat-action-button:hover {
+    background: var(--cos-bg-secondary);
+    color: var(--cos-text);
+}
+
+.chat-action-button.is-active {
+    background: var(--cos-primary);
+    color: var(--cos-primary-foreground);
+    border-color: var(--cos-primary);
+}
+
+.chat-feedback-error {
+    color: var(--cos-error);
+    font-size: 0.75rem;
+    font-weight: 400;
+}
+
 .chat-message-content,
 .chat-live-answer {
     white-space: pre-wrap;

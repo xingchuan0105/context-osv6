@@ -658,6 +658,8 @@ fn history_messages() -> Vec<ConversationMessage> {
     vec![
         ConversationMessage {
             id: "11".to_string(),
+            session_id: Some("sess-1".to_string()),
+            message_id: Some(11),
             role: MessageRole::User,
             content: "你好".to_string(),
             answer_blocks: Vec::new(),
@@ -667,6 +669,8 @@ fn history_messages() -> Vec<ConversationMessage> {
         },
         ConversationMessage {
             id: "12".to_string(),
+            session_id: Some("sess-1".to_string()),
+            message_id: Some(12),
             role: MessageRole::Assistant,
             content: "你好，我是助手。".to_string(),
             answer_blocks: Vec::new(),

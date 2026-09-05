@@ -484,7 +484,41 @@ const server = http.createServer((req, res) => {
     }
     const messagesMatch = pathname.match(/\/api\/v1\/chat\/sessions\/([^/]+)\/messages$/);
     if (messagesMatch) {
-      jsonOk(res, { messages: [] });
+      const id = decodeURIComponent(messagesMatch[1]);
+      const withHistory = pathname.includes('/case/feedback') || id === 'sess-history';
+      jsonOk(res, {
+        messages: withHistory
+          ? [
+              {
+                id: 101,
+                session_id: id,
+                role: 'user',
+                content: '用户历史提问',
+                answer_blocks: [],
+                citations: [],
+                created_at: '2026-09-04T00:00:00Z',
+              },
+              {
+                id: 102,
+                session_id: id,
+                role: 'assistant',
+                content: '这是历史助手的完整回答内容。',
+                answer_blocks: [],
+                citations: [
+                  {
+                    citation_id: 1,
+                    doc_id: 'doc-del',
+                    doc_name: '已下线文档',
+                    citation_status: 'source_deleted',
+                    preview: '旧文档残片',
+                    score: 0.8,
+                  },
+                ],
+                created_at: '2026-09-04T00:00:01Z',
+              },
+            ]
+          : [],
+      });
       return;
     }
     const sessionMatch = pathname.match(/\/api\/v1\/chat\/sessions\/([^/]+)$/);
@@ -600,6 +634,18 @@ const server = http.createServer((req, res) => {
           filesState.file = { ...filesState.file, status: 'completed' };
         }
         jsonOk(res, { status: 'queued' });
+      });
+      return;
+    }
+    const feedbackMatch = pathname.match(/\/api\/v1\/chat\/sessions\/([^/]+)\/messages\/([^/]+)\/feedback$/);
+    if (feedbackMatch) {
+      readBody(req).then(() => {
+        if (pathname.includes('/case/feedback-fail/')) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'internal_error', message: 'feedback failed' }));
+          return;
+        }
+        jsonOk(res, {});
       });
       return;
     }

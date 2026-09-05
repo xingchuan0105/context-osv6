@@ -1,6 +1,6 @@
 use crate::api_base::poc_api_base;
 use crate::components::chat::{
-    ChatCanvasModel, ModelRoleBadge, PreparedUserTurn, ScopeBar, SessionFileTray,
+    ChatCanvasModel, MessageActions, ModelRoleBadge, PreparedUserTurn, ScopeBar, SessionFileTray,
 };
 use crate::reducer::{ActivityEntry, TurnStatus};
 use crate::session::{ConversationMessage, MessageRole, messages_from_wire};
@@ -649,7 +649,7 @@ fn message_view(message: ConversationMessage) -> impl IntoView {
                 .into_any()
             } else {
                 view! {
-                    <div class="chat-message-content">{message.content}</div>
+                    <div class="chat-message-content">{message.content.clone()}</div>
                 }
                 .into_any()
             }}
@@ -666,6 +666,15 @@ fn message_view(message: ConversationMessage) -> impl IntoView {
                         .map(|card| source_card_view(card, active_cite))
                         .collect::<Vec<_>>()}
                 </ul>
+            })}
+            {(message.role == MessageRole::Assistant).then(|| {
+                view! {
+                    <MessageActions
+                        content=message.content.clone()
+                        session_id=message.session_id.clone()
+                        message_id=message.message_id
+                    />
+                }
             })}
         </article>
     }

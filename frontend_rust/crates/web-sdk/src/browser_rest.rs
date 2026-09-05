@@ -106,6 +106,15 @@ impl BrowserRestClient {
     ) -> Result<crate::providers::ProviderSecretsResponse, TransportError> {
         self.unavailable()
     }
+
+    pub async fn submit_feedback(
+        &self,
+        _session_id: &str,
+        _message_id: i64,
+        _rating: &str,
+    ) -> Result<(), TransportError> {
+        self.unavailable()
+    }
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -352,5 +361,31 @@ impl BrowserRestClient {
             &wasm_request::get_bytes(self, &crate::providers::provider_secrets_url(&self.base_url))
                 .await?,
         )
+    }
+
+    pub async fn submit_feedback(
+        &self,
+        session_id: &str,
+        message_id: i64,
+        rating: &str,
+    ) -> Result<(), TransportError> {
+        let body = serde_json::to_vec(&contracts::chat::MessageFeedbackRequest {
+            session_id: session_id.to_string(),
+            message_id,
+            rating: match rating {
+                "down" => contracts::chat::MessageFeedbackRating::Down,
+                _ => contracts::chat::MessageFeedbackRating::Up,
+            },
+        })?;
+        wasm_request::request_bytes(
+            self,
+            "POST",
+            &crate::conversation_api::message_feedback_url(&self.base_url, session_id, message_id),
+            Some(&body),
+            Some("application/json"),
+            true,
+        )
+        .await?;
+        Ok(())
     }
 }

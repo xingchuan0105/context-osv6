@@ -40,6 +40,15 @@ pub fn session_messages_url(base_url: &str, session_id: &str) -> String {
     )
 }
 
+pub fn message_feedback_url(base_url: &str, session_id: &str, message_id: i64) -> String {
+    format!(
+        "{}/api/v1/chat/sessions/{}/messages/{}/feedback",
+        trim_base_url(base_url),
+        encode_path_segment(session_id),
+        message_id
+    )
+}
+
 pub fn parse_session_list(body: &[u8]) -> Result<ChatSessionListResponse, TransportError> {
     serde_json::from_slice(body).map_err(TransportError::from)
 }

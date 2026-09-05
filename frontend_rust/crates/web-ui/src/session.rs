@@ -6,6 +6,8 @@ use contracts::{
 #[derive(Debug, Clone, PartialEq)]
 pub struct ConversationMessage {
     pub id: String,
+    pub session_id: Option<String>,
+    pub message_id: Option<i64>,
     pub role: MessageRole,
     pub content: String,
     pub answer_blocks: Vec<AnswerBlock>,
@@ -23,6 +25,8 @@ impl ConversationMessage {
         };
         Some(Self {
             id: message.id.to_string(),
+            session_id: Some(message.session_id.clone()),
+            message_id: Some(message.id),
             role,
             content: message.content.clone(),
             answer_blocks: message.answer_blocks.clone(),
@@ -137,8 +141,11 @@ impl ConversationManager {
 
     /// 记录用户提问
     pub fn append_user_message(&mut self, text: &str) {
+        let sid = self.active.session_id.clone();
         self.active.messages.push(ConversationMessage {
             id: format!("msg-user-{}", self.active.messages.len() + 1),
+            session_id: sid,
+            message_id: None,
             role: MessageRole::User,
             content: text.to_string(),
             answer_blocks: Vec::new(),
@@ -156,8 +163,11 @@ impl ConversationManager {
         reasoning: Option<&str>,
         citations: Vec<serde_json::Value>,
     ) {
+        let sid = self.active.session_id.clone();
         self.active.messages.push(ConversationMessage {
             id: format!("msg-assistant-{}", self.active.messages.len() + 1),
+            session_id: sid,
+            message_id: None,
             role: MessageRole::Assistant,
             content: text.to_string(),
             answer_blocks,

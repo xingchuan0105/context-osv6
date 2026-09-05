@@ -35,6 +35,8 @@ web-sys = { workspace = true, features = [
     "Blob",
     "Event",
     "EventTarget",
+    "Navigator",
+    "Clipboard",
 ] }
 
 [features]

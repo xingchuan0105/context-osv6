@@ -1,7 +1,7 @@
 use contracts::workspaces::ConversationScopeKind;
 use web_sdk::{
-    BrowserRestClient, TransportError, parse_message_list, parse_session, parse_session_list,
-    session_messages_url, session_url, sessions_url,
+    BrowserRestClient, TransportError, message_feedback_url, parse_message_list, parse_session,
+    parse_session_list, session_messages_url, session_url, sessions_url,
 };
 
 #[test]
@@ -17,6 +17,10 @@ fn session_urls_trim_slash_and_encode_id() {
     assert_eq!(
         session_messages_url("http://x", "a/b"),
         "http://x/api/v1/chat/sessions/a%2Fb/messages"
+    );
+    assert_eq!(
+        message_feedback_url("http://x", "sess-1", 42),
+        "http://x/api/v1/chat/sessions/sess-1/messages/42/feedback"
     );
 }
 

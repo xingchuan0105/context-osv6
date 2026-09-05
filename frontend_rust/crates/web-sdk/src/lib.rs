@@ -28,8 +28,8 @@ pub use browser_rest::BrowserRestClient;
 pub use browser_transport::BrowserHttpTransport;
 pub use client::ChatClient;
 pub use conversation_api::{
-    encode_path_segment, parse_message_list, parse_session, parse_session_list, session_messages_url,
-    session_url, sessions_url, trim_base_url,
+    encode_path_segment, message_feedback_url, parse_message_list, parse_session, parse_session_list,
+    session_messages_url, session_url, sessions_url, trim_base_url,
 };
 pub use fixture_transport::FixtureTransport;
 pub use citations::{CitationView, RenderedAnswer, SourceCard, render_assistant_answer};

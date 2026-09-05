@@ -316,6 +316,50 @@ test.describe('模型角色与 BYOK 状态（W2.6）', () => {
   });
 });
 
+test.describe('回答操作与 Feedback 持久化（W2.7）', () => {
+  test('支持复制回答内容、点赞成功高亮、已删除来源卡明确标记且禁用链接', async ({ page, context }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    const errors = collectPageErrors(page);
+    await gotoChat(page, `${FIXTURE_BASE}/case/feedback`, '/chat/sess-history', 'poc-test-token');
+
+    const assistantMsg = page.getByTestId('chat-message').filter({ hasText: '历史助手' });
+    await expect(assistantMsg).toBeVisible({ timeout: 15_000 });
+    const copyBtn = assistantMsg.getByTestId('copy-answer-button');
+    await expect(copyBtn).toBeVisible();
+    await copyBtn.click();
+    await expect(copyBtn).toHaveText('已复制');
+
+    const upBtn = assistantMsg.getByTestId('feedback-up');
+    await expect(upBtn).toBeVisible();
+    await upBtn.click();
+    await expect(upBtn).toHaveClass(/is-active/);
+
+    const card = assistantMsg.getByTestId('citation-card');
+    await expect(card).toContainText('已下线文档');
+    await expect(card).toContainText('来源已删除');
+    await expect(card.locator('a')).toHaveCount(0);
+
+    expect(errors).toEqual([]);
+  });
+
+  test('Feedback 提交失败时在 UI 呈现可感知的错误提示（role=alert）', async ({ page }) => {
+    const errors = collectPageErrors(page, [/Failed to load resource.*500/]);
+    await gotoChat(page, `${FIXTURE_BASE}/case/feedback-fail`, '/chat/sess-history', 'poc-test-token');
+
+    const assistantMsg = page.getByTestId('chat-message').filter({ hasText: '历史助手' });
+    await expect(assistantMsg).toBeVisible({ timeout: 15_000 });
+
+    const downBtn = assistantMsg.getByTestId('feedback-down');
+    await downBtn.click();
+
+    const errAlert = assistantMsg.getByTestId('feedback-error');
+    await expect(errAlert).toBeVisible({ timeout: 15_000 });
+    await expect(errAlert).toContainText('反馈提交失败');
+
+    expect(errors).toEqual([]);
+  });
+});
+
 test.describe('浏览器聊天旅程（Gate C/D）', () => {
   test.beforeEach(async ({ request }) => {
     await request.post(`${FIXTURE_BASE}/admin/reset`);
