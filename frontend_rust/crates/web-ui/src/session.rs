@@ -127,13 +127,13 @@ impl ConversationManager {
         };
     }
 
-    /// 切换到工作区上下文（仅作为附加上下文，保留当前 model_role 设置，递增 epoch）
+    /// 切换到工作区上下文（工作区默认为 agent，递增 epoch）
     pub fn switch_to_workspace(&mut self, workspace_id: &str, session_id: Option<&str>) {
         self.conversation_epoch += 1;
         self.active = ActiveConversation {
             session_id: session_id.map(|s| s.to_string()),
             workspace_id: Some(workspace_id.to_string()),
-            model_role: self.active.model_role.clone(),
+            model_role: "agent".to_string(),
             scope_kind: ConversationScopeKind::Workspace,
             messages: Vec::new(),
         };

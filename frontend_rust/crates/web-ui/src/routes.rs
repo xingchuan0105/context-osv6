@@ -134,10 +134,11 @@ pub fn route_family(id: &str) -> Option<&'static RouteFamily> {
     ROUTE_FAMILIES.iter().find(|family| family.id == id)
 }
 
-/// Phase 0 已挂载路径（仅 /chat）。
+/// Phase 0 已挂载路径（/chat 与 /dashboard）。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AppRoute {
     Chat { session_id: Option<String> },
+    Dashboard { workspace_id: Option<String> },
     NotFound,
 }
 
@@ -154,6 +155,10 @@ impl AppRoute {
             ["chat"] => Self::Chat { session_id: None },
             ["chat", sid] => Self::Chat {
                 session_id: Some(sid.to_string()),
+            },
+            ["dashboard"] => Self::Dashboard { workspace_id: None },
+            ["dashboard", wid] => Self::Dashboard {
+                workspace_id: Some(wid.to_string()),
             },
             _ => Self::NotFound,
         }
@@ -175,6 +180,16 @@ mod tests {
             AppRoute::parse("/chat/session-1"),
             AppRoute::Chat {
                 session_id: Some("session-1".to_string())
+            }
+        );
+        assert_eq!(
+            AppRoute::parse("/dashboard"),
+            AppRoute::Dashboard { workspace_id: None }
+        );
+        assert_eq!(
+            AppRoute::parse("/dashboard/ws-1"),
+            AppRoute::Dashboard {
+                workspace_id: Some("ws-1".to_string())
             }
         );
     }

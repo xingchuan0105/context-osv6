@@ -829,3 +829,33 @@ fn test_default_model_role_is_quick_chat_and_workspace_is_agent() {
     assert_eq!(canvas.manager().active.model_role, "quick_chat");
 }
 
+#[test]
+fn test_switch_to_workspace_updates_scope_and_invalidates_active_stream() {
+    let mut canvas = ChatCanvasModel::new();
+    let turn = canvas.prepare_user_turn("个人提问");
+    assert!(canvas.is_streaming());
+    let old_scope = turn.stream_scope;
+    let old_epoch = canvas.manager().conversation_epoch;
+
+    canvas.switch_to_workspace("ws-100", Some("sess-ws-1"));
+    assert!(!canvas.is_streaming());
+    assert_eq!(canvas.manager().active.workspace_id.as_deref(), Some("ws-100"));
+    assert_eq!(canvas.manager().active.session_id.as_deref(), Some("sess-ws-1"));
+    assert_eq!(canvas.manager().active.scope_kind, ConversationScopeKind::Workspace);
+    assert_eq!(canvas.manager().active.model_role, "agent");
+    assert!(canvas.manager().conversation_epoch > old_epoch);
+
+    assert!(!canvas.on_event(
+        old_scope,
+        contracts::chat::ChatEvent::Token {
+            request_id: "req-1".into(),
+            message_id: 1,
+            content: "旧流迟到".into(),
+        }
+    ));
+
+    let new_turn = canvas.prepare_user_turn("工作区提问");
+    assert_eq!(new_turn.request.workspace_id.as_deref(), Some("ws-100"));
+}
+
+

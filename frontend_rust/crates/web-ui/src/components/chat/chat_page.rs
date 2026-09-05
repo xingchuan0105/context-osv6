@@ -8,7 +8,7 @@ use contracts::workspaces::ChatSession;
 use futures_util::StreamExt;
 use leptos::prelude::*;
 use leptos_router::NavigateOptions;
-use leptos_router::hooks::{use_navigate, use_params};
+use leptos_router::hooks::{query_signal, use_navigate, use_params};
 use leptos_router::params::Params;
 use web_sdk::{
     BrowserHttpTransport, BrowserRestClient, Capability, ChatClient, CitationView, SourceCard,
@@ -19,6 +19,7 @@ use web_sdk::{
 #[derive(Params, PartialEq, Clone, Debug)]
 struct ChatParams {
     session_id: Option<String>,
+    workspace_id: Option<String>,
 }
 
 /// Chat-first 页面：/chat 与 /chat/:session_id 共用。
@@ -47,6 +48,23 @@ pub fn ChatPage() -> impl IntoView {
     let current_model_role =
         Signal::derive(move || model.with(|m| m.manager().active.model_role.clone()));
 
+    let (session_query, _) = query_signal::<String>("session");
+    let route_workspace_id = Signal::derive(move || {
+        params
+            .read()
+            .as_ref()
+            .ok()
+            .and_then(|p| p.workspace_id.clone())
+    });
+    let route_session_id = Signal::derive(move || {
+        let p_sid = params
+            .read()
+            .as_ref()
+            .ok()
+            .and_then(|p| p.session_id.clone());
+        p_sid.or_else(|| session_query.get())
+    });
+
     Effect::new(move |_| {
         if model.with(|m| matches!(m.live_turn().status, TurnStatus::Streaming)) {
             progress_expanded.set(false);
@@ -60,14 +78,34 @@ pub fn ChatPage() -> impl IntoView {
     // model，新流确立 session id 的瞬间（URL 尚未更新）会误判成"切换到旧会话"，
     // 清空消息并作废当前流。
     Effect::new(move |_| {
-        let session_id = params
-            .read()
-            .as_ref()
-            .ok()
-            .and_then(|p| p.session_id.clone());
-        if let Some(session_id) = session_id {
+        let ws_id = route_workspace_id.get();
+        let session_id = route_session_id.get();
+        if let Some(ws_id) = ws_id {
+            let needs_bind = model.with_untracked(|m| {
+                m.manager().active.workspace_id.as_deref() != Some(ws_id.as_str())
+                    || m.manager().active.session_id != session_id
+            });
+            if needs_bind {
+                model.update(|m| {
+                    if let Some(sid) = &session_id {
+                        if let Some(session) = m
+                            .manager()
+                            .session_list
+                            .iter()
+                            .find(|session| session.id == *sid)
+                            .cloned()
+                        {
+                            m.switch_to_session(&session);
+                            return;
+                        }
+                    }
+                    m.switch_to_workspace(&ws_id, session_id.as_deref());
+                });
+            }
+        } else if let Some(session_id) = &session_id {
             let needs_bind = model.with_untracked(|m| {
                 m.manager().active.session_id.as_deref() != Some(session_id.as_str())
+                    || m.manager().active.workspace_id.is_some()
             });
             if needs_bind {
                 model.update(|m| {
@@ -75,15 +113,30 @@ pub fn ChatPage() -> impl IntoView {
                         .manager()
                         .session_list
                         .iter()
-                        .find(|session| session.id == session_id)
+                        .find(|session| session.id == *session_id)
                         .cloned()
                     {
                         m.switch_to_session(&session);
                     } else {
-                        m.switch_to_personal_session(&session_id);
+                        m.switch_to_personal_session(session_id);
                     }
                 });
             }
+        } else {
+            let should_reset = model.with_untracked(|m| {
+                !m.is_streaming()
+                    && (m.manager().active.session_id.is_some()
+                        || m.manager().active.workspace_id.is_some())
+            });
+            if should_reset {
+                model.update(|m| m.new_personal_chat(None));
+                history_error.set(None);
+                history_loading.set(false);
+                history_load_gen.update(|n| *n += 1);
+            }
+        }
+
+        if let Some(session_id) = session_id {
             let token_value = token.get_untracked();
             let should_load = !token_value.is_empty()
                 && model.with_untracked(|m| {
@@ -103,16 +156,6 @@ pub fn ChatPage() -> impl IntoView {
                     history_load_gen,
                 );
             }
-        } else {
-            let should_reset = model.with_untracked(|m| {
-                !m.is_streaming() && m.manager().active.session_id.is_some()
-            });
-            if should_reset {
-                model.update(|m| m.new_personal_chat(None));
-                history_error.set(None);
-                history_loading.set(false);
-                history_load_gen.update(|n| *n += 1);
-            }
         }
     });
 
@@ -125,10 +168,7 @@ pub fn ChatPage() -> impl IntoView {
         }
         spawn_refresh_sessions(model, Some(token_value.clone()));
         spawn_check_byok(has_byok, token_value.clone());
-        let session_id = params
-            .get_untracked()
-            .ok()
-            .and_then(|p| p.session_id);
+        let session_id = route_session_id.get_untracked();
         let Some(session_id) = session_id else {
             return;
         };
@@ -253,28 +293,56 @@ pub fn ChatPage() -> impl IntoView {
     let start_new = {
         let navigate = navigate.clone();
         move |_| {
-            model.update(|m| m.new_personal_chat(None));
+            model.update(|m| {
+                if let Some(ws_id) = route_workspace_id.get_untracked() {
+                    m.switch_to_workspace(&ws_id, None);
+                } else {
+                    m.new_personal_chat(None);
+                }
+            });
             capabilities.set(Vec::new());
             capabilities_manual.set(false);
             ready_count.set(0);
             history_error.set(None);
             history_loading.set(false);
             history_load_gen.update(|n| *n += 1);
-            navigate(
-                "/chat",
-                NavigateOptions {
-                    scroll: false,
-                    ..Default::default()
-                },
-            );
+            if let Some(ws_id) = route_workspace_id.get_untracked() {
+                navigate(
+                    &format!("/dashboard/{ws_id}"),
+                    NavigateOptions {
+                        scroll: false,
+                        ..Default::default()
+                    },
+                );
+            } else {
+                navigate(
+                    "/chat",
+                    NavigateOptions {
+                        scroll: false,
+                        ..Default::default()
+                    },
+                );
+            }
         }
     };
 
     let open_session = {
         let navigate = navigate.clone();
-        move |session_id: String| {
+        move |session: ChatSession| {
+            if session.scope_kind == contracts::workspaces::ConversationScopeKind::Workspace {
+                if let Some(ws_id) = &session.workspace_id {
+                    navigate(
+                        &format!("/dashboard/{}?session={}", ws_id, session.id),
+                        NavigateOptions {
+                            scroll: false,
+                            ..Default::default()
+                        },
+                    );
+                    return;
+                }
+            }
             navigate(
-                &format!("/chat/{session_id}"),
+                &format!("/chat/{}", session.id),
                 NavigateOptions {
                     scroll: false,
                     ..Default::default()
@@ -304,6 +372,19 @@ pub fn ChatPage() -> impl IntoView {
     view! {
         <div class="chat-shell">
             <aside class="chat-sessions" aria-label="会话列表" data-testid="session-list">
+                {move || {
+                    route_workspace_id.get().map(|ws_id| {
+                        view! {
+                            <div class="chat-workspace-banner" data-testid="workspace-banner">
+                                <span class="chat-workspace-label">"工作区"</span>
+                                <span class="chat-workspace-id">{ws_id}</span>
+                                <a href="/chat" class="chat-workspace-back" data-testid="back-to-personal">
+                                    "返回个人对话"
+                                </a>
+                            </div>
+                        }
+                    })
+                }}
                 <button
                     type="button"
                     class="chat-new-chat"
@@ -320,8 +401,8 @@ pub fn ChatPage() -> impl IntoView {
                         each=move || model.with(|m| m.manager().session_list.clone())
                         key=|session| session.id.clone()
                         children=move |session| {
-                            let session_id = session.id.clone();
-                            let current_id = session_id.clone();
+                            let item_session = session.clone();
+                            let current_id = session.id.clone();
                             let open_session = open_session.clone();
                             view! {
                                 <li>
@@ -340,7 +421,7 @@ pub fn ChatPage() -> impl IntoView {
                                                 "false"
                                             }
                                         }
-                                        on:click=move |_| open_session(session_id.clone())
+                                        on:click=move |_| open_session(item_session.clone())
                                     >
                                         {session_label(&session)}
                                     </button>
@@ -608,13 +689,22 @@ pub fn ChatPage() -> impl IntoView {
 }
 
 fn session_label(session: &ChatSession) -> String {
-    session
+    let base = session
         .title
         .as_deref()
         .map(str::trim)
         .filter(|title| !title.is_empty())
         .map(|title| title.to_string())
-        .unwrap_or_else(|| "未命名对话".to_string())
+        .unwrap_or_else(|| "未命名对话".to_string());
+    if session.scope_kind == contracts::workspaces::ConversationScopeKind::Workspace {
+        let ws_name = session
+            .workspace_name
+            .as_deref()
+            .unwrap_or("工作区");
+        format!("[{ws_name}] {base}")
+    } else {
+        base
+    }
 }
 
 fn message_view(message: ConversationMessage) -> impl IntoView {
@@ -880,11 +970,21 @@ fn maybe_navigate_to_session(
     model: RwSignal<ChatCanvasModel>,
     navigate: &(impl Fn(&str, NavigateOptions) + Clone),
 ) {
-    let Some(session_id) = model.with_untracked(|m| m.manager().active.session_id.clone()) else {
+    let (session_id, workspace_id) = model.with_untracked(|m| {
+        (
+            m.manager().active.session_id.clone(),
+            m.manager().active.workspace_id.clone(),
+        )
+    });
+    let Some(session_id) = session_id else {
         return;
     };
-    let target = format!("/chat/{session_id}");
-    if current_path().as_deref() == Some(target.as_str()) {
+    let target = if let Some(ws_id) = workspace_id {
+        format!("/dashboard/{ws_id}?session={session_id}")
+    } else {
+        format!("/chat/{session_id}")
+    };
+    if current_path_and_query().as_deref() == Some(target.as_str()) {
         return;
     }
     navigate(
@@ -898,12 +998,15 @@ fn maybe_navigate_to_session(
 }
 
 #[cfg(target_arch = "wasm32")]
-fn current_path() -> Option<String> {
-    web_sys::window()?.location().pathname().ok()
+fn current_path_and_query() -> Option<String> {
+    let loc = web_sys::window()?.location();
+    let path = loc.pathname().ok()?;
+    let search = loc.search().ok().unwrap_or_default();
+    Some(format!("{path}{search}"))
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn current_path() -> Option<String> {
+fn current_path_and_query() -> Option<String> {
     None
 }
 

@@ -468,16 +468,30 @@ const server = http.createServer((req, res) => {
       const authed = Boolean(req.headers.authorization);
       jsonOk(res, {
         sessions: authed
-          ? [{
-              id: 'sess-900',
-              owner_user_id: 'fixture-user',
-              scope_kind: 'personal',
-              title: '夹具会话',
-              agent_type: 'chat',
-              model_role: 'quick_chat',
-              created_at: '2026-09-04T00:00:00Z',
-              updated_at: '2026-09-04T00:00:00Z',
-            }]
+          ? [
+              {
+                id: 'sess-900',
+                owner_user_id: 'fixture-user',
+                scope_kind: 'personal',
+                title: '夹具会话',
+                agent_type: 'chat',
+                model_role: 'quick_chat',
+                created_at: '2026-09-04T00:00:00Z',
+                updated_at: '2026-09-04T00:00:00Z',
+              },
+              {
+                id: 'sess-ws-901',
+                owner_user_id: 'fixture-user',
+                workspace_id: 'ws-materials',
+                workspace_name: '材料研发',
+                scope_kind: 'workspace',
+                title: '合金强度分析',
+                agent_type: 'rag',
+                model_role: 'agent',
+                created_at: '2026-09-04T00:00:00Z',
+                updated_at: '2026-09-04T00:00:00Z',
+              },
+            ]
           : [],
       });
       return;
@@ -524,12 +538,15 @@ const server = http.createServer((req, res) => {
     const sessionMatch = pathname.match(/\/api\/v1\/chat\/sessions\/([^/]+)$/);
     if (sessionMatch) {
       const id = decodeURIComponent(sessionMatch[1]);
+      const isWs = id === 'sess-ws-901' || pathname.includes('/case/workspace/');
       jsonOk(res, {
         id,
         owner_user_id: 'fixture-user',
-        scope_kind: 'personal',
-        agent_type: 'chat',
-        model_role: 'quick_chat',
+        workspace_id: isWs ? 'ws-materials' : null,
+        workspace_name: isWs ? '材料研发' : null,
+        scope_kind: isWs ? 'workspace' : 'personal',
+        agent_type: isWs ? 'rag' : 'chat',
+        model_role: isWs ? 'agent' : 'quick_chat',
         created_at: '2026-09-04T00:00:00Z',
         updated_at: '2026-09-04T00:00:00Z',
       });

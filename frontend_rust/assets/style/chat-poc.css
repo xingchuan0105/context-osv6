@@ -18,6 +18,39 @@
     gap: 0.75rem;
 }
 
+.chat-workspace-banner {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.5rem;
+    background: var(--cos-surface);
+    border: 1px solid var(--cos-border);
+    border-radius: var(--cos-radius-sm);
+    font-size: 0.75rem;
+}
+
+.chat-workspace-label {
+    color: var(--cos-text-subtle);
+    font-size: 0.6875rem;
+}
+
+.chat-workspace-id {
+    font-weight: 400;
+    color: var(--cos-text);
+    word-break: break-all;
+}
+
+.chat-workspace-back {
+    color: var(--cos-primary);
+    text-decoration: none;
+    font-size: 0.75rem;
+    margin-top: 0.25rem;
+}
+
+.chat-workspace-back:hover {
+    text-decoration: underline;
+}
+
 .chat-new-chat,
 .chat-session-item {
     width: 100%;

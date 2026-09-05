@@ -84,8 +84,8 @@ test.describe('浏览器凭据（W1）', () => {
   test('Next 同键存储水合后出现会话列表，且无 PoC token 框', async ({ page }) => {
     await gotoChat(page, FIXTURE_BASE, '/chat', 'poc-test-token');
     await expect(page.getByTestId('poc-token-input')).toHaveCount(0);
-    await expect(page.getByTestId('session-item')).toHaveCount(1);
-    await expect(page.getByTestId('session-item')).toContainText('夹具会话');
+    await expect(page.getByTestId('session-item')).toHaveCount(2);
+    await expect(page.getByTestId('session-item').first()).toContainText('夹具会话');
     await expect(page.getByTestId('session-auth-hint')).toHaveCount(0);
   });
 });
@@ -355,6 +355,48 @@ test.describe('回答操作与 Feedback 持久化（W2.7）', () => {
     const errAlert = assistantMsg.getByTestId('feedback-error');
     await expect(errAlert).toBeVisible({ timeout: 15_000 });
     await expect(errAlert).toContainText('反馈提交失败');
+
+    expect(errors).toEqual([]);
+  });
+});
+
+test.describe('Workspace 最小 Shell 与归属隔离（W2.8）', () => {
+  test('会话列表区分工作区与个人归属，点击工作区会话路由到 /dashboard，展示横幅与工作区 Agent', async ({
+    page,
+    request,
+  }) => {
+    const errors = collectPageErrors(page);
+    await gotoChat(page, FIXTURE_BASE, '/chat', 'poc-test-token');
+
+    // 1. 会话列表区分归属
+    const personalItem = page.getByTestId('session-item').filter({ hasText: '夹具会话' });
+    const wsItem = page.getByTestId('session-item').filter({ hasText: '[材料研发]' });
+    await expect(personalItem).toBeVisible();
+    await expect(wsItem).toBeVisible();
+    await expect(wsItem).toContainText('合金强度分析');
+
+    // 2. 点击工作区会话导航至 /dashboard/:ws?session=:sid
+    await wsItem.click();
+    await expect(page).toHaveURL(/\/dashboard\/ws-materials\?session=sess-ws-901$/);
+
+    // 3. 工作区最小 shell：展示横幅与模型为工作区 Agent
+    const banner = page.getByTestId('workspace-banner');
+    await expect(banner).toBeVisible();
+    await expect(banner).toContainText('ws-materials');
+    await expect(page.getByTestId('model-role-badge')).toContainText('工作区 Agent');
+
+    // 4. 工作区内发问自动携带 workspace_id
+    await page.getByTestId('composer-input').fill('测试工作区发问');
+    await page.getByTestId('send-button').click();
+    await expect(page.getByTestId('status-line')).toHaveText('已完成', { timeout: 15_000 });
+    const state = await fixtureState(request);
+    expect(state.lastChatBody?.workspace_id).toBe('ws-materials');
+
+    // 5. 点击返回个人对话，无缝回到 /chat，横幅消失，模型恢复为个人 quick_chat
+    await page.getByTestId('back-to-personal').click();
+    await expect(page).toHaveURL(/\/chat$/);
+    await expect(page.getByTestId('workspace-banner')).toHaveCount(0);
+    await expect(page.getByTestId('model-role-badge')).toContainText('对话 · qwen3.8-flash');
 
     expect(errors).toEqual([]);
   });
