@@ -1,6 +1,6 @@
 # Rust 在线优先与 GPUI 对等：开发执行计划
 
-日期：2026-09-05。状态：E0/E1 已完成并通过，W2.6/W2.7/W2.8 已完成并提交 (`93533806`)；进入 W2.9。
+日期：2026-09-05。状态：E0/E1/E2 全部完成并通过，Gate 2 (G2) 达成 (`5bd52c59`)；进入 D0.1 / E3。
 
 本计划细化 [09-04 路线图](2026-09-04-rust-web-first-gpui-parity-roadmap.md)，保留其阶段编号与优先级；架构以 [ADR-0011](../adr/0011-rust-web-gpui-desktop.md) 晚间修订为准，产品路径以 [PRODUCT_IA](../design/PRODUCT_IA.md) 为准。旧迁移设计只引用仍有效的产品不变量、路由和内容要求；Tauri CSR 与性能 20% 开发门不再执行。
 
@@ -10,16 +10,12 @@
 
 | 当前对象 | 本次核查事实 | 不能据此声称 |
 |---|---|---|
-| Git | HEAD `93533806`；已本地提交 E0 (G0)、E1 (G1)、W2.6、W2.7、W2.8 | 已与远端实时同步、已部署 |
+| Git | HEAD `5bd52c59`；已本地提交 E0 (G0)、E1 (G1)、E2 (W2.1–W2.9, G2) | 已与远端实时同步、已部署 |
 | Chat-first 后端与 Next | W0–W3 已提交；第九轮修复文档记录 L1 OK | 本轮已复跑，或 Rust UI 已全部对等 |
 | Rust W1 (E1) | 全量 71 路由矩阵就位、样式守卫增强、资源 hash/br 与未 hash 样式无 immutable 实测通过、Tiptap 方案明确 | 已有完整设置/工作区/后台页面 |
-| Rust W2.1–W2.3 | Markdown、引用卡、进度折叠已提交 | 原文 viewer、图片引用、所有长内容行为均完成 |
-| Rust W2.4–W2.5 (E0) | 文件托盘、上传接口、scope 模型与旅程测试已验证并提交 (`cd821a74`)，G0 达成 | 已提交 W2.9，或完整 W2 Gate (G2) 通过 |
-| Rust W2.6 | model_role 标牌与 quick-chat BYOK 状态读取已验证并提交 (`774c3b3a`) | 完整 provider 配置页已迁完 (属于 E3.1) |
-| Rust W2.7 | Feedback 真实持久化与错误提示、复制回答、已删除来源卡标记已验证并提交 (`b2ba620d`) | 原文 viewer、图片引用全量完成 |
-| Rust W2.8 | `/dashboard/:id?session=:sid` 路由、工作区横幅、全局会话归属标记已验证并提交 (`93533806`) | 完整工作区资料管理与管理后台已迁完 |
-| 最近测试证据 | Playwright 22/22 passed (21.2s)；unit tests 90/90 passed；live smoke 2/2 passed | 未包含的入库检索/桌面对等用例已通过 |
-| Rust 页面 | `App` 当前挂载 `/chat/:session_id?` 与 `/dashboard/:workspace_id?`，根路径重定向聊天；`ROUTE_FAMILIES` 与全量矩阵已建立 | 已实现 settings/public/admin 页面 |
+| Rust W2 (E2) | W2.1–W2.9 全部完成，十二条 Chat-first 不变量逐一验收通过，**Gate 2 (G2) 达成** | 完整工作区资料管理与管理后台已迁完 (属于 E3) |
+| 最近测试证据 | Playwright 23/23 passed (18.1s)；unit tests 91/91 passed；live smoke 2/2 passed (7.5s) | 未包含的桌面端/管理后台用例已通过 |
+| Rust 页面 | `App` 挂载 `/chat/:session_id?` 与 `/dashboard/:workspace_id?`，根路径重定向聊天；全量 71 路由矩阵已建立 | 已实现 settings/public/admin 页面 |
 | GPUI | 独立初始 crate；`desktop/core` 尚不存在 | 已实现本机产品、已通过三平台验收 |
 
 后端现有契约是迁移输入。发现真实 API 缺口时记录最小复现和阻断项，另立后端任务；前端不能伪造成功态或新增第二协议绕过。

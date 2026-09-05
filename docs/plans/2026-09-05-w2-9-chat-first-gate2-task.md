@@ -38,5 +38,5 @@
 3. **W2.9.3 运行 Playwright 浏览器旅程全套件与 Live Smoke**：
    - `chat-journey.spec.ts`: 23 passed / 0 failed (18.1s)
    - `playwright.live.config.ts`: 2 passed / 0 failed (7.5s against avrag-api :18081)
-4. **W2.9.4 更新知识图谱 (`code-review-graph update`)，生成 G2 报告，本地提交**：进行中
+4. **W2.9.4 更新知识图谱 (`code-review-graph update`)，生成 G2 报告，本地提交**：已完成（提交 `5bd52c59`，Gate 2 达成）
 
