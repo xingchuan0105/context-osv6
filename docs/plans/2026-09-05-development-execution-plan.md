@@ -1,21 +1,21 @@
 # Rust 在线优先与 GPUI 对等：开发执行计划
 
-日期：2026-09-05。状态：计划已编排，以下新增任务尚未执行。
+日期：2026-09-05。状态：E0 已执行并通过（G0 达成，提交 cd821a74）；进入 E1。
 
 本计划细化 [09-04 路线图](2026-09-04-rust-web-first-gpui-parity-roadmap.md)，保留其阶段编号与优先级；架构以 [ADR-0011](../adr/0011-rust-web-gpui-desktop.md) 晚间修订为准，产品路径以 [PRODUCT_IA](../design/PRODUCT_IA.md) 为准。旧迁移设计只引用仍有效的产品不变量、路由和内容要求；Tauri CSR 与性能 20% 开发门不再执行。
 
 ## 1. 起点与执行范围
 
-本次按“编排后续开发”处理：只写计划与索引，不启动产品实现、编译、测试或部署。后续执行采用本地 `master`、单个实现切片在途；计划不要求多代理并行开发。
+本次按“单切片推进”处理：后续执行采用本地 `master`、单个实现切片在途；严格遵守门禁推进。
 
 | 当前对象 | 本次核查事实 | 不能据此声称 |
 |---|---|---|
-| Git | HEAD `a4c391619bea`；相对本地 `origin/master` 记录领先 38 个提交；计划编写前有 22 项改动/未跟踪文件 | 已与远端实时同步、已部署 |
+| Git | HEAD `cd821a74`；已本地提交 E0 (W2.4–W2.5) | 已与远端实时同步、已部署 |
 | Chat-first 后端与 Next | W0–W3 已提交；第九轮修复文档记录 L1 OK | 本轮已复跑，或 Rust UI 已全部对等 |
 | Rust W1 | auth bootstrap、静态预压缩、资源 hash、导航 parity 已有代码 | 已有完整登录页；导航表覆盖全部页面、SSR metadata 已实际生效 |
 | Rust W2.1–W2.3 | Markdown、引用卡、进度折叠已提交 | 原文 viewer、图片引用、所有长内容行为均完成 |
-| Rust W2.4–W2.5 | 文件托盘、上传接口、scope 模型与旅程测试在未提交工作区 | 已提交，或完整 W2 Gate 通过 |
-| 最近测试证据 | Playwright `.last-run.json` 在 09-05 02:37 为 passed；旧 cargo check 日志 exit 0 | `.last-run.json` 能证明执行范围、用例数量、产物与当前源码一致 |
+| Rust W2.4–W2.5 (E0) | 文件托盘、上传接口、scope 模型与旅程测试已验证并提交 (`cd821a74`)，G0 达成 | 已提交 W2.6–W2.9，或完整 W2 Gate (G2) 通过 |
+| 最近测试证据 | Playwright 16/16 passed (16.5s)；unit tests 83/83 passed；live smoke 2/2 passed | 未包含的入库检索/桌面对等用例已通过 |
 | Rust 页面 | `App` 当前挂载 `/chat/:session_id?`，根路径重定向聊天；`ROUTE_FAMILIES` 是导航清单 | 已实现 dashboard/settings/public/admin 页面 |
 | GPUI | 独立初始 crate；`desktop/core` 尚不存在 | 已实现本机产品、已通过三平台验收 |
 

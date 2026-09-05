@@ -59,7 +59,7 @@
 | E0.3 | 核验删除、轮询、重试与导航防竞态逻辑 | 已完成 | 通过单元与 E2E 验证，墓碑过滤生效，迟到请求防污染 |
 | E0.4 | 核验自动 RAG 与手动能力组合规则 | 已完成 | 单元测试与 E2E 验证 0->1 自动附带、1->0 自动撤销、手动独立 |
 | E0.5 | 运行 Rust 模型测试、check、Playwright 浏览器旅程与真机链路 | 已完成 | 83/83 unit passed, check 0, 16/16 browser passed, 2/2 live passed |
-| E0.6 | 图谱更新 (`code-review-graph update`) 与本地提交 (G0) | 进行中 | 准备提交并达成 G0 |
+| E0.6 | 图谱更新 (`code-review-graph update`) 与本地提交 (G0) | 已完成 | 图谱已更新 (25 files)，已提交 commit `cd821a74` (G0 达成) |
 
 ---
 
@@ -70,6 +70,6 @@
 - **Cargo Leptos Build**：生成 wasm32 与 ssr 二进制成功 (exit 0)
 - **Playwright Test**：16 passed / 0 failed (16.5s)
 - **Live Smoke**：2 passed / 0 failed (5.4s against avrag-api :18081)
-- **Graph Update**：待执行
-- **Commit SHA**：待执行
+- **Graph Update**：已完成 (25 files, 49 nodes, 480 edges)
+- **Commit SHA**：`cd821a74`
 
