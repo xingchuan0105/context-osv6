@@ -36,6 +36,7 @@ const state = {
   lastChatBody: null,
 };
 const filesState = { file: null, events: [] };
+let secretsState = [];
 
 function fileEvent(kind) {
   filesState.events.push(kind);
@@ -449,18 +450,19 @@ const server = http.createServer((req, res) => {
     }
     if (pathname.endsWith('/api/v1/settings/provider-secrets')) {
       const hasByok = pathname.includes('/case/byok');
+      const baseSecrets = hasByok
+        ? [
+            {
+              id: 'sec-quick-1',
+              purpose: 'quick_chat',
+              provider: 'bailian',
+              model_hint: 'qwen3.8-flash',
+              is_active: true,
+            },
+          ]
+        : [];
       jsonOk(res, {
-        secrets: hasByok
-          ? [
-              {
-                id: 'sec-quick-1',
-                purpose: 'quick_chat',
-                provider: 'bailian',
-                model_hint: 'qwen3.8-flash',
-                is_active: true,
-              },
-            ]
-          : [],
+        secrets: [...baseSecrets, ...secretsState],
       });
       return;
     }
@@ -561,6 +563,7 @@ const server = http.createServer((req, res) => {
     state.lastChatBody = null;
     filesState.file = null;
     filesState.events = [];
+    secretsState = [];
     res.writeHead(204);
     res.end();
     return;
@@ -577,7 +580,31 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  if (req.method === 'PUT' && url.pathname.endsWith('/api/v1/settings/provider-secrets')) {
+    readBody(req).then((buf) => {
+      const body = JSON.parse(buf.toString('utf8') || '{}');
+      const newSec = {
+        id: `sec-${Date.now()}`,
+        provider: body.provider,
+        purpose: body.purpose,
+        model_hint: body.model_hint,
+        is_active: true,
+      };
+      secretsState = secretsState.filter((s) => s.purpose !== body.purpose);
+      secretsState.push(newSec);
+      jsonOk(res, { success: true, data: newSec });
+    });
+    return;
+  }
+
   if (req.method === 'DELETE') {
+    const secMatch = url.pathname.match(/\/api\/v1\/settings\/provider-secrets\/([^/]+)$/);
+    if (secMatch) {
+      const secId = decodeURIComponent(secMatch[1]);
+      secretsState = secretsState.filter((s) => s.id !== secId);
+      jsonOk(res, { success: true, data: {} });
+      return;
+    }
     const delMatch = url.pathname.match(/\/api\/v1\/chat\/sessions\/[^/]+\/files\/([^/]+)$/);
     if (delMatch) {
       const bindingId = decodeURIComponent(delMatch[1]);
@@ -591,6 +618,83 @@ const server = http.createServer((req, res) => {
 
   if (req.method === 'POST') {
     const pathname = url.pathname;
+    if (pathname.endsWith('/api/auth/login')) {
+      readBody(req).then((buf) => {
+        const body = JSON.parse(buf.toString('utf8') || '{}');
+        if (body.password === 'wrong') {
+          res.writeHead(401, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, data: null, error: '账号或密码错误' }));
+          return;
+        }
+        jsonOk(res, {
+          success: true,
+          data: {
+            token: 'test-login-token-999',
+            user: {
+              id: 'user-auth-1',
+              email: body.email || 'user@example.com',
+              full_name: '测试用户',
+              public_profile_enabled: false,
+            },
+            reset_ticket: null,
+          },
+          error: null,
+        });
+      });
+      return;
+    }
+    if (pathname.endsWith('/api/auth/register')) {
+      readBody(req).then((buf) => {
+        const body = JSON.parse(buf.toString('utf8') || '{}');
+        jsonOk(res, {
+          success: true,
+          data: {
+            token: 'test-reg-token-888',
+            user: {
+              id: 'user-reg-1',
+              email: body.email,
+              full_name: body.full_name || '新注册用户',
+              public_profile_enabled: false,
+            },
+            reset_ticket: null,
+          },
+          error: null,
+        });
+      });
+      return;
+    }
+    if (pathname.endsWith('/api/auth/reset/send-code')) {
+      readBody(req).then(() => {
+        jsonOk(res, { success: true, data: {}, error: null });
+      });
+      return;
+    }
+    if (pathname.endsWith('/api/auth/reset/verify-code')) {
+      readBody(req).then((buf) => {
+        const body = JSON.parse(buf.toString('utf8') || '{}');
+        if (body.code === '000000') {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, data: null, error: '验证码无效' }));
+          return;
+        }
+        jsonOk(res, {
+          success: true,
+          data: {
+            token: '',
+            user: { id: '', email: body.email, full_name: '' },
+            reset_ticket: 'valid-reset-ticket-123',
+          },
+          error: null,
+        });
+      });
+      return;
+    }
+    if (pathname.endsWith('/api/auth/reset/confirm')) {
+      readBody(req).then(() => {
+        jsonOk(res, { success: true, data: {}, error: null });
+      });
+      return;
+    }
     if (pathname.endsWith('/api/v1/chat/sessions')) {
       req.resume();
       req.on('end', () => {

@@ -115,6 +115,20 @@ impl BrowserRestClient {
     ) -> Result<(), TransportError> {
         self.unavailable()
     }
+
+    pub async fn upsert_provider_secret(
+        &self,
+        _provider: &str,
+        _api_key: &str,
+        _purpose: &str,
+        _model_hint: Option<&str>,
+    ) -> Result<(), TransportError> {
+        self.unavailable()
+    }
+
+    pub async fn revoke_provider_secret(&self, _id: &str) -> Result<(), TransportError> {
+        self.unavailable()
+    }
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -386,6 +400,39 @@ impl BrowserRestClient {
             true,
         )
         .await?;
+        Ok(())
+    }
+
+    pub async fn upsert_provider_secret(
+        &self,
+        provider: &str,
+        api_key: &str,
+        purpose: &str,
+        model_hint: Option<&str>,
+    ) -> Result<(), TransportError> {
+        let payload = serde_json::json!({
+            "provider": provider,
+            "api_key": api_key,
+            "purpose": purpose,
+            "model_hint": model_hint,
+        });
+        let body = serde_json::to_vec(&payload)?;
+        wasm_request::request_bytes(
+            self,
+            "PUT",
+            &crate::providers::provider_secrets_url(&self.base_url),
+            Some(&body),
+            Some("application/json"),
+            true,
+        )
+        .await?;
+        Ok(())
+    }
+
+    pub async fn revoke_provider_secret(&self, id: &str) -> Result<(), TransportError> {
+        let trimmed = crate::conversation_api::trim_base_url(&self.base_url);
+        let url = format!("{trimmed}/api/v1/settings/provider-secrets/{id}");
+        wasm_request::request_bytes(self, "DELETE", &url, None, None, true).await?;
         Ok(())
     }
 }

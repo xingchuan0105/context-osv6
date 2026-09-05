@@ -134,11 +134,18 @@ pub fn route_family(id: &str) -> Option<&'static RouteFamily> {
     ROUTE_FAMILIES.iter().find(|family| family.id == id)
 }
 
-/// Phase 0 已挂载路径（/chat 与 /dashboard）。
+/// Phase 0 & E3.1 已挂载路径。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AppRoute {
     Chat { session_id: Option<String> },
     Dashboard { workspace_id: Option<String> },
+    Login,
+    Register,
+    ResetPassword,
+    ResetPasswordVerify,
+    ResetPasswordConfirm,
+    Settings,
+    SettingsUsage,
     NotFound,
 }
 
@@ -160,6 +167,13 @@ impl AppRoute {
             ["dashboard", wid] => Self::Dashboard {
                 workspace_id: Some(wid.to_string()),
             },
+            ["login"] => Self::Login,
+            ["register"] => Self::Register,
+            ["reset-password"] => Self::ResetPassword,
+            ["reset-password", "verify"] => Self::ResetPasswordVerify,
+            ["reset-password", "confirm"] => Self::ResetPasswordConfirm,
+            ["settings"] => Self::Settings,
+            ["settings", "usage"] => Self::SettingsUsage,
             _ => Self::NotFound,
         }
     }
@@ -192,5 +206,18 @@ mod tests {
                 workspace_id: Some("ws-1".to_string())
             }
         );
+        assert_eq!(AppRoute::parse("/login"), AppRoute::Login);
+        assert_eq!(AppRoute::parse("/register"), AppRoute::Register);
+        assert_eq!(AppRoute::parse("/reset-password"), AppRoute::ResetPassword);
+        assert_eq!(
+            AppRoute::parse("/reset-password/verify"),
+            AppRoute::ResetPasswordVerify
+        );
+        assert_eq!(
+            AppRoute::parse("/reset-password/confirm"),
+            AppRoute::ResetPasswordConfirm
+        );
+        assert_eq!(AppRoute::parse("/settings"), AppRoute::Settings);
+        assert_eq!(AppRoute::parse("/settings/usage"), AppRoute::SettingsUsage);
     }
 }

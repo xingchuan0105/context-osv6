@@ -1,6 +1,11 @@
 use crate::auth::AuthBootstrap;
+use crate::components::auth::{
+    LoginPage, RegisterPage, ResetPasswordConfirmPage, ResetPasswordRequestPage,
+    ResetPasswordVerifyPage,
+};
 use crate::components::chat::ChatCanvasModel;
 use crate::components::chat::chat_page::ChatPage;
+use crate::components::settings::{SettingsPage, UsagePage};
 use leptos::prelude::*;
 use leptos_config::LeptosOptions;
 use leptos_meta::{HashedStylesheet, MetaTags, provide_meta_context};
@@ -34,6 +39,13 @@ pub fn App() -> impl IntoView {
                 <Route path=path!("/") view=RedirectToChat/>
                 <Route path=path!("/chat/:session_id?") view=ChatPage/>
                 <Route path=path!("/dashboard/:workspace_id?") view=ChatPage/>
+                <Route path=path!("/login") view=LoginPage/>
+                <Route path=path!("/register") view=RegisterPage/>
+                <Route path=path!("/reset-password") view=ResetPasswordRequestPage/>
+                <Route path=path!("/reset-password/verify") view=ResetPasswordVerifyPage/>
+                <Route path=path!("/reset-password/confirm") view=ResetPasswordConfirmPage/>
+                <Route path=path!("/settings") view=SettingsPage/>
+                <Route path=path!("/settings/usage") view=UsagePage/>
             </Routes>
         </Router>
     }

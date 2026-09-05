@@ -604,3 +604,361 @@
     margin: 0 auto;
     padding: 3rem 1rem;
 }
+
+/* E3.1 Auth 样式 */
+.auth-page-container {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem 1rem;
+    background: var(--cos-bg);
+}
+
+.auth-card {
+    width: 100%;
+    max-width: 400px;
+    background: var(--cos-surface);
+    border: 1px solid var(--cos-border);
+    border-radius: var(--cos-radius-md);
+    padding: 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.auth-header {
+    text-align: center;
+}
+
+.auth-title {
+    font-size: 1.25rem;
+    font-weight: 400;
+    margin: 0 0 0.5rem;
+    color: var(--cos-text);
+}
+
+.auth-subtitle {
+    font-size: 0.875rem;
+    color: var(--cos-text-secondary);
+    margin: 0;
+}
+
+.auth-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.auth-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+}
+
+.auth-field label {
+    font-size: 0.8125rem;
+    color: var(--cos-text-secondary);
+}
+
+.auth-field input {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--cos-border);
+    border-radius: var(--cos-radius-sm);
+    background: var(--cos-surface);
+    color: var(--cos-text);
+    font: inherit;
+    font-size: 0.875rem;
+}
+
+.auth-field-checkbox label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.8125rem;
+    color: var(--cos-text-secondary);
+}
+
+.auth-submit-btn {
+    padding: 0.625rem 1rem;
+    border: 1px solid var(--cos-border);
+    border-radius: var(--cos-radius-sm);
+    background: var(--cos-cta-bg);
+    color: var(--cos-cta-fg);
+    font-size: 0.875rem;
+    cursor: pointer;
+    margin-top: 0.5rem;
+}
+
+.auth-submit-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.auth-error {
+    color: var(--cos-error);
+    font-size: 0.8125rem;
+    margin: 0;
+}
+
+.auth-success-message {
+    color: var(--cos-primary);
+    font-size: 0.875rem;
+    text-align: center;
+    padding: 1rem 0;
+}
+
+.auth-footer-links {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    font-size: 0.8125rem;
+}
+
+.auth-link {
+    color: var(--cos-primary);
+    text-decoration: none;
+}
+
+.auth-link:hover {
+    text-decoration: underline;
+}
+
+.auth-divider {
+    color: var(--cos-text-subtle);
+}
+
+/* E3.1 Settings 样式 */
+.settings-shell {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 2rem 1rem 4rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.settings-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--cos-border);
+    padding-bottom: 1rem;
+}
+
+.settings-header-left {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.settings-back-link {
+    color: var(--cos-text-secondary);
+    text-decoration: none;
+    font-size: 0.8125rem;
+}
+
+.settings-back-link:hover {
+    color: var(--cos-primary);
+}
+
+.settings-title {
+    font-size: 1.5rem;
+    font-weight: 400;
+    margin: 0;
+    color: var(--cos-text);
+}
+
+.settings-logout-btn {
+    padding: 0.375rem 0.75rem;
+    border: 1px solid var(--cos-border);
+    border-radius: var(--cos-radius-sm);
+    background: transparent;
+    color: var(--cos-text-secondary);
+    font-size: 0.8125rem;
+    cursor: pointer;
+}
+
+.settings-logout-btn:hover {
+    color: var(--cos-error);
+    border-color: var(--cos-error);
+}
+
+.settings-nav {
+    display: flex;
+    gap: 0.5rem;
+    border-bottom: 1px solid var(--cos-border);
+    padding-bottom: 0.5rem;
+    overflow-x: auto;
+}
+
+.settings-nav-item {
+    padding: 0.375rem 0.75rem;
+    border: 1px solid transparent;
+    border-radius: var(--cos-radius-sm);
+    background: transparent;
+    color: var(--cos-text-secondary);
+    font-size: 0.875rem;
+    cursor: pointer;
+    text-decoration: none;
+}
+
+.settings-nav-item.is-active {
+    background: var(--cos-surface);
+    border-color: var(--cos-border);
+    color: var(--cos-text);
+}
+
+.settings-content {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.settings-panel {
+    background: var(--cos-surface);
+    border: 1px solid var(--cos-border);
+    border-radius: var(--cos-radius-md);
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.settings-panel-title {
+    font-size: 1.125rem;
+    font-weight: 400;
+    margin: 0;
+    color: var(--cos-text);
+}
+
+.settings-panel-desc {
+    font-size: 0.8125rem;
+    color: var(--cos-text-secondary);
+    margin: 0;
+    line-height: 1.5;
+}
+
+.settings-provider-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.settings-provider-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem;
+    border: 1px solid var(--cos-border);
+    border-radius: var(--cos-radius-sm);
+    background: var(--cos-bg-secondary);
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.settings-provider-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.settings-provider-name {
+    font-size: 0.875rem;
+    color: var(--cos-text);
+}
+
+.settings-provider-model {
+    font-size: 0.75rem;
+    color: var(--cos-text-subtle);
+}
+
+.settings-provider-action {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.settings-secret-status {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.settings-status-badge {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+    background: var(--cos-primary-subtle, var(--cos-surface));
+    color: var(--cos-primary);
+    border-radius: var(--cos-radius-sm);
+}
+
+.settings-secret-form {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.settings-key-input {
+    padding: 0.375rem 0.5rem;
+    border: 1px solid var(--cos-border);
+    border-radius: var(--cos-radius-sm);
+    font-size: 0.8125rem;
+    background: var(--cos-surface);
+    color: var(--cos-text);
+    width: 200px;
+}
+
+.settings-btn-save {
+    padding: 0.375rem 0.75rem;
+    border: 1px solid var(--cos-border);
+    border-radius: var(--cos-radius-sm);
+    background: var(--cos-cta-bg);
+    color: var(--cos-cta-fg);
+    font-size: 0.8125rem;
+    cursor: pointer;
+}
+
+.settings-btn-revoke {
+    padding: 0.375rem 0.75rem;
+    border: 1px solid var(--cos-border);
+    border-radius: var(--cos-radius-sm);
+    background: transparent;
+    color: var(--cos-error);
+    font-size: 0.8125rem;
+    cursor: pointer;
+}
+
+.settings-error {
+    width: 100%;
+    color: var(--cos-error);
+    font-size: 0.75rem;
+    margin: 0.25rem 0 0;
+}
+
+.settings-usage-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+}
+
+.settings-usage-card {
+    padding: 1rem;
+    border: 1px solid var(--cos-border);
+    border-radius: var(--cos-radius-sm);
+    background: var(--cos-bg-secondary);
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.settings-usage-label {
+    font-size: 0.75rem;
+    color: var(--cos-text-secondary);
+}
+
+.settings-usage-value {
+    font-size: 1.5rem;
+    color: var(--cos-text);
+}

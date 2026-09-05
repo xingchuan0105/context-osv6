@@ -23,7 +23,10 @@ pub use auth::{
     parse_persisted_auth_json, persisted_clear_cookie, persisted_set_cookie,
     session_hint_clear_cookie, session_hint_set_cookie,
 };
-pub use browser_auth::{clear_browser_auth, fetch_me, read_browser_auth, write_browser_auth};
+pub use browser_auth::{
+    auth_login, auth_register, auth_reset_confirm, auth_reset_send_code, auth_reset_verify_code,
+    clear_browser_auth, fetch_me, read_browser_auth, write_browser_auth,
+};
 pub use browser_rest::BrowserRestClient;
 pub use browser_transport::BrowserHttpTransport;
 pub use client::ChatClient;
