@@ -1,6 +1,6 @@
 # Rust 在线优先与 GPUI 对等：开发执行计划
 
-日期：2026-09-05。状态：E0/E1/E2/D0.1/E3.1 已全部完成并通过 (`b2e71dfc`)；进入 E3.2 (Dashboard 与 Workspace 管理)。
+日期：2026-09-05。状态：E0/E1/E2/D0.1/E3.1/E3.2 已全部完成并通过 (`03bb02a6`)；进入 E3.3 (分享中心、公开分享、主页与邀请)。
 
 本计划细化 [09-04 路线图](2026-09-04-rust-web-first-gpui-parity-roadmap.md)，保留其阶段编号与优先级；架构以 [ADR-0011](../adr/0011-rust-web-gpui-desktop.md) 晚间修订为准，产品路径以 [PRODUCT_IA](../design/PRODUCT_IA.md) 为准。旧迁移设计只引用仍有效的产品不变量、路由和内容要求；Tauri CSR 与性能 20% 开发门不再执行。
 
@@ -10,14 +10,15 @@
 
 | 当前对象 | 本次核查事实 | 不能据此声称 |
 |---|---|---|
-| Git | HEAD `b2e71dfc`；已本地提交 E0 (G0)、E1 (G1)、E2 (G2)、D0.1、E3.1 | 已与远端实时同步、已部署 |
+| Git | HEAD `03bb02a6`；已本地提交 E0 (G0)、E1 (G1)、E2 (G2)、D0.1、E3.1、E3.2 | 已与远端实时同步、已部署 |
 | Chat-first 后端与 Next | W0–W3 已提交；第九轮修复文档记录 L1 OK | 本轮已复跑，或 Rust UI 已全部对等 |
 | Rust W1 (E1) | 全量 71 路由矩阵就位、样式守卫增强、资源 hash/br 与未 hash 样式无 immutable 实测通过、Tiptap 方案明确 | 已有完整工作区资料管理与后台页面 |
 | Rust W2 (E2) | W2.1–W2.9 全部完成，十二条 Chat-first 不变量逐一验收通过，**Gate 2 (G2) 达成** | 完整工作区资料管理已迁完 (属于 E3.2) |
 | 桌面 D0.1 | `desktop/core` 抽离，复用 `web-sdk::SseDecoder`，多字节中文跨包无损重组已验证并提交 (`b3ce4ad7`) | GPUI 已完全对等 (属于 D1~D6) |
 | Rust E3.1 | 登录/注册/密码重置三步走/登出 + `/settings?tab=providers` 自备密钥闭环已验证并提交 (`b2e71dfc`) | 完整交易、分享与管理后台已迁完 |
-| 最近测试证据 | Playwright 28/28 passed (20.0s)；desktop-core 4/4 passed；unit tests 91/91 passed；live smoke 2/2 passed (7.5s) | 未包含的后台/分享用例已通过 |
-| Rust 页面 | `App` 挂载对话、工作区、登录、注册、重置密码三端点、设置、用量等 10 个端点；全量 71 路由矩阵已建立 | 已实现 public/admin 页面 |
+| Rust E3.2 | `/dashboard` 概览与建库、`/dashboard/:id` 工作台与持久资料/笔记、分析页面已验证并提交 (`03bb02a6`) | 完整分享中心与交易已迁完 |
+| 最近测试证据 | Playwright 31/31 passed (27.8s)；desktop-core 4/4 passed；unit tests 95/95 passed；live smoke 2/2 passed (7.5s) | 未包含的后台/分享用例已通过 |
+| Rust 页面 | `App` 挂载对话、工作区概览/工作台/分析、登录/注册/重置三端点、设置、用量等 14 个端点；全量 71 路由矩阵已建立 | 已实现 public/admin 页面 |
 | GPUI | 独立初始 crate；`desktop/core` 已就绪可供复用 | 已实现本机产品、已通过三平台验收 |
 
 后端现有契约是迁移输入。发现真实 API 缺口时记录最小复现和阻断项，另立后端任务；前端不能伪造成功态或新增第二协议绕过。

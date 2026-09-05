@@ -37,4 +37,4 @@
 | E3.2.3 | 工作台持久来源与笔记面板集成 (`/dashboard/:id`) | 已完成 | `workspace_workbench.rs`, 聊天+右轨管理 |
 | E3.2.4 | 分析与统计页面落地 (`/dashboard/analytics`, `/analyze`) | 已完成 | `workspace_analytics.rs` 双页面就位 |
 | E3.2.5 | 路由挂载、样式集成与自动化测试断言 | 已完成 | `workspace-journey.spec.ts` 3/3, 全量 31/31 passed |
-| E3.2.6 | 验证收敛、图谱更新与本地提交 | 进行中 | 待提交本地 commit |
+| E3.2.6 | 验证收敛、图谱更新与本地提交 | 已完成 | 图谱已更新 (19 files)，本地提交 `03bb02a6` (E3.2 达成) |
