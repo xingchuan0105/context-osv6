@@ -31,4 +31,4 @@
 | D0.1.2 | 实现中立的 `stream_chat_events`，复用 `web-sdk::SseDecoder` | 已完成 | `desktop/core/src/chat_stream.rs` |
 | D0.1.3 | 编写跨 chunk 中文、换行、坏帧与取消单元测试 | 已完成 | `desktop/core/tests/chat_stream_tests.rs` 4/4 passed |
 | D0.1.4 | Tauri 接入 `desktop-core`，清理废弃许可门与手写解析代码 | 已完成 | `desktop/src-tauri/src/commands/chat_stream.rs` 简化重构 |
-| D0.1.5 | 验证收敛、图谱更新与本地提交 | 进行中 | 待提交本地 commit |
+| D0.1.5 | 验证收敛、图谱更新与本地提交 | 已完成 | 图谱已更新 (12 files)，本地提交 `b3ce4ad7` (D0.1 达成) |
