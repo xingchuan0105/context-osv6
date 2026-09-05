@@ -168,6 +168,14 @@ pub enum AppRoute {
     Admin { section: AdminSection },
     Help,
     HelpWrite,
+    HelpFaq,
+    HelpCompare,
+    HelpApiAccess,
+    HelpApiAccessAgents,
+    Integrations,
+    IntegrationsMcp,
+    IntegrationsClaudeDesktop,
+    IntegrationsCursor,
     Pricing,
     UpgradePaywall,
     UpgradeSuccess,
@@ -264,6 +272,14 @@ impl AppRoute {
             },
             ["help"] => Self::Help,
             ["help", "write"] => Self::HelpWrite,
+            ["help", "faq"] => Self::HelpFaq,
+            ["help", "compare"] => Self::HelpCompare,
+            ["help", "api-access"] => Self::HelpApiAccess,
+            ["help", "api-access", "agents"] => Self::HelpApiAccessAgents,
+            ["integrations"] => Self::Integrations,
+            ["integrations", "mcp"] => Self::IntegrationsMcp,
+            ["integrations", "claude-desktop"] => Self::IntegrationsClaudeDesktop,
+            ["integrations", "cursor"] => Self::IntegrationsCursor,
             ["pricing"] => Self::Pricing,
             ["upgrade", "paywall"] => Self::UpgradePaywall,
             ["upgrade", "success"] => Self::UpgradeSuccess,
@@ -366,7 +382,29 @@ mod tests {
         );
         assert_eq!(AppRoute::parse("/help"), AppRoute::Help);
         assert_eq!(AppRoute::parse("/help/write"), AppRoute::HelpWrite);
+        assert_eq!(AppRoute::parse("/help/faq"), AppRoute::HelpFaq);
+        assert_eq!(AppRoute::parse("/help/compare"), AppRoute::HelpCompare);
+        assert_eq!(AppRoute::parse("/help/api-access"), AppRoute::HelpApiAccess);
+        assert_eq!(
+            AppRoute::parse("/help/api-access/agents"),
+            AppRoute::HelpApiAccessAgents
+        );
+        assert_eq!(AppRoute::parse("/integrations"), AppRoute::Integrations);
+        assert_eq!(
+            AppRoute::parse("/integrations/mcp"),
+            AppRoute::IntegrationsMcp
+        );
+        assert_eq!(
+            AppRoute::parse("/integrations/claude-desktop"),
+            AppRoute::IntegrationsClaudeDesktop
+        );
+        assert_eq!(
+            AppRoute::parse("/integrations/cursor"),
+            AppRoute::IntegrationsCursor
+        );
         assert_eq!(AppRoute::parse("/admin/nope"), AppRoute::NotFound);
+        assert_eq!(AppRoute::parse("/help/nope"), AppRoute::NotFound);
+        assert_eq!(AppRoute::parse("/integrations/nope"), AppRoute::NotFound);
     }
 
     #[test]

@@ -30,12 +30,13 @@
 | **E3.3** | `65ab035a` | 工作区分享中心三端点、公开只读知识库问答 (`/shared/kb/:token`)、分享者公开主页与工作区邀请加入页面 | [`2026-09-05-e3-3-share-invite-task.md`](2026-09-05-e3-3-share-invite-task.md) |
 | **E3.4** | `82076d9b` | 套餐定价对比 (`/pricing`)、钱包充值面板 (`#topup`)、拦截墙 (`/upgrade/paywall`)、成功回跳与桌面购买说明 | [`2026-09-05-e3-4-billing-pricing-task.md`](2026-09-05-e3-4-billing-pricing-task.md) |
 | **E3.5** | 本切片提交 | `/admin/*` 管理后台 13 端点（门禁 401→login?next / 403→无权面板、分页、空态、CSV 导出、变更请求复核闭环）与 `/help`、`/help/write` 应用内帮助；**G3 达成** | [`2026-09-05-e3-5-admin-help-task.md`](2026-09-05-e3-5-admin-help-task.md) |
+| **E4.1** | 本切片提交 | 公开帮助与集成生态 8 端点（`/help/faq`, `/help/compare`, `/help/api-access*`, `/integrations/*`），内容对齐 Next 单一数据源 + canonical/hreflang SEO 头 | [`2026-09-05-e4-1-public-help-integrations-task.md`](2026-09-05-e4-1-public-help-integrations-task.md) |
 
 ---
 
 ## 2. 架构现状与已挂载路由清单
 
-当前 `frontend_rust` 已挂载并实现 **39 个产品端点**，涵盖对话、工作区、分享、公开知识库、主页、邀请、认证、设置、定价与交易、管理后台运维与应用内帮助全链路：
+当前 `frontend_rust` 已挂载并实现 **47 个产品端点**，涵盖对话、工作区、分享、公开知识库、主页、邀请、认证、设置、定价与交易、管理后台运维、应用内帮助与公开帮助/集成生态全链路：
 
 ```text
 /                                   -> Redirect to /chat
@@ -73,6 +74,14 @@
 /admin/feature-flags                -> AdminFeatureFlagsPage (功能开关与变更请求复核)
 /help                               -> HelpPage (应用内帮助中心)
 /help/write                         -> HelpWritePage (长文与提示词编写建议)
+/help/faq                           -> HelpFaqPage (公开产品 FAQ)
+/help/compare                       -> HelpComparePage (公开中立选型对照)
+/help/api-access                    -> HelpApiAccessPage (公开人类接入说明)
+/help/api-access/agents             -> HelpAgentApiPage (Agent 可读接入文档)
+/integrations                       -> IntegrationIndexPage (集成承接索引)
+/integrations/mcp                   -> IntegrationMcpPage (MCP 总入口承接)
+/integrations/claude-desktop        -> IntegrationClaudeDesktopPage (Claude Desktop 承接)
+/integrations/cursor                -> IntegrationCursorPage (Cursor 承接)
 /pricing                            -> PricingPage (套餐对比与钱包充值面板)
 /upgrade/paywall                    -> PaywallPage (配额与高级会员拦截墙说明)
 /upgrade/success                    -> UpgradeSuccessPage (支付成功回跳与订单查询)
@@ -104,9 +113,9 @@
 
 ---
 
-## 4. 下一棒执行指南：E4 (W4 公共 SSR / SEO / 双语)
+## 4. 下一棒执行指南：E4 剩余（营销/桌面下载族、SEO 基建、双语）
 
-E3.5 已完成并达成 **G3**（见 §1 任务记录与 [`2026-09-05-e3-5-admin-help-task.md`](2026-09-05-e3-5-admin-help-task.md)）。下一棒为 E4：公共 SSR 页面族（`/help/faq`、`/help/compare`、`/help/api-access*`、`/integrations/*`）、SEO/sitemap 与双语（`/en/*`）迁移，范围以权威计划 §6 E4 与 `ROUTE_MIGRATION_MATRIX.md` §8/§9 为准。
+E4.1（公开帮助与集成生态 8 端点）已完成（见 [`2026-09-05-e4-1-public-help-integrations-task.md`](2026-09-05-e4-1-public-help-integrations-task.md)）。E4 剩余：`/desktop`（row 47，挂载后把 FAQ/compare/integrations 的「免费客户端」链接从 `/desktop/buy` 恢复为 `/desktop`）与营销页族、结构化数据 JSON-LD、robots/sitemap/manifest/llms.txt、OG/验证文件、状态码与重定向、`/en/*` 双语。范围以权威计划 §6 E4 与 `ROUTE_MIGRATION_MATRIX.md` §9–§11 为准。
 
 ### 4.1 常用命令与操作提示
 - **构建工作目录**：`frontend_rust`

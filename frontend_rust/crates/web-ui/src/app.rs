@@ -16,7 +16,12 @@ use crate::components::chat::chat_page::ChatPage;
 use crate::components::dashboard::{
     DashboardOverviewPage, GlobalAnalyticsPage, WorkspaceAnalyzePage, WorkspaceWorkbenchPage,
 };
-use crate::components::help::{HelpPage, HelpWritePage};
+use crate::components::help::{
+    HelpApiAccessPage, HelpAgentApiPage, HelpComparePage, HelpFaqPage, HelpPage, HelpWritePage,
+};
+use crate::components::integrations::{
+    IntegrationClaudeDesktopPage, IntegrationCursorPage, IntegrationIndexPage, IntegrationMcpPage,
+};
 use crate::components::settings::{SettingsPage, UsagePage};
 use crate::components::share::{
     InvitePage, SharedKbPage, SharedUserPage, WorkspaceShareAnalyticsPage,
@@ -86,6 +91,14 @@ pub fn App() -> impl IntoView {
                 <Route path=path!("/admin/feature-flags") view=AdminFeatureFlagsPage/>
                 <Route path=path!("/help") view=HelpPage/>
                 <Route path=path!("/help/write") view=HelpWritePage/>
+                <Route path=path!("/help/faq") view=HelpFaqPage/>
+                <Route path=path!("/help/compare") view=HelpComparePage/>
+                <Route path=path!("/help/api-access") view=HelpApiAccessPage/>
+                <Route path=path!("/help/api-access/agents") view=HelpAgentApiPage/>
+                <Route path=path!("/integrations") view=IntegrationIndexPage/>
+                <Route path=path!("/integrations/mcp") view=IntegrationMcpPage/>
+                <Route path=path!("/integrations/claude-desktop") view=IntegrationClaudeDesktopPage/>
+                <Route path=path!("/integrations/cursor") view=IntegrationCursorPage/>
                 <Route path=path!("/pricing") view=PricingPage/>
                 <Route path=path!("/upgrade/paywall") view=PaywallPage/>
                 <Route path=path!("/upgrade/success") view=UpgradeSuccessPage/>

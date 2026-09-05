@@ -97,14 +97,14 @@
 |---|---|---|---|---|---|---|---|
 | 37 | `/help` | `app/(app)/help/page.tsx` | 公开/应用内 | SSR | indexable | 已挂载 | E3.5 |
 | 38 | `/help/write` | `app/(app)/help/write/page.tsx` | 公开/应用内 | SSR | indexable | 已挂载 | E3.5 |
-| 39 | `/help/faq` | `app/(open)/help/faq/page.tsx` | 公开 | SSR | indexable | 待挂载 | E4 |
-| 40 | `/help/compare` | `app/(open)/help/compare/page.tsx` | 公开 | SSR | indexable | 待挂载 | E4 |
-| 41 | `/help/api-access` | `app/(open)/help/api-access/page.tsx` | 公开 | SSR | indexable | 待挂载 | E4 |
-| 42 | `/help/api-access/agents` | `app/(open)/help/api-access/agents/page.tsx` | 公开 | SSR | indexable | 待挂载 | E4 |
-| 43 | `/integrations` | `app/(open)/integrations/page.tsx` | 公开 | SSR | indexable | 待挂载 | E4 |
-| 44 | `/integrations/mcp` | `app/(open)/integrations/mcp/page.tsx` | 公开 | SSR | indexable | 待挂载 | E4 |
-| 45 | `/integrations/claude-desktop` | `app/(open)/integrations/claude-desktop/page.tsx` | 公开 | SSR | indexable | 待挂载 | E4 |
-| 46 | `/integrations/cursor` | `app/(open)/integrations/cursor/page.tsx` | 公开 | SSR | indexable | 待挂载 | E4 |
+| 39 | `/help/faq` | `app/(open)/help/faq/page.tsx` | 公开 | SSR | indexable | 已挂载 | E4.1 |
+| 40 | `/help/compare` | `app/(open)/help/compare/page.tsx` | 公开 | SSR | indexable | 已挂载 | E4.1 |
+| 41 | `/help/api-access` | `app/(open)/help/api-access/page.tsx` | 公开 | SSR | indexable | 已挂载 | E4.1 |
+| 42 | `/help/api-access/agents` | `app/(open)/help/api-access/agents/page.tsx` | 公开 | SSR | indexable | 已挂载 | E4.1 |
+| 43 | `/integrations` | `app/(open)/integrations/page.tsx` | 公开 | SSR | indexable | 已挂载 | E4.1 |
+| 44 | `/integrations/mcp` | `app/(open)/integrations/mcp/page.tsx` | 公开 | SSR | indexable | 已挂载 | E4.1 |
+| 45 | `/integrations/claude-desktop` | `app/(open)/integrations/claude-desktop/page.tsx` | 公开 | SSR | indexable | 已挂载 | E4.1 |
+| 46 | `/integrations/cursor` | `app/(open)/integrations/cursor/page.tsx` | 公开 | SSR | indexable | 已挂载 | E4.1 |
 
 ---
 
@@ -171,5 +171,6 @@
 | **E3.3** | 3 | 工作区邀请与公开分享页面 (`/invite/*`, `/shared/*`) |
 | **E3.4** | 4 | 交易计费、定价与购买流程 (`/pricing`, `/upgrade/*`, `/desktop/buy`) |
 | **E3.5** | 15 | 管理后台运维 (`/admin/*`) 与应用内帮助 (`/help`, `/help/write`) |
-| **E4** | 33 | 公开营销站、桌面下载激活、双语帮助、双语法律文本、首页与抓取协议 |
+| **E4.1** | 8 | 公开帮助与集成生态 (`/help/faq`, `/help/compare`, `/help/api-access*`, `/integrations/*`)，含 canonical/hreflang SEO 头 |
+| **E4** | 25 | 公开营销站、桌面下载激活、双语帮助、双语法律文本、首页与抓取协议（剩余） |
 | **总计** | **71** | **100% 覆盖现有 `frontend_next` 的全部端点** |

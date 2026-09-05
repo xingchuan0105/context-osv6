@@ -2199,3 +2199,244 @@
     margin: 0;
     padding-left: 1.25rem;
 }
+
+/* ---------- E4.1 公开帮助与集成页 (public / open) ---------- */
+
+.pub-shell {
+    min-height: 100vh;
+    padding: 2rem 1rem 3rem;
+    background: var(--cos-bg-secondary);
+}
+
+.pub-center {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    max-width: 48rem;
+    margin: 0 auto;
+}
+
+.pub-shell-wide .pub-center {
+    max-width: 64rem;
+}
+
+.pub-header {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.pub-header-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.pub-subtitle {
+    color: var(--cos-text-secondary);
+    font-size: 0.875rem;
+    margin: 0;
+}
+
+.pub-title {
+    font-size: 1.35rem;
+    margin: 0;
+}
+
+.pub-muted {
+    color: var(--cos-text-subtle);
+    font-size: 0.8125rem;
+    margin: 0;
+    line-height: 1.6;
+}
+
+.pub-muted a {
+    color: inherit;
+    text-decoration: underline;
+}
+
+.pub-btn-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.pub-btn {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid var(--cos-border);
+    background: var(--cos-surface);
+    color: var(--cos-text);
+    border-radius: var(--cos-radius-sm);
+    padding: 0.375rem 0.75rem;
+    font-size: 0.8125rem;
+    text-decoration: none;
+}
+
+.pub-btn:hover {
+    border-color: var(--cos-accent, var(--cos-border));
+}
+
+.pub-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    border: 1px solid var(--cos-border);
+    background: var(--cos-surface);
+    border-radius: var(--cos-radius-md);
+    padding: 1.25rem 1.35rem;
+}
+
+.pub-card-grid {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.pub-card-link {
+    gap: 0.4rem;
+    text-decoration: none;
+    color: var(--cos-text);
+}
+
+.pub-card-link:hover {
+    border-color: var(--cos-accent, var(--cos-border));
+}
+
+.pub-card-desc {
+    color: var(--cos-text-secondary);
+    font-size: 0.875rem;
+    line-height: 1.5;
+}
+
+.pub-h2 {
+    font-size: 1.15rem;
+    margin: 1rem 0 0.4rem;
+}
+
+.pub-card > .pub-h2:first-child {
+    margin-top: 0;
+}
+
+.pub-p {
+    margin: 0.3rem 0 0.6rem;
+    line-height: 1.6;
+    color: var(--cos-text);
+    font-size: 0.9rem;
+}
+
+.pub-list {
+    line-height: 1.7;
+    margin: 0.3rem 0 0.6rem;
+    padding-left: 1.25rem;
+    color: var(--cos-text);
+    font-size: 0.9rem;
+}
+
+.pub-table-wrap {
+    overflow-x: auto;
+    margin: 0.75rem 0;
+}
+
+.pub-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.pub-th {
+    text-align: left;
+    border-bottom: 1px solid var(--cos-border);
+    padding: 0.45rem 0.55rem;
+    vertical-align: top;
+    color: var(--cos-text-secondary);
+}
+
+.pub-td {
+    border-bottom: 1px solid var(--cos-border);
+    padding: 0.45rem 0.55rem;
+    vertical-align: top;
+    font-size: 0.875rem;
+    line-height: 1.5;
+}
+
+.pub-code-block {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    margin: 0.6rem 0;
+}
+
+.pub-code-label {
+    color: var(--cos-text-subtle);
+    font-family: monospace;
+    font-size: 0.75rem;
+}
+
+.pub-code {
+    background: var(--cos-bg-secondary);
+    border: 1px solid var(--cos-border);
+    border-radius: var(--cos-radius-sm);
+    padding: 0.75rem;
+    overflow-x: auto;
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    margin: 0;
+}
+
+/* Agent 文档渲染正文（markdown → HTML） */
+.pub-doc-body h1,
+.pub-doc-body h2,
+.pub-doc-body h3 {
+    font-size: 1.15rem;
+    margin: 1.1rem 0 0.4rem;
+}
+
+.pub-doc-body h1:first-child {
+    margin-top: 0;
+}
+
+.pub-doc-body p {
+    margin: 0.35rem 0 0.65rem;
+    line-height: 1.6;
+    font-size: 0.9rem;
+    color: var(--cos-text);
+}
+
+.pub-doc-body ul,
+.pub-doc-body ol {
+    line-height: 1.7;
+    margin: 0.35rem 0 0.65rem;
+    padding-left: 1.25rem;
+    font-size: 0.9rem;
+    color: var(--cos-text);
+}
+
+.pub-doc-body table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0.75rem 0;
+}
+
+.pub-doc-body th,
+.pub-doc-body td {
+    text-align: left;
+    border-bottom: 1px solid var(--cos-border);
+    padding: 0.45rem 0.55rem;
+    vertical-align: top;
+    font-size: 0.8125rem;
+}
+
+.pub-doc-body code {
+    font-family: monospace;
+    font-size: 0.8125rem;
+}
+
+.pub-doc-body pre code {
+    display: block;
+    background: var(--cos-bg-secondary);
+    border: 1px solid var(--cos-border);
+    border-radius: var(--cos-radius-sm);
+    padding: 0.75rem;
+    overflow-x: auto;
+}

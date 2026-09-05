@@ -1,6 +1,6 @@
 # Rust 在线优先与 GPUI 对等：开发执行计划
 
-日期：2026-09-05。状态：E0/E1/E2/D0.1/E3.1/E3.2/E3.3/E3.4/E3.5 已全部完成并通过，**G3 达成**（E3.5 见任务记录 [`2026-09-05-e3-5-admin-help-task.md`](2026-09-05-e3-5-admin-help-task.md)）；下一步 E4 (W4 公共 SSR / SEO / 双语)。
+日期：2026-09-05。状态：E0/E1/E2/D0.1/E3.1–E3.5 已全部完成并通过（**G3 达成**）；**E4.1（公开帮助与集成生态 8 端点）已完成**（见任务记录 [`2026-09-05-e4-1-public-help-integrations-task.md`](2026-09-05-e4-1-public-help-integrations-task.md)）；E4 剩余：营销/桌面下载族、SEO 基建（JSON-LD/robots/sitemap）、`/en/*` 双语。
 
 本计划细化 [09-04 路线图](2026-09-04-rust-web-first-gpui-parity-roadmap.md)，保留其阶段编号与优先级；架构以 [ADR-0011](../adr/0011-rust-web-gpui-desktop.md) 晚间修订为准，产品路径以 [PRODUCT_IA](../design/PRODUCT_IA.md) 为准。旧迁移设计只引用仍有效的产品不变量、路由和内容要求；Tauri CSR 与性能 20% 开发门不再执行。
 

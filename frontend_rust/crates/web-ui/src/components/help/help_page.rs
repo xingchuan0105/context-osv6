@@ -18,6 +18,13 @@ pub fn HelpPage() -> impl IntoView {
                     </p>
                     <a href="/help/write" class="admin-panel-btn">"阅读指引 →"</a>
                 </section>
+                <section class="help-card" data-testid="help-card-api-access">
+                    <h2 class="help-card-title">"API 接入"</h2>
+                    <p class="help-card-desc">
+                        "为工作区创建密钥，把知识库接进 Cursor / Claude 等外接 Agent（MCP）；Agent 可读文档与集成承接页互链。"
+                    </p>
+                    <a href="/help/api-access" class="admin-panel-btn">"查看接入说明 →"</a>
+                </section>
                 <section class="help-card" data-testid="help-card-providers">
                     <h2 class="help-card-title">"模型与自备密钥 (BYOK)"</h2>
                     <p class="help-card-desc">
