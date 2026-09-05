@@ -1,6 +1,6 @@
 # Rust 在线优先与 GPUI 对等：开发执行计划
 
-日期：2026-09-05。状态：E0 已执行并通过（G0 达成，提交 cd821a74）；进入 E1。
+日期：2026-09-05。状态：E0/E1 已完成并通过（G0 达成 cd821a74，G1 达成 40614225）；进入 E2 (W2.6)。
 
 本计划细化 [09-04 路线图](2026-09-04-rust-web-first-gpui-parity-roadmap.md)，保留其阶段编号与优先级；架构以 [ADR-0011](../adr/0011-rust-web-gpui-desktop.md) 晚间修订为准，产品路径以 [PRODUCT_IA](../design/PRODUCT_IA.md) 为准。旧迁移设计只引用仍有效的产品不变量、路由和内容要求；Tauri CSR 与性能 20% 开发门不再执行。
 
@@ -10,13 +10,13 @@
 
 | 当前对象 | 本次核查事实 | 不能据此声称 |
 |---|---|---|
-| Git | HEAD `cd821a74`；已本地提交 E0 (W2.4–W2.5) | 已与远端实时同步、已部署 |
+| Git | HEAD `40614225`；已本地提交 E0 (G0) 与 E1 (G1) | 已与远端实时同步、已部署 |
 | Chat-first 后端与 Next | W0–W3 已提交；第九轮修复文档记录 L1 OK | 本轮已复跑，或 Rust UI 已全部对等 |
-| Rust W1 | auth bootstrap、静态预压缩、资源 hash、导航 parity 已有代码 | 已有完整登录页；导航表覆盖全部页面、SSR metadata 已实际生效 |
+| Rust W1 (E1) | 全量 71 路由矩阵就位、样式守卫增强、资源 hash/br 与未 hash 样式无 immutable 实测通过、Tiptap 方案明确 | 已有完整设置/工作区/后台页面 |
 | Rust W2.1–W2.3 | Markdown、引用卡、进度折叠已提交 | 原文 viewer、图片引用、所有长内容行为均完成 |
 | Rust W2.4–W2.5 (E0) | 文件托盘、上传接口、scope 模型与旅程测试已验证并提交 (`cd821a74`)，G0 达成 | 已提交 W2.6–W2.9，或完整 W2 Gate (G2) 通过 |
-| 最近测试证据 | Playwright 16/16 passed (16.5s)；unit tests 83/83 passed；live smoke 2/2 passed | 未包含的入库检索/桌面对等用例已通过 |
-| Rust 页面 | `App` 当前挂载 `/chat/:session_id?`，根路径重定向聊天；`ROUTE_FAMILIES` 是导航清单 | 已实现 dashboard/settings/public/admin 页面 |
+| 最近测试证据 | Playwright 17/17 passed (14.2s)；unit tests 83/83 passed；live smoke 2/2 passed | 未包含的入库检索/桌面对等用例已通过 |
+| Rust 页面 | `App` 当前挂载 `/chat/:session_id?`，根路径重定向聊天；`ROUTE_FAMILIES` 与全量矩阵已建立 | 已实现 dashboard/settings/public/admin 页面 |
 | GPUI | 独立初始 crate；`desktop/core` 尚不存在 | 已实现本机产品、已通过三平台验收 |
 
 后端现有契约是迁移输入。发现真实 API 缺口时记录最小复现和阻断项，另立后端任务；前端不能伪造成功态或新增第二协议绕过。
