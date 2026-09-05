@@ -707,6 +707,10 @@ const server = http.createServer((req, res) => {
         streamShortOk(req, res, 'sess-file-1');
         return;
       }
+      if (url.pathname === '/case/feedback/api/v1/chat') {
+        streamShortOk(req, res, 'sess-history');
+        return;
+      }
       if (url.pathname === '/api/v1/chat') {
         streamFixture(req, res, url);
         return;

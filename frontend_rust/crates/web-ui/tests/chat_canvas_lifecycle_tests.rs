@@ -858,4 +858,51 @@ fn test_switch_to_workspace_updates_scope_and_invalidates_active_stream() {
     assert_eq!(new_turn.request.workspace_id.as_deref(), Some("ws-100"));
 }
 
+#[test]
+fn test_invariant_12_snapshot_evidence_immutable_across_turns() {
+    let mut canvas = ChatCanvasModel::new();
+    canvas.switch_to_personal_session("sess-snapshot-1");
+    let epoch = canvas.manager().conversation_epoch;
+
+    let history = history_messages();
+    assert!(canvas.apply_history("sess-snapshot-1", epoch, None, history.clone()));
+    let first_user_content = canvas.manager().active.messages[0].content.clone();
+    let first_assistant_content = canvas.manager().active.messages[1].content.clone();
+    let first_citations = canvas.manager().active.messages[1].citations.clone();
+
+    let turn = canvas.prepare_user_turn("第二轮提问");
+    canvas.on_event(
+        turn.stream_scope,
+        contracts::chat::ChatEvent::Start {
+            request_id: "srv-turn-2".to_string(),
+            session_id: "sess-snapshot-1".to_string(),
+        },
+    );
+    canvas.on_event(
+        turn.stream_scope,
+        contracts::chat::ChatEvent::Token {
+            request_id: "srv-turn-2".to_string(),
+            message_id: 202,
+            content: "第二轮答案".to_string(),
+        },
+    );
+    canvas.on_event(
+        turn.stream_scope,
+        contracts::chat::ChatEvent::Done {
+            request_id: "srv-turn-2".to_string(),
+            session_id: "sess-snapshot-1".to_string(),
+            message_id: 202,
+            payload: done_payload("第二轮答案"),
+        },
+    );
+
+    assert_eq!(canvas.manager().active.messages.len(), 4);
+    assert_eq!(canvas.manager().active.messages[0].content, first_user_content);
+    assert_eq!(canvas.manager().active.messages[1].content, first_assistant_content);
+    assert_eq!(canvas.manager().active.messages[1].citations, first_citations);
+    assert_eq!(canvas.manager().active.messages[2].content, "第二轮提问");
+    assert_eq!(canvas.manager().active.messages[3].content, "第二轮答案");
+}
+
+
 

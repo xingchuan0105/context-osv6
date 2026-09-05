@@ -402,6 +402,37 @@ test.describe('Workspace 最小 Shell 与归属隔离（W2.8）', () => {
   });
 });
 
+test.describe('受限上下文与历史不可变性（不变量 11 & 12）', () => {
+  test('历史会话恢复后发起新提问，旧轮次内容与引用保持完整，不外泄其他会话上下文', async ({
+    page,
+    request,
+  }) => {
+    const errors = collectPageErrors(page);
+    await gotoChat(page, `${FIXTURE_BASE}/case/feedback`, '/chat/sess-history', 'poc-test-token');
+
+    // 1. 验证既有历史消息与引用呈现
+    const historyAssistant = page.getByTestId('chat-message').filter({ hasText: '历史助手' });
+    await expect(historyAssistant).toBeVisible();
+    await expect(historyAssistant).toContainText('旧文档残片');
+
+    // 2. 发起新一轮提问
+    await page.getByTestId('composer-input').fill('继续追问');
+    await page.getByTestId('send-button').click();
+    await expect(page.getByTestId('status-line')).toHaveText('已完成', { timeout: 15_000 });
+
+    // 3. 既有旧轮次正文与引用完全不被改写或污染
+    await expect(historyAssistant).toBeVisible();
+    await expect(historyAssistant).toContainText('这是历史助手的完整回答内容。');
+    await expect(historyAssistant).toContainText('已下线文档');
+
+    // 4. 验证请求携带正确的会话隔离 ID
+    const state = await fixtureState(request);
+    expect(state.lastChatBody?.query).toBe('继续追问');
+
+    expect(errors).toEqual([]);
+  });
+});
+
 test.describe('浏览器聊天旅程（Gate C/D）', () => {
   test.beforeEach(async ({ request }) => {
     await request.post(`${FIXTURE_BASE}/admin/reset`);
