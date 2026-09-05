@@ -134,13 +134,19 @@ pub fn route_family(id: &str) -> Option<&'static RouteFamily> {
     ROUTE_FAMILIES.iter().find(|family| family.id == id)
 }
 
-/// Phase 0, E3.1 & E3.2 已挂载路径。
+/// Phase 0, E3.1, E3.2 & E3.3 已挂载路径。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AppRoute {
     Chat { session_id: Option<String> },
     Dashboard { workspace_id: Option<String> },
     DashboardAnalytics,
     WorkspaceAnalyze { workspace_id: String },
+    WorkspaceShare { workspace_id: String },
+    WorkspaceShareLogs { workspace_id: String },
+    WorkspaceShareAnalytics { workspace_id: String },
+    SharedKb { token: String },
+    SharedUser { user_id: String },
+    Invite { workspace_id: String, member_id: String },
     Login,
     Register,
     ResetPassword,
@@ -170,8 +176,27 @@ impl AppRoute {
             ["dashboard", wid, "analyze"] => Self::WorkspaceAnalyze {
                 workspace_id: wid.to_string(),
             },
+            ["dashboard", wid, "share", "access-logs"] => Self::WorkspaceShareLogs {
+                workspace_id: wid.to_string(),
+            },
+            ["dashboard", wid, "share", "analytics"] => Self::WorkspaceShareAnalytics {
+                workspace_id: wid.to_string(),
+            },
+            ["dashboard", wid, "share"] => Self::WorkspaceShare {
+                workspace_id: wid.to_string(),
+            },
             ["dashboard", wid] => Self::Dashboard {
                 workspace_id: Some(wid.to_string()),
+            },
+            ["shared", "kb", tok] => Self::SharedKb {
+                token: tok.to_string(),
+            },
+            ["shared", "u", uid] => Self::SharedUser {
+                user_id: uid.to_string(),
+            },
+            ["invite", wid, mid] => Self::Invite {
+                workspace_id: wid.to_string(),
+                member_id: mid.to_string(),
             },
             ["login"] => Self::Login,
             ["register"] => Self::Register,
@@ -220,6 +245,31 @@ mod tests {
             AppRoute::parse("/dashboard/ws-1/analyze"),
             AppRoute::WorkspaceAnalyze {
                 workspace_id: "ws-1".to_string()
+            }
+        );
+        assert_eq!(
+            AppRoute::parse("/dashboard/ws-1/share"),
+            AppRoute::WorkspaceShare {
+                workspace_id: "ws-1".to_string()
+            }
+        );
+        assert_eq!(
+            AppRoute::parse("/shared/kb/tok-1"),
+            AppRoute::SharedKb {
+                token: "tok-1".to_string()
+            }
+        );
+        assert_eq!(
+            AppRoute::parse("/shared/u/u-1"),
+            AppRoute::SharedUser {
+                user_id: "u-1".to_string()
+            }
+        );
+        assert_eq!(
+            AppRoute::parse("/invite/ws-1/mem-1"),
+            AppRoute::Invite {
+                workspace_id: "ws-1".to_string(),
+                member_id: "mem-1".to_string()
             }
         );
         assert_eq!(AppRoute::parse("/login"), AppRoute::Login);

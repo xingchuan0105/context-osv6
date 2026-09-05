@@ -189,6 +189,56 @@ impl BrowserRestClient {
     ) -> Result<(), TransportError> {
         self.unavailable()
     }
+
+    pub async fn create_share(
+        &self,
+        _workspace_id: &str,
+    ) -> Result<contracts::share::ShareTokenResponse, TransportError> {
+        self.unavailable()
+    }
+
+    pub async fn get_share_settings(
+        &self,
+        _workspace_id: &str,
+    ) -> Result<contracts::share::ShareSettings, TransportError> {
+        self.unavailable()
+    }
+
+    pub async fn get_share_analytics(
+        &self,
+        _workspace_id: &str,
+    ) -> Result<contracts::share::ShareAnalyticsResponse, TransportError> {
+        self.unavailable()
+    }
+
+    pub async fn get_share_access_logs(
+        &self,
+        _workspace_id: &str,
+    ) -> Result<contracts::share::AccessLogsResponse, TransportError> {
+        self.unavailable()
+    }
+
+    pub async fn revoke_share(
+        &self,
+        _workspace_id: &str,
+        _token: &str,
+    ) -> Result<(), TransportError> {
+        self.unavailable()
+    }
+
+    pub async fn get_shared_workspace(
+        &self,
+        _token: &str,
+    ) -> Result<contracts::share::SharedWorkspacePayload, TransportError> {
+        self.unavailable()
+    }
+
+    pub async fn get_public_user_shares(
+        &self,
+        _user_id: &str,
+    ) -> Result<serde_json::Value, TransportError> {
+        self.unavailable()
+    }
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -618,5 +668,94 @@ impl BrowserRestClient {
         )
         .await?;
         Ok(())
+    }
+
+    pub async fn create_share(
+        &self,
+        workspace_id: &str,
+    ) -> Result<contracts::share::ShareTokenResponse, TransportError> {
+        crate::share_api::parse_share_token(
+            &wasm_request::request_bytes(
+                self,
+                "POST",
+                &crate::share_api::share_url(&self.base_url, workspace_id),
+                None,
+                None,
+                true,
+            )
+            .await?,
+        )
+    }
+
+    pub async fn get_share_settings(
+        &self,
+        workspace_id: &str,
+    ) -> Result<contracts::share::ShareSettings, TransportError> {
+        crate::share_api::parse_share_settings(
+            &wasm_request::get_bytes(
+                self,
+                &crate::share_api::share_settings_url(&self.base_url, workspace_id),
+            )
+            .await?,
+        )
+    }
+
+    pub async fn get_share_analytics(
+        &self,
+        workspace_id: &str,
+    ) -> Result<contracts::share::ShareAnalyticsResponse, TransportError> {
+        crate::share_api::parse_share_analytics(
+            &wasm_request::get_bytes(
+                self,
+                &crate::share_api::share_analytics_url(&self.base_url, workspace_id),
+            )
+            .await?,
+        )
+    }
+
+    pub async fn get_share_access_logs(
+        &self,
+        workspace_id: &str,
+    ) -> Result<contracts::share::AccessLogsResponse, TransportError> {
+        crate::share_api::parse_access_logs(
+            &wasm_request::get_bytes(
+                self,
+                &crate::share_api::share_access_logs_url(&self.base_url, workspace_id),
+            )
+            .await?,
+        )
+    }
+
+    pub async fn revoke_share(
+        &self,
+        workspace_id: &str,
+        token: &str,
+    ) -> Result<(), TransportError> {
+        let trimmed = crate::conversation_api::trim_base_url(&self.base_url);
+        let url = format!("{trimmed}/api/v1/workspaces/{workspace_id}/share/{token}");
+        wasm_request::request_bytes(self, "DELETE", &url, None, None, true).await?;
+        Ok(())
+    }
+
+    pub async fn get_shared_workspace(
+        &self,
+        token: &str,
+    ) -> Result<contracts::share::SharedWorkspacePayload, TransportError> {
+        crate::share_api::parse_shared_workspace(
+            &wasm_request::get_bytes(self, &crate::share_api::shared_kb_url(&self.base_url, token))
+                .await?,
+        )
+    }
+
+    pub async fn get_public_user_shares(
+        &self,
+        user_id: &str,
+    ) -> Result<serde_json::Value, TransportError> {
+        let bytes = wasm_request::get_bytes(
+            self,
+            &crate::share_api::public_user_shares_url(&self.base_url, user_id),
+        )
+        .await?;
+        serde_json::from_slice(&bytes).map_err(TransportError::from)
     }
 }

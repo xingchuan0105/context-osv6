@@ -11,6 +11,7 @@ pub mod progress;
 pub mod providers;
 pub mod scope;
 pub mod session_files;
+pub mod share_api;
 pub mod reducer;
 pub mod sse_decoder;
 pub mod transport;
@@ -57,6 +58,11 @@ pub use reducer::{
     ActivityEntry, ChatTurnState, TurnStatus, event_request_id, reduce_chat_event,
 };
 pub use sse_decoder::{SseDecoder, events_from_byte_stream};
+pub use share_api::{
+    parse_access_logs, parse_share_analytics, parse_share_settings, parse_share_token,
+    parse_shared_workspace, public_user_shares_url, share_access_logs_url, share_analytics_url,
+    share_settings_url, share_url, shared_kb_url,
+};
 pub use transport::{Cancellation, ChatEventStream, ChatTransport, TransportError};
 pub use workspace_api::{
     create_note_json, create_workspace_json, parse_workspace_documents, parse_workspace_list,

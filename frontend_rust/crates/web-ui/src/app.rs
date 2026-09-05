@@ -9,6 +9,10 @@ use crate::components::dashboard::{
     DashboardOverviewPage, GlobalAnalyticsPage, WorkspaceAnalyzePage, WorkspaceWorkbenchPage,
 };
 use crate::components::settings::{SettingsPage, UsagePage};
+use crate::components::share::{
+    InvitePage, SharedKbPage, SharedUserPage, WorkspaceShareAnalyticsPage,
+    WorkspaceShareLogsPage, WorkspaceSharePage,
+};
 use leptos::prelude::*;
 use leptos_config::LeptosOptions;
 use leptos_meta::{HashedStylesheet, MetaTags, provide_meta_context};
@@ -44,7 +48,13 @@ pub fn App() -> impl IntoView {
                 <Route path=path!("/dashboard") view=DashboardOverviewPage/>
                 <Route path=path!("/dashboard/analytics") view=GlobalAnalyticsPage/>
                 <Route path=path!("/dashboard/:workspace_id/analyze") view=WorkspaceAnalyzePage/>
+                <Route path=path!("/dashboard/:workspace_id/share/access-logs") view=WorkspaceShareLogsPage/>
+                <Route path=path!("/dashboard/:workspace_id/share/analytics") view=WorkspaceShareAnalyticsPage/>
+                <Route path=path!("/dashboard/:workspace_id/share") view=WorkspaceSharePage/>
                 <Route path=path!("/dashboard/:workspace_id") view=WorkspaceWorkbenchPage/>
+                <Route path=path!("/shared/kb/:token") view=SharedKbPage/>
+                <Route path=path!("/shared/u/:user_id") view=SharedUserPage/>
+                <Route path=path!("/invite/:workspace_id/:member_id") view=InvitePage/>
                 <Route path=path!("/login") view=LoginPage/>
                 <Route path=path!("/register") view=RegisterPage/>
                 <Route path=path!("/reset-password") view=ResetPasswordRequestPage/>

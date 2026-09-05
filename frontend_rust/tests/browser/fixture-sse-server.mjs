@@ -489,6 +489,88 @@ const server = http.createServer((req, res) => {
       jsonOk(res, { files: [] });
       return;
     }
+    const sharedKbMatch = pathname.match(/\/api\/shared\/kb\/([^/]+)$/);
+    if (sharedKbMatch) {
+      const tok = decodeURIComponent(sharedKbMatch[1]);
+      if (tok === 'tok-expired') {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'not_found', message: 'share expired' }));
+        return;
+      }
+      jsonOk(res, {
+        knowledge_base: {
+          id: 'ws-materials',
+          title: '公开材料知识库',
+          description: '公开分享的特种金属资料',
+        },
+        share: {
+          permission: 'read_only',
+          expires_at: null,
+          allow_download: true,
+          scope: 'full',
+        },
+        sources: [
+          {
+            id: 's-shared-1',
+            file_name: 'titanium-guide.pdf',
+            status: 'completed',
+          },
+        ],
+        owner: {
+          display_name: '公开分享者',
+          bio: '材料科学专家',
+          profile_enabled: true,
+        },
+      });
+      return;
+    }
+    const publicUserMatch = pathname.match(/\/api\/public\/users\/([^/]+)\/shares$/);
+    if (publicUserMatch) {
+      const uid = decodeURIComponent(publicUserMatch[1]);
+      if (uid === 'u-disabled') {
+        jsonOk(res, { profile_enabled: false });
+        return;
+      }
+      jsonOk(res, {
+        profile_enabled: true,
+        display_name: '李工',
+        bio: '高级材料工程师',
+      });
+      return;
+    }
+    const shareSettingsMatch = pathname.match(/\/api\/v1\/workspaces\/([^/]+)\/share\/settings$/);
+    if (shareSettingsMatch) {
+      jsonOk(res, {
+        share_token: 'tok-valid-123',
+        access_level: 'read_only',
+        expires_at: null,
+        allow_download: true,
+      });
+      return;
+    }
+    const shareLogsMatch = pathname.match(/\/api\/v1\/workspaces\/([^/]+)\/share\/access-logs$/);
+    if (shareLogsMatch) {
+      jsonOk(res, {
+        logs: [
+          {
+            id: 'l1',
+            visitor_id: 'visitor-88',
+            accessed_at: '2026-09-05T00:00:00Z',
+            action: 'view',
+          },
+        ],
+      });
+      return;
+    }
+    const shareAnalyticsMatch = pathname.match(/\/api\/v1\/workspaces\/([^/]+)\/share\/analytics$/);
+    if (shareAnalyticsMatch) {
+      jsonOk(res, {
+        total_views: 45,
+        total_unique_visitors: 18,
+        views_by_day: {},
+      });
+      return;
+    }
     const wsDocsMatch = pathname.match(/\/api\/v1\/workspaces\/([^/]+)\/documents$/);
     if (wsDocsMatch) {
       jsonOk(res, { documents: workspaceDocsState });
