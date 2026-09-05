@@ -36,4 +36,4 @@
 | E3.1.3 | 实现 Settings 页面族 (`/settings?tab=providers`, `/settings/usage`) | 已完成 | `web-ui/src/components/settings/` |
 | E3.1.4 | 挂载路由并补充单元与集成测试 | 已完成 | `app.rs`, `routes.rs` 单元测试通过 |
 | E3.1.5 | Playwright 浏览器旅程全套件断言 | 已完成 | `auth-settings-journey.spec.ts` 5/5, `chat-journey.spec.ts` 23/23 |
-| E3.1.6 | 验证收敛、图谱更新与本地提交 | 进行中 | 待提交本地 commit |
+| E3.1.6 | 验证收敛、图谱更新与本地提交 | 已完成 | 图谱已更新 (20 files)，本地提交 `b2e71dfc` (E3.1 达成) |
