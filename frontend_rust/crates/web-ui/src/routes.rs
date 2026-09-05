@@ -134,11 +134,13 @@ pub fn route_family(id: &str) -> Option<&'static RouteFamily> {
     ROUTE_FAMILIES.iter().find(|family| family.id == id)
 }
 
-/// Phase 0 & E3.1 已挂载路径。
+/// Phase 0, E3.1 & E3.2 已挂载路径。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AppRoute {
     Chat { session_id: Option<String> },
     Dashboard { workspace_id: Option<String> },
+    DashboardAnalytics,
+    WorkspaceAnalyze { workspace_id: String },
     Login,
     Register,
     ResetPassword,
@@ -164,6 +166,10 @@ impl AppRoute {
                 session_id: Some(sid.to_string()),
             },
             ["dashboard"] => Self::Dashboard { workspace_id: None },
+            ["dashboard", "analytics"] => Self::DashboardAnalytics,
+            ["dashboard", wid, "analyze"] => Self::WorkspaceAnalyze {
+                workspace_id: wid.to_string(),
+            },
             ["dashboard", wid] => Self::Dashboard {
                 workspace_id: Some(wid.to_string()),
             },
@@ -201,9 +207,19 @@ mod tests {
             AppRoute::Dashboard { workspace_id: None }
         );
         assert_eq!(
+            AppRoute::parse("/dashboard/analytics"),
+            AppRoute::DashboardAnalytics
+        );
+        assert_eq!(
             AppRoute::parse("/dashboard/ws-1"),
             AppRoute::Dashboard {
                 workspace_id: Some("ws-1".to_string())
+            }
+        );
+        assert_eq!(
+            AppRoute::parse("/dashboard/ws-1/analyze"),
+            AppRoute::WorkspaceAnalyze {
+                workspace_id: "ws-1".to_string()
             }
         );
         assert_eq!(AppRoute::parse("/login"), AppRoute::Login);

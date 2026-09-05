@@ -5,6 +5,9 @@ use crate::components::auth::{
 };
 use crate::components::chat::ChatCanvasModel;
 use crate::components::chat::chat_page::ChatPage;
+use crate::components::dashboard::{
+    DashboardOverviewPage, GlobalAnalyticsPage, WorkspaceAnalyzePage, WorkspaceWorkbenchPage,
+};
 use crate::components::settings::{SettingsPage, UsagePage};
 use leptos::prelude::*;
 use leptos_config::LeptosOptions;
@@ -38,7 +41,10 @@ pub fn App() -> impl IntoView {
             }>
                 <Route path=path!("/") view=RedirectToChat/>
                 <Route path=path!("/chat/:session_id?") view=ChatPage/>
-                <Route path=path!("/dashboard/:workspace_id?") view=ChatPage/>
+                <Route path=path!("/dashboard") view=DashboardOverviewPage/>
+                <Route path=path!("/dashboard/analytics") view=GlobalAnalyticsPage/>
+                <Route path=path!("/dashboard/:workspace_id/analyze") view=WorkspaceAnalyzePage/>
+                <Route path=path!("/dashboard/:workspace_id") view=WorkspaceWorkbenchPage/>
                 <Route path=path!("/login") view=LoginPage/>
                 <Route path=path!("/register") view=RegisterPage/>
                 <Route path=path!("/reset-password") view=ResetPasswordRequestPage/>

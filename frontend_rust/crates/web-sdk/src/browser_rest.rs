@@ -129,6 +129,66 @@ impl BrowserRestClient {
     pub async fn revoke_provider_secret(&self, _id: &str) -> Result<(), TransportError> {
         self.unavailable()
     }
+
+    pub async fn list_workspaces(
+        &self,
+    ) -> Result<contracts::workspaces::WorkspaceListResponse, TransportError> {
+        self.unavailable()
+    }
+
+    pub async fn create_workspace(
+        &self,
+        _name: &str,
+        _description: &str,
+    ) -> Result<contracts::workspaces::WorkspaceResponse, TransportError> {
+        self.unavailable()
+    }
+
+    pub async fn get_workspace(
+        &self,
+        _workspace_id: &str,
+    ) -> Result<contracts::workspaces::WorkspaceResponse, TransportError> {
+        self.unavailable()
+    }
+
+    pub async fn list_workspace_documents(
+        &self,
+        _workspace_id: &str,
+    ) -> Result<contracts::documents::DocumentsResponse, TransportError> {
+        self.unavailable()
+    }
+
+    pub async fn delete_workspace_document(
+        &self,
+        _workspace_id: &str,
+        _document_id: &str,
+    ) -> Result<(), TransportError> {
+        self.unavailable()
+    }
+
+    pub async fn list_workspace_notes(
+        &self,
+        _workspace_id: &str,
+    ) -> Result<contracts::workspaces::WorkspaceNoteListResponse, TransportError> {
+        self.unavailable()
+    }
+
+    pub async fn create_workspace_note(
+        &self,
+        _workspace_id: &str,
+        _title: &str,
+        _content: &str,
+    ) -> Result<contracts::workspaces::WorkspaceNoteResponse, TransportError> {
+        self.unavailable()
+    }
+
+    pub async fn delete_workspace_note(
+        &self,
+        _workspace_id: &str,
+        _note_id: &str,
+    ) -> Result<(), TransportError> {
+        self.unavailable()
+    }
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -433,6 +493,130 @@ impl BrowserRestClient {
         let trimmed = crate::conversation_api::trim_base_url(&self.base_url);
         let url = format!("{trimmed}/api/v1/settings/provider-secrets/{id}");
         wasm_request::request_bytes(self, "DELETE", &url, None, None, true).await?;
+        Ok(())
+    }
+
+    pub async fn list_workspaces(
+        &self,
+    ) -> Result<contracts::workspaces::WorkspaceListResponse, TransportError> {
+        crate::workspace_api::parse_workspace_list(
+            &wasm_request::get_bytes(self, &crate::workspace_api::workspaces_url(&self.base_url))
+                .await?,
+        )
+    }
+
+    pub async fn create_workspace(
+        &self,
+        name: &str,
+        description: &str,
+    ) -> Result<contracts::workspaces::WorkspaceResponse, TransportError> {
+        let body = crate::workspace_api::create_workspace_json(name, description)?;
+        crate::workspace_api::parse_workspace_response(
+            &wasm_request::request_bytes(
+                self,
+                "POST",
+                &crate::workspace_api::workspaces_url(&self.base_url),
+                Some(&body),
+                Some("application/json"),
+                true,
+            )
+            .await?,
+        )
+    }
+
+    pub async fn get_workspace(
+        &self,
+        workspace_id: &str,
+    ) -> Result<contracts::workspaces::WorkspaceResponse, TransportError> {
+        crate::workspace_api::parse_workspace_response(
+            &wasm_request::get_bytes(
+                self,
+                &crate::workspace_api::workspace_url(&self.base_url, workspace_id),
+            )
+            .await?,
+        )
+    }
+
+    pub async fn list_workspace_documents(
+        &self,
+        workspace_id: &str,
+    ) -> Result<contracts::documents::DocumentsResponse, TransportError> {
+        crate::workspace_api::parse_workspace_documents(
+            &wasm_request::get_bytes(
+                self,
+                &crate::workspace_api::workspace_documents_url(&self.base_url, workspace_id),
+            )
+            .await?,
+        )
+    }
+
+    pub async fn delete_workspace_document(
+        &self,
+        workspace_id: &str,
+        document_id: &str,
+    ) -> Result<(), TransportError> {
+        wasm_request::request_bytes(
+            self,
+            "DELETE",
+            &crate::workspace_api::workspace_document_url(
+                &self.base_url,
+                workspace_id,
+                document_id,
+            ),
+            None,
+            None,
+            true,
+        )
+        .await?;
+        Ok(())
+    }
+
+    pub async fn list_workspace_notes(
+        &self,
+        workspace_id: &str,
+    ) -> Result<contracts::workspaces::WorkspaceNoteListResponse, TransportError> {
+        crate::workspace_api::parse_workspace_notes(
+            &wasm_request::get_bytes(
+                self,
+                &crate::workspace_api::workspace_notes_url(&self.base_url, workspace_id),
+            )
+            .await?,
+        )
+    }
+
+    pub async fn create_workspace_note(
+        &self,
+        workspace_id: &str,
+        title: &str,
+        content: &str,
+    ) -> Result<contracts::workspaces::WorkspaceNoteResponse, TransportError> {
+        let body = crate::workspace_api::create_note_json(title, content)?;
+        let bytes = wasm_request::request_bytes(
+            self,
+            "POST",
+            &crate::workspace_api::workspace_notes_url(&self.base_url, workspace_id),
+            Some(&body),
+            Some("application/json"),
+            true,
+        )
+        .await?;
+        serde_json::from_slice(&bytes).map_err(TransportError::from)
+    }
+
+    pub async fn delete_workspace_note(
+        &self,
+        workspace_id: &str,
+        note_id: &str,
+    ) -> Result<(), TransportError> {
+        wasm_request::request_bytes(
+            self,
+            "DELETE",
+            &crate::workspace_api::workspace_note_url(&self.base_url, workspace_id, note_id),
+            None,
+            None,
+            true,
+        )
+        .await?;
         Ok(())
     }
 }

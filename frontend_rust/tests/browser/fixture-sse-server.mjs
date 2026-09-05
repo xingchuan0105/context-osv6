@@ -37,6 +37,47 @@ const state = {
 };
 const filesState = { file: null, events: [] };
 let secretsState = [];
+let workspacesState = [
+  {
+    id: 'ws-materials',
+    owner_user_id: 'fixture-user',
+    owner_id: 'fixture-user',
+    name: '材料研发知识库',
+    title: '材料研发知识库',
+    description: '特种合金与复合材料',
+    created_at: '2026-09-01T00:00:00Z',
+    updated_at: '2026-09-04T00:00:00Z',
+    document_count: 1,
+    status_summary: {},
+    shared: false,
+  },
+];
+let workspaceDocsState = [
+  {
+    id: 'doc-titanium',
+    owner_user_id: 'fixture-user',
+    owner_id: 'fixture-user',
+    workspace_id: 'ws-materials',
+    file_name: 'titanium-spec.pdf',
+    mime_type: 'application/pdf',
+    file_size: 1024,
+    status: 'completed',
+    chunk_count: 12,
+    created_at: '2026-09-02T00:00:00Z',
+    updated_at: '2026-09-02T00:00:00Z',
+  },
+];
+let workspaceNotesState = [
+  {
+    id: 'note-weekly',
+    workspace_id: 'ws-materials',
+    title: '周会讨论要点',
+    content: '# 周会讨论\n- 重点跟进抗拉强度',
+    preview: '重点跟进抗拉强度',
+    created_at: '2026-09-03T00:00:00Z',
+    updated_at: '2026-09-03T00:00:00Z',
+  },
+];
 
 function fileEvent(kind) {
   filesState.events.push(kind);
@@ -448,6 +489,39 @@ const server = http.createServer((req, res) => {
       jsonOk(res, { files: [] });
       return;
     }
+    const wsDocsMatch = pathname.match(/\/api\/v1\/workspaces\/([^/]+)\/documents$/);
+    if (wsDocsMatch) {
+      jsonOk(res, { documents: workspaceDocsState });
+      return;
+    }
+    const wsNotesMatch = pathname.match(/\/api\/v1\/workspaces\/([^/]+)\/notes$/);
+    if (wsNotesMatch) {
+      jsonOk(res, { notes: workspaceNotesState });
+      return;
+    }
+    const wsSingleMatch = pathname.match(/\/api\/v1\/workspaces\/([^/]+)$/);
+    if (wsSingleMatch) {
+      const wid = decodeURIComponent(wsSingleMatch[1]);
+      const found = workspacesState.find((w) => w.id === wid) || {
+        id: wid,
+        owner_user_id: 'fixture-user',
+        owner_id: 'fixture-user',
+        name: '材料研发知识库',
+        title: '材料研发知识库',
+        description: '工作区描述',
+        created_at: '2026-09-01T00:00:00Z',
+        updated_at: '2026-09-04T00:00:00Z',
+        document_count: workspaceDocsState.length,
+        status_summary: {},
+        shared: false,
+      };
+      jsonOk(res, { workspace: found });
+      return;
+    }
+    if (pathname.endsWith('/api/v1/workspaces')) {
+      jsonOk(res, { workspaces: workspacesState });
+      return;
+    }
     if (pathname.endsWith('/api/v1/settings/provider-secrets')) {
       const hasByok = pathname.includes('/case/byok');
       const baseSecrets = hasByok
@@ -564,6 +638,47 @@ const server = http.createServer((req, res) => {
     filesState.file = null;
     filesState.events = [];
     secretsState = [];
+    workspacesState = [
+      {
+        id: 'ws-materials',
+        owner_user_id: 'fixture-user',
+        owner_id: 'fixture-user',
+        name: '材料研发知识库',
+        title: '材料研发知识库',
+        description: '特种合金与复合材料',
+        created_at: '2026-09-01T00:00:00Z',
+        updated_at: '2026-09-04T00:00:00Z',
+        document_count: 1,
+        status_summary: {},
+        shared: false,
+      },
+    ];
+    workspaceDocsState = [
+      {
+        id: 'doc-titanium',
+        owner_user_id: 'fixture-user',
+        owner_id: 'fixture-user',
+        workspace_id: 'ws-materials',
+        file_name: 'titanium-spec.pdf',
+        mime_type: 'application/pdf',
+        file_size: 1024,
+        status: 'completed',
+        chunk_count: 12,
+        created_at: '2026-09-02T00:00:00Z',
+        updated_at: '2026-09-02T00:00:00Z',
+      },
+    ];
+    workspaceNotesState = [
+      {
+        id: 'note-weekly',
+        workspace_id: 'ws-materials',
+        title: '周会讨论要点',
+        content: '# 周会讨论\n- 重点跟进抗拉强度',
+        preview: '重点跟进抗拉强度',
+        created_at: '2026-09-03T00:00:00Z',
+        updated_at: '2026-09-03T00:00:00Z',
+      },
+    ];
     res.writeHead(204);
     res.end();
     return;
@@ -598,6 +713,22 @@ const server = http.createServer((req, res) => {
   }
 
   if (req.method === 'DELETE') {
+    const wsDocMatch = url.pathname.match(/\/api\/v1\/workspaces\/([^/]+)\/documents\/([^/]+)$/);
+    if (wsDocMatch) {
+      const docId = decodeURIComponent(wsDocMatch[2]);
+      workspaceDocsState = workspaceDocsState.filter((d) => d.id !== docId);
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+    const wsNoteMatch = url.pathname.match(/\/api\/v1\/workspaces\/([^/]+)\/notes\/([^/]+)$/);
+    if (wsNoteMatch) {
+      const noteId = decodeURIComponent(wsNoteMatch[2]);
+      workspaceNotesState = workspaceNotesState.filter((n) => n.id !== noteId);
+      res.writeHead(204);
+      res.end();
+      return;
+    }
     const secMatch = url.pathname.match(/\/api\/v1\/settings\/provider-secrets\/([^/]+)$/);
     if (secMatch) {
       const secId = decodeURIComponent(secMatch[1]);
@@ -618,6 +749,46 @@ const server = http.createServer((req, res) => {
 
   if (req.method === 'POST') {
     const pathname = url.pathname;
+    if (pathname.endsWith('/api/v1/workspaces')) {
+      readBody(req).then((buf) => {
+        const body = JSON.parse(buf.toString('utf8') || '{}');
+        const newWs = {
+          id: `ws-${Date.now()}`,
+          owner_user_id: 'fixture-user',
+          owner_id: 'fixture-user',
+          name: body.name || '新工作区',
+          title: body.name || '新工作区',
+          description: body.description || '',
+          created_at: '2026-09-05T00:00:00Z',
+          updated_at: '2026-09-05T00:00:00Z',
+          document_count: 0,
+          status_summary: {},
+          shared: false,
+        };
+        workspacesState.push(newWs);
+        jsonOk(res, { workspace: newWs });
+      });
+      return;
+    }
+    const createNoteMatch = pathname.match(/\/api\/v1\/workspaces\/([^/]+)\/notes$/);
+    if (createNoteMatch) {
+      const wid = decodeURIComponent(createNoteMatch[1]);
+      readBody(req).then((buf) => {
+        const body = JSON.parse(buf.toString('utf8') || '{}');
+        const newNote = {
+          id: `note-${Date.now()}`,
+          workspace_id: wid,
+          title: body.title || '无标题笔记',
+          content: body.content || '',
+          preview: (body.content || '').slice(0, 50),
+          created_at: '2026-09-05T00:00:00Z',
+          updated_at: '2026-09-05T00:00:00Z',
+        };
+        workspaceNotesState.push(newNote);
+        jsonOk(res, { note: newNote });
+      });
+      return;
+    }
     if (pathname.endsWith('/api/auth/login')) {
       readBody(req).then((buf) => {
         const body = JSON.parse(buf.toString('utf8') || '{}');

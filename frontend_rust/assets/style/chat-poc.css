@@ -962,3 +962,420 @@
     font-size: 1.5rem;
     color: var(--cos-text);
 }
+
+/* E3.2 Dashboard & Workspace 样式 */
+.dashboard-shell {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 2rem 1rem 4rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.dashboard-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--cos-border);
+    padding-bottom: 1rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.dashboard-header-left {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.dashboard-chat-link {
+    color: var(--cos-text-secondary);
+    text-decoration: none;
+    font-size: 0.8125rem;
+}
+
+.dashboard-chat-link:hover {
+    color: var(--cos-primary);
+}
+
+.dashboard-title {
+    font-size: 1.5rem;
+    font-weight: 400;
+    margin: 0;
+    color: var(--cos-text);
+}
+
+.dashboard-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.dashboard-header-btn {
+    padding: 0.375rem 0.75rem;
+    border: 1px solid var(--cos-border);
+    border-radius: var(--cos-radius-sm);
+    color: var(--cos-text-secondary);
+    font-size: 0.8125rem;
+    text-decoration: none;
+}
+
+.dashboard-create-btn {
+    padding: 0.375rem 0.875rem;
+    border: 1px solid var(--cos-border);
+    border-radius: var(--cos-radius-sm);
+    background: var(--cos-cta-bg);
+    color: var(--cos-cta-fg);
+    font-size: 0.8125rem;
+    cursor: pointer;
+}
+
+.dashboard-workspace-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1rem;
+}
+
+.dashboard-workspace-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 1.25rem;
+    background: var(--cos-surface);
+    border: 1px solid var(--cos-border);
+    border-radius: var(--cos-radius-md);
+    text-decoration: none;
+    color: inherit;
+    transition: border-color 0.15s ease;
+}
+
+.dashboard-workspace-card:hover {
+    border-color: var(--cos-primary);
+}
+
+.dashboard-card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.dashboard-card-title {
+    font-size: 1rem;
+    font-weight: 400;
+    margin: 0;
+    color: var(--cos-text);
+}
+
+.dashboard-card-docs {
+    font-size: 0.75rem;
+    color: var(--cos-text-subtle);
+    background: var(--cos-bg-secondary);
+    padding: 0.125rem 0.375rem;
+    border-radius: var(--cos-radius-sm);
+}
+
+.dashboard-card-desc {
+    font-size: 0.8125rem;
+    color: var(--cos-text-secondary);
+    margin: 0;
+    line-height: 1.4;
+}
+
+.dashboard-panel {
+    background: var(--cos-surface);
+    border: 1px solid var(--cos-border);
+    border-radius: var(--cos-radius-md);
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.dashboard-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.dashboard-modal {
+    background: var(--cos-surface);
+    border: 1px solid var(--cos-border);
+    border-radius: var(--cos-radius-md);
+    padding: 1.5rem;
+    width: 100%;
+    max-width: 420px;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.dashboard-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.dashboard-modal-header h2 {
+    font-size: 1.125rem;
+    font-weight: 400;
+    margin: 0;
+}
+
+.dashboard-modal-close {
+    background: transparent;
+    border: none;
+    font-size: 1.25rem;
+    cursor: pointer;
+    color: var(--cos-text-subtle);
+}
+
+.dashboard-modal-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.dashboard-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+}
+
+.dashboard-btn-cancel {
+    padding: 0.375rem 0.75rem;
+    border: 1px solid var(--cos-border);
+    border-radius: var(--cos-radius-sm);
+    background: transparent;
+    color: var(--cos-text-secondary);
+    cursor: pointer;
+    font-size: 0.8125rem;
+}
+
+.dashboard-btn-confirm {
+    padding: 0.375rem 0.875rem;
+    border: 1px solid var(--cos-border);
+    border-radius: var(--cos-radius-sm);
+    background: var(--cos-cta-bg);
+    color: var(--cos-cta-fg);
+    cursor: pointer;
+    font-size: 0.8125rem;
+}
+
+/* Workspace 工作台两栏外壳 */
+.workspace-workbench-shell {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+.workbench-top-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1.25rem;
+    background: var(--cos-surface);
+    border-bottom: 1px solid var(--cos-border);
+}
+
+.workbench-top-left {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.workbench-back {
+    color: var(--cos-text-secondary);
+    text-decoration: none;
+    font-size: 0.8125rem;
+}
+
+.workbench-back:hover {
+    color: var(--cos-primary);
+}
+
+.workbench-title {
+    font-size: 1rem;
+    font-weight: 400;
+    margin: 0;
+    color: var(--cos-text);
+}
+
+.workbench-analyze-link {
+    color: var(--cos-primary);
+    text-decoration: none;
+    font-size: 0.8125rem;
+}
+
+.workbench-main-body {
+    display: flex;
+    flex: 1;
+}
+
+.workbench-chat-column {
+    flex: 1;
+    min-width: 0;
+}
+
+.workbench-side-rail {
+    width: 320px;
+    border-left: 1px solid var(--cos-border);
+    background: var(--cos-bg-secondary);
+    display: flex;
+    flex-direction: column;
+}
+
+.rail-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--cos-border);
+    background: var(--cos-surface);
+}
+
+.rail-tab {
+    flex: 1;
+    padding: 0.625rem;
+    border: none;
+    background: transparent;
+    color: var(--cos-text-secondary);
+    font-size: 0.8125rem;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+}
+
+.rail-tab.is-active {
+    color: var(--cos-primary);
+    border-bottom-color: var(--cos-primary);
+}
+
+.rail-content {
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    overflow-y: auto;
+}
+
+.rail-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+}
+
+.rail-section-title {
+    font-size: 0.875rem;
+    font-weight: 400;
+    color: var(--cos-text);
+}
+
+.rail-section-count {
+    font-size: 0.75rem;
+    color: var(--cos-text-subtle);
+}
+
+.rail-doc-list,
+.rail-note-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.rail-doc-item,
+.rail-note-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.625rem;
+    background: var(--cos-surface);
+    border: 1px solid var(--cos-border);
+    border-radius: var(--cos-radius-sm);
+    gap: 0.5rem;
+}
+
+.rail-doc-info,
+.rail-note-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    min-width: 0;
+}
+
+.rail-doc-name,
+.rail-note-title {
+    font-size: 0.8125rem;
+    color: var(--cos-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.rail-doc-status {
+    font-size: 0.6875rem;
+    color: var(--cos-text-subtle);
+}
+
+.rail-note-preview {
+    font-size: 0.6875rem;
+    color: var(--cos-text-secondary);
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.rail-doc-delete,
+.rail-note-delete {
+    background: transparent;
+    border: none;
+    color: var(--cos-error);
+    font-size: 0.75rem;
+    cursor: pointer;
+    padding: 0.25rem;
+    flex-shrink: 0;
+}
+
+.rail-btn-new-note {
+    background: transparent;
+    border: 1px dashed var(--cos-border);
+    border-radius: var(--cos-radius-sm);
+    color: var(--cos-primary);
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+    cursor: pointer;
+}
+
+.rail-note-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    background: var(--cos-surface);
+    border: 1px solid var(--cos-border);
+    border-radius: var(--cos-radius-sm);
+    margin-bottom: 0.75rem;
+}
+
+.rail-note-form input,
+.rail-note-form textarea {
+    border: 1px solid var(--cos-border);
+    border-radius: var(--cos-radius-sm);
+    background: var(--cos-bg-secondary);
+    color: var(--cos-text);
+    padding: 0.375rem 0.5rem;
+    font: inherit;
+    font-size: 0.8125rem;
+}
+
+.rail-note-form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.375rem;
+}

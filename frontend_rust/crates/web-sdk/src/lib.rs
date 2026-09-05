@@ -14,6 +14,7 @@ pub mod session_files;
 pub mod reducer;
 pub mod sse_decoder;
 pub mod transport;
+pub mod workspace_api;
 
 pub use auth::{
     AUTH_BOOTSTRAP_TIMEOUT_MS, AUTH_PERSISTED_COOKIE_NAME, AUTH_SESSION_COOKIE_MAX_AGE,
@@ -57,3 +58,9 @@ pub use reducer::{
 };
 pub use sse_decoder::{SseDecoder, events_from_byte_stream};
 pub use transport::{Cancellation, ChatEventStream, ChatTransport, TransportError};
+pub use workspace_api::{
+    create_note_json, create_workspace_json, parse_workspace_documents, parse_workspace_list,
+    parse_workspace_notes, parse_workspace_response, workspace_document_url,
+    workspace_documents_url, workspace_note_url, workspace_notes_url, workspace_url,
+    workspaces_url,
+};
