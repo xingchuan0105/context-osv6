@@ -62,6 +62,7 @@
 
 ## 进行中的计划
 
+- `plans/2026-09-05-development-execution-plan.md` — **当前执行队列**：收尾未提交 W2.4/W2.5 → W1 验收 → 完整 Chat-first → 在线路由迁移 → GPUI 对等；细化下方 09-04 路线图，明确验证证据、工时估计，以及 Web 切流与最终删除 Next 的依赖。
 - `plans/2026-09-04-rust-web-first-gpui-parity-roadmap.md` — **在线 Rust 优先 + 桌面 GPUI 全量对等路线图**（Step 0 删 Tauri CSR 死路径 → W1/W2 在线 Chat-first → D0 `desktop-core` 抽库 → D1–D6 GPUI）；GPUI 第一刀交接 `plans/2026-09-04-rust-web-gpui-desktop-handoff.md` 转历史
 - `plans/2026-08-18-security-remediation-plan.md` — **AI 产品安全修补**（W0–W5 代码在工作区；P2-14 延期）
 - `plans/2026-08-18-security-review-fixes.md` — **W0–W5 审查修复**（F1–F3 已落地；`--lib` 已过）
