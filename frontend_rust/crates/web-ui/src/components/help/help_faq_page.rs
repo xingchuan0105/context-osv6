@@ -1,3 +1,4 @@
+use super::json_ld::FaqPageJsonLd;
 use super::public_common::{PublicPageHeader, PublicSeoHead};
 use super::public_content::{FAQ, FAQ_UPDATED_LINE};
 use leptos::prelude::*;
@@ -11,6 +12,13 @@ pub fn HelpFaqPage() -> impl IntoView {
             description="Context OS 产品 FAQ：MCP / Agent 接入、工作区密钥边界、可分享名额、BYOK、会员与余额定价。"
             canonical="/help/faq"
             en_href=Some("/en/help/faq")
+        />
+        <FaqPageJsonLd
+            items=FAQ.items
+                .iter()
+                .map(|item| (item.question.to_string(), item.answer.to_string()))
+                .collect()
+            locale="zh-CN"
         />
         <main class="pub-shell" data-testid="help-faq-page">
             <div class="pub-center">

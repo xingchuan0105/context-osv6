@@ -1,7 +1,8 @@
+use super::json_ld::{OrganizationJsonLd, SoftwareApplicationJsonLd};
 use leptos::prelude::*;
 use leptos_meta::{Link, Meta, Title};
 
-/// 公开页 SEO 头（title / description / canonical / hreflang）。
+/// 公开页 SEO 头（title / description / canonical / hreflang + (open) 布局的 JSON-LD）。
 /// `en_href` 为 `/en/*` 对应路由；集成族暂无 en 页（与 Next metadata 一致）。
 #[component]
 pub fn PublicSeoHead(
@@ -19,6 +20,8 @@ pub fn PublicSeoHead(
             view! { <Link rel="alternate" hreflang="en" href=en/> }
         })}
         <Link rel="alternate" hreflang="x-default" href=canonical/>
+        <OrganizationJsonLd locale="zh"/>
+        <SoftwareApplicationJsonLd locale="zh"/>
     }
 }
 

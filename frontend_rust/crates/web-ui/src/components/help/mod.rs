@@ -1,5 +1,6 @@
 pub mod help_page;
 pub mod help_write_page;
+pub mod json_ld;
 pub mod public_common;
 pub mod public_content;
 pub mod help_api_access_page;

@@ -165,6 +165,7 @@ pub enum AppRoute {
     SharedKb { token: String },
     SharedUser { user_id: String },
     Invite { workspace_id: String, member_id: String },
+    Home,
     Admin { section: AdminSection },
     Help,
     HelpWrite,
@@ -209,6 +210,7 @@ impl AppRoute {
         };
 
         match segments.as_slice() {
+            [] => Self::Home,
             ["chat"] => Self::Chat { session_id: None },
             ["chat", sid] => Self::Chat {
                 session_id: Some(sid.to_string()),
@@ -441,8 +443,8 @@ mod tests {
     }
 
     #[test]
-    fn chat_routes_are_canonical_and_root_is_not_chat() {
-        assert_eq!(AppRoute::parse("/"), AppRoute::NotFound);
+    fn chat_routes_are_canonical_and_root_is_home() {
+        assert_eq!(AppRoute::parse("/"), AppRoute::Home);
         assert_eq!(
             AppRoute::parse("/chat"),
             AppRoute::Chat { session_id: None }

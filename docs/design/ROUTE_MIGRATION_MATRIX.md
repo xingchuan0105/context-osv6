@@ -155,9 +155,9 @@
 
 | # | 规范路径 (Canonical URL) | Next.js 源文件 | 鉴权 (Auth) | 渲染 (Render) | SEO / noindex | Rust 挂载状态 | 归属阶段 |
 |---|---|---|---|---|---|---|---|
-| 69 | `/` (首页/产品根) | `app/page.tsx` | 公开 (未登录展示，已登录导向 `/chat`) | SSR | indexable | PoC 临时重定向 `/chat` (E4 替换为产品首页) | E4 |
-| 70 | `/llms.txt` | `app/llms.txt/route.ts` | 公开 | Static Text | noindex | 待挂载 | E4 |
-| 71 | `/baidu_verify_codeva-THd6TRYMwv.html` | `app/baidu_verify_codeva-THd6TRYMwv.html/route.ts` | 公开 | Static Text | noindex | 待挂载 | E4 |
+| 69 | `/` (首页/产品根) | `app/page.tsx` | 公开 (未登录展示，已登录导向 `/chat`) | SSR | indexable | 已挂载 (SSR 价值主张 + 会话分流) | E4.3 |
+| 70 | `/llms.txt` | `app/llms.txt/route.ts` | 公开 | Static Text | noindex | 已挂载 | E4.3 |
+| 71 | `/baidu_verify_codeva-THd6TRYMwv.html` | `app/baidu_verify_codeva-THd6TRYMwv.html/route.ts` | 公开 | Static Text | noindex | 已挂载 | E4.3 |
 
 ---
 
@@ -173,5 +173,6 @@
 | **E3.5** | 15 | 管理后台运维 (`/admin/*`) 与应用内帮助 (`/help`, `/help/write`) |
 | **E4.1** | 8 | 公开帮助与集成生态 (`/help/faq`, `/help/compare`, `/help/api-access*`, `/integrations/*`)，含 canonical/hreflang SEO 头 |
 | **E4.2** | 9 | 桌面产品与法务公开族 (`/desktop`, `/activate`, `/setup`, `/legal*`) + `/legal/third-party-notices.md` 下载路由 |
-| **E4** | 16 | 首页产品根、双语帮助、双语法律文本、抓取协议（剩余） |
+| **E4.3** | 3 | 首页产品根 (`/`, SSR 价值主张 + 会话分流 + Organization/WebSite/SoftwareApplication JSON-LD)、`/llms.txt`、百度站长验证 |
+| **E4.4** | 13 | `/en/*` 英文公共站（首页 / 定价 / 桌面 / 帮助 4 / 法务 6） |
 | **总计** | **71** | **100% 覆盖现有 `frontend_next` 的全部端点** |
