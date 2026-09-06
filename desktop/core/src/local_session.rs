@@ -4,11 +4,10 @@
 //! avrag-api (or log in if already present). Persist JWT under app data dir.
 
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
-use tauri::Manager;
+use std::path::{Path, PathBuf};
 
-use super::api::IpcApiError;
-use super::local_product::product_api_base_url;
+use crate::host_error::HostError;
+use crate::local_product::product_api_base_url;
 
 const LOCAL_EMAIL: &str = "local@context-os.client";
 const LOCAL_FULL_NAME: &str = "Local User";
@@ -45,30 +44,18 @@ pub struct LocalSessionStatus {
     pub api_base_url: String,
 }
 
-fn creds_path(app: &tauri::AppHandle) -> Result<PathBuf, IpcApiError> {
-    let dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| IpcApiError::internal(format!("app_data_dir: {e}")))?;
-    Ok(dir.join("local_user.json"))
+fn creds_path(data_dir: &Path) -> PathBuf {
+    data_dir.join("local_user.json")
 }
 
-fn session_path(app: &tauri::AppHandle) -> Result<PathBuf, IpcApiError> {
-    let dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| IpcApiError::internal(format!("app_data_dir: {e}")))?;
-    Ok(dir.join("local_session.json"))
+fn session_path(data_dir: &Path) -> PathBuf {
+    data_dir.join("local_session.json")
 }
 
-fn ensure_app_data(app: &tauri::AppHandle) -> Result<PathBuf, IpcApiError> {
-    let dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| IpcApiError::internal(format!("app_data_dir: {e}")))?;
-    std::fs::create_dir_all(&dir)
-        .map_err(|e| IpcApiError::internal(format!("create app data: {e}")))?;
-    Ok(dir)
+fn ensure_app_data(data_dir: &Path) -> Result<PathBuf, HostError> {
+    std::fs::create_dir_all(data_dir)
+        .map_err(|e| HostError::internal(format!("create app data: {e}")))?;
+    Ok(data_dir.to_path_buf())
 }
 
 fn random_password() -> String {
@@ -79,14 +66,14 @@ fn random_password() -> String {
     )
 }
 
-fn load_or_create_credentials(app: &tauri::AppHandle) -> Result<StoredCredentials, IpcApiError> {
-    ensure_app_data(app)?;
-    let path = creds_path(app)?;
+fn load_or_create_credentials(data_dir: &Path) -> Result<StoredCredentials, HostError> {
+    ensure_app_data(data_dir)?;
+    let path = creds_path(data_dir);
     if path.is_file() {
         let raw = std::fs::read_to_string(&path)
-            .map_err(|e| IpcApiError::internal(format!("read local_user: {e}")))?;
+            .map_err(|e| HostError::internal(format!("read local_user: {e}")))?;
         let creds: StoredCredentials = serde_json::from_str(&raw)
-            .map_err(|e| IpcApiError::internal(format!("parse local_user: {e}")))?;
+            .map_err(|e| HostError::internal(format!("parse local_user: {e}")))?;
         if creds.password.len() >= 8 && !creds.email.is_empty() {
             return Ok(creds);
         }
@@ -96,30 +83,30 @@ fn load_or_create_credentials(app: &tauri::AppHandle) -> Result<StoredCredential
         password: random_password(),
     };
     let raw = serde_json::to_string_pretty(&creds)
-        .map_err(|e| IpcApiError::internal(format!("serialize local_user: {e}")))?;
+        .map_err(|e| HostError::internal(format!("serialize local_user: {e}")))?;
     std::fs::write(&path, raw)
-        .map_err(|e| IpcApiError::internal(format!("write local_user: {e}")))?;
-    super::secret_fs::restrict_secret_file(&path);
+        .map_err(|e| HostError::internal(format!("write local_user: {e}")))?;
+    crate::secret_fs::restrict_secret_file(&path);
     Ok(creds)
 }
 
-fn load_session(app: &tauri::AppHandle) -> Option<StoredSession> {
-    let path = session_path(app).ok()?;
+fn load_session(data_dir: &Path) -> Option<StoredSession> {
+    let path = session_path(data_dir);
     let raw = std::fs::read_to_string(path).ok()?;
     serde_json::from_str(&raw).ok()
 }
 
 /// JWT of the local B2C session (for shell-orchestrated API calls like reindex).
-pub(crate) fn local_session_token(app: &tauri::AppHandle) -> Option<String> {
-    load_session(app).map(|session| session.token)
+pub fn local_session_token(data_dir: &Path) -> Option<String> {
+    load_session(data_dir).map(|session| session.token)
 }
 
-fn save_session(app: &tauri::AppHandle, session: &StoredSession) -> Result<(), IpcApiError> {
-    ensure_app_data(app)?;
-    let path = session_path(app)?;
+fn save_session(data_dir: &Path, session: &StoredSession) -> Result<(), HostError> {
+    ensure_app_data(data_dir)?;
+    let path = session_path(data_dir);
     let raw = serde_json::to_string_pretty(session)
-        .map_err(|e| IpcApiError::internal(format!("serialize session: {e}")))?;
-    std::fs::write(&path, raw).map_err(|e| IpcApiError::internal(format!("write session: {e}")))?;
+        .map_err(|e| HostError::internal(format!("serialize session: {e}")))?;
+    std::fs::write(&path, raw).map_err(|e| HostError::internal(format!("write session: {e}")))?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -133,17 +120,17 @@ async fn http_json(
     url: &str,
     body: Option<serde_json::Value>,
     token: Option<&str>,
-) -> Result<(u16, serde_json::Value), IpcApiError> {
+) -> Result<(u16, serde_json::Value), HostError> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
         .build()
-        .map_err(|e| IpcApiError::internal(format!("http client: {e}")))?;
+        .map_err(|e| HostError::internal(format!("http client: {e}")))?;
 
     let mut req = match method {
         "GET" => client.get(url),
         "POST" => client.post(url),
         _ => {
-            return Err(IpcApiError::bad_request(
+            return Err(HostError::bad_request(
                 "method_not_allowed",
                 format!("unsupported {method}"),
             ));
@@ -157,18 +144,18 @@ async fn http_json(
     }
     let resp = req.send().await.map_err(|e| {
         if e.is_connect() {
-            IpcApiError::service_unavailable(format!(
+            HostError::service_unavailable(format!(
                 "Local product API unreachable ({e}). Start: bash scripts/desktop-local-product.sh ensure"
             ))
         } else {
-            IpcApiError::internal(format!("request failed: {e}"))
+            HostError::internal(format!("request failed: {e}"))
         }
     })?;
     let status = resp.status().as_u16();
     let text = resp
         .text()
         .await
-        .map_err(|e| IpcApiError::internal(format!("read body: {e}")))?;
+        .map_err(|e| HostError::internal(format!("read body: {e}")))?;
     let value = if text.trim().is_empty() {
         serde_json::json!({})
     } else {
@@ -216,7 +203,7 @@ async fn me_ok(base: &str, token: &str) -> bool {
 async fn login_or_register(
     base: &str,
     creds: &StoredCredentials,
-) -> Result<StoredSession, IpcApiError> {
+) -> Result<StoredSession, HostError> {
     let login_url = format!("{base}/api/auth/login");
     let (status, value) = http_json(
         "POST",
@@ -280,17 +267,16 @@ async fn login_or_register(
         .or_else(|| value.get("message"))
         .and_then(|m| m.as_str())
         .unwrap_or("local register/login failed");
-    Err(IpcApiError::new(
+    Err(HostError::new(
         if r_status >= 400 { r_status } else { status },
         "local_session_failed",
         msg.to_string(),
     ))
 }
 
-#[tauri::command]
-pub async fn get_local_session(app: tauri::AppHandle) -> Result<LocalSessionStatus, IpcApiError> {
+pub async fn get_local_session(data_dir: &Path) -> Result<LocalSessionStatus, HostError> {
     let base = product_api_base_url();
-    if let Some(session) = load_session(&app) {
+    if let Some(session) = load_session(data_dir) {
         if me_ok(&base, &session.token).await {
             return Ok(LocalSessionStatus {
                 ready: true,
@@ -313,7 +299,10 @@ pub async fn get_local_session(app: tauri::AppHandle) -> Result<LocalSessionStat
 }
 
 /// Bring up data plane + product if the local API is not healthy.
-async fn ensure_local_environment() -> Result<(), IpcApiError> {
+async fn ensure_local_environment(
+    device_id: Option<&str>,
+    relay_env: Option<String>,
+) -> Result<(), HostError> {
     let base = product_api_base_url();
     let health_url = format!("{base}/health");
     if http_json("GET", &health_url, None, None).await.is_ok() {
@@ -321,17 +310,17 @@ async fn ensure_local_environment() -> Result<(), IpcApiError> {
     }
 
     // Stack first (PG + Redis + client.env), then product (api + worker).
-    let stack = super::local_stack::ensure_local_stack().await?;
+    let stack = crate::local_stack::ensure_local_stack(device_id, relay_env).await?;
     if !stack.ok {
-        return Err(IpcApiError::service_unavailable(format!(
+        return Err(HostError::service_unavailable(format!(
             "本机数据面未就绪：{}",
             stack.message
         )));
     }
 
-    let product = super::local_product::ensure_local_product().await?;
+    let product = crate::local_product::ensure_local_product().await?;
     if !product.ok {
-        return Err(IpcApiError::service_unavailable(format!(
+        return Err(HostError::service_unavailable(format!(
             "本机产品进程未就绪：{}",
             product.message
         )));
@@ -339,7 +328,7 @@ async fn ensure_local_environment() -> Result<(), IpcApiError> {
 
     // Re-check health after ensure.
     if http_json("GET", &health_url, None, None).await.is_err() {
-        return Err(IpcApiError::service_unavailable(format!(
+        return Err(HostError::service_unavailable(format!(
             "本机产品 API 仍不可达（{base}/health）。请查看设置中的产品日志。"
         )));
     }
@@ -348,11 +337,14 @@ async fn ensure_local_environment() -> Result<(), IpcApiError> {
 
 /// Ensure a personal B2C user exists on the local product API and return a JWT.
 /// On cold start, automatically brings up local stack + product when the API is down.
-#[tauri::command]
-pub async fn ensure_local_session(app: tauri::AppHandle) -> Result<LocalSessionStatus, IpcApiError> {
+pub async fn ensure_local_session(
+    data_dir: &Path,
+    device_id: Option<&str>,
+    relay_env: Option<String>,
+) -> Result<LocalSessionStatus, HostError> {
     let base = product_api_base_url();
 
-    if let Some(session) = load_session(&app) {
+    if let Some(session) = load_session(data_dir) {
         if me_ok(&base, &session.token).await {
             return Ok(LocalSessionStatus {
                 ready: true,
@@ -365,12 +357,12 @@ pub async fn ensure_local_session(app: tauri::AppHandle) -> Result<LocalSessionS
         }
     }
 
-    ensure_local_environment().await?;
+    ensure_local_environment(device_id, relay_env).await?;
 
     let base = product_api_base_url();
-    let creds = load_or_create_credentials(&app)?;
+    let creds = load_or_create_credentials(data_dir)?;
     let session = login_or_register(&base, &creds).await?;
-    save_session(&app, &session)?;
+    save_session(data_dir, &session)?;
 
     Ok(LocalSessionStatus {
         ready: true,

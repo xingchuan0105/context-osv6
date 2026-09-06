@@ -4,7 +4,7 @@ use std::io::Read;
 
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 
-use super::local_product::product_api_base_url;
+use super::local_host::product_api_base_url;
 
 const LOCAL_API_TIMEOUT_SECS: u64 = 60;
 const PUBLISH_EXPORT_TIMEOUT_SECS: u64 = 180;

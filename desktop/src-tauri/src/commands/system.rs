@@ -92,5 +92,5 @@ pub async fn open_data_dir(app: tauri::AppHandle) -> Result<(), IpcApiError> {
 /// Local product logs dir (api.log / worker.log) in the OS file manager.
 #[tauri::command]
 pub async fn open_logs_dir() -> Result<(), IpcApiError> {
-    open_dir(crate::commands::local_product::log_dir_path())
+    open_dir(crate::commands::local_host::log_dir_path())
 }

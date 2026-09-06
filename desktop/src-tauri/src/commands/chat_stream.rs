@@ -5,7 +5,7 @@ use tauri::{AppHandle, Emitter, State};
 
 use super::api::IpcApiError;
 use super::chat::{chat_event_channel, parse_chat_request_id, pre_start_error_event};
-use super::local_product::product_api_base_url;
+use super::local_host::product_api_base_url;
 use crate::registry::ChatStreamRegistry;
 
 fn emit_chat_event(app: &AppHandle, request_id: &str, event: &ChatEvent) -> Result<(), IpcApiError> {

@@ -2,7 +2,7 @@
 
 use serde::Serialize;
 use std::process::Command;
-use std::time::Duration;
+
 
 #[derive(Debug, Clone, Serialize)]
 pub struct DockerStatus {
@@ -27,7 +27,7 @@ fn run_cmd(program: &str, args: &[&str], timeout_secs: u64) -> (bool, String) {
     let _ = timeout_secs;
     let mut cmd = Command::new(program);
     cmd.args(args);
-    crate::commands::win_cmd::hide_console(&mut cmd);
+    crate::win_cmd::hide_console(&mut cmd);
     match cmd.output() {
         Ok(out) => {
             let ok = out.status.success();
@@ -174,7 +174,6 @@ fn finish_probe(
     }
 }
 
-#[tauri::command]
 pub fn get_docker_status() -> DockerStatus {
     build_status()
 }
@@ -214,7 +213,7 @@ mod tests {
     #[test]
     fn probe_runs_without_panic() {
         // May be true or false depending on host — must not panic.
-        let _ = Duration::from_secs(1);
+        let _ = std::time::Duration::from_secs(1);
         let st = get_docker_status();
         assert!(!st.install_url.is_empty());
         assert!(!st.platform.is_empty());

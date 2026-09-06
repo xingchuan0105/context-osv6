@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 
-use super::api::IpcApiError;
+use crate::host_error::HostError;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct LocalStackServiceStatus {
@@ -29,7 +29,7 @@ pub struct LocalStackStatus {
     pub env_file_path: Option<String>,
     pub env_file_exists: bool,
     /// Nested Docker probe for install guidance in settings UI.
-    pub docker: Option<super::docker_status::DockerStatus>,
+    pub docker: Option<crate::docker_status::DockerStatus>,
 }
 
 /// Connection strings for local PG / Redis and retrieval backend flags.
@@ -194,7 +194,7 @@ fn build_status() -> LocalStackStatus {
 
     // Slim stack: only PG + Redis are required for overall_ok.
     let overall_ok = services.iter().all(|s| s.ok);
-    let docker = Some(super::docker_status::docker_status_snapshot());
+    let docker = Some(crate::docker_status::docker_status_snapshot());
     LocalStackStatus {
         overall_ok,
         services,
@@ -252,16 +252,16 @@ fn build_runtime_config() -> ClientRuntimeConfig {
     }
 }
 
-fn run_stack_script(arg: &str) -> Result<(i32, String, String), IpcApiError> {
+fn run_stack_script(arg: &str) -> Result<(i32, String, String), HostError> {
     let root = monorepo_root().ok_or_else(|| {
-        IpcApiError::bad_request(
+        HostError::bad_request(
             "monorepo_not_found",
             "Cannot find scripts/desktop-local-stack.sh. Set CONTEXT_OS_ROOT to the monorepo root, or run: bash scripts/desktop-local-stack.sh ensure",
         )
     })?;
     let script = script_path(&root);
     if !script.is_file() {
-        return Err(IpcApiError::bad_request(
+        return Err(HostError::bad_request(
             "script_missing",
             format!("Stack script missing: {}", script.display()),
         ));
@@ -272,10 +272,10 @@ fn run_stack_script(arg: &str) -> Result<(i32, String, String), IpcApiError> {
         .arg(arg)
         .current_dir(&root)
         .env("CONTEXT_OS_ROOT", root.as_os_str());
-    super::win_cmd::hide_console(&mut bash);
+    crate::win_cmd::hide_console(&mut bash);
     let output = bash.output()
         .map_err(|e| {
-            IpcApiError::internal(format!(
+            HostError::internal(format!(
                 "Failed to run desktop-local-stack.sh {arg}: {e}. Is Docker installed?"
             ))
         })?;
@@ -286,34 +286,36 @@ fn run_stack_script(arg: &str) -> Result<(i32, String, String), IpcApiError> {
     Ok((code, stdout, stderr))
 }
 
-#[tauri::command]
 pub fn get_local_stack_status() -> LocalStackStatus {
     build_status()
 }
 
-#[tauri::command]
 pub fn get_client_runtime_config() -> ClientRuntimeConfig {
     build_runtime_config()
 }
 
 /// Bring up data plane: **Rust native first** (no bash/Docker), then bash script fallback.
 /// Hard timeout so a stuck `pg_ctl`/pipe cannot freeze the UI forever.
-#[tauri::command]
-pub async fn ensure_local_stack() -> Result<EnsureLocalStackResult, IpcApiError> {
-    let docker = super::docker_status::docker_status_snapshot();
+/// `device_id` seeds local identity uuids; `relay_env` (cloud metered relay
+/// block, if a cloud session exists) is embedded into client.env.
+pub async fn ensure_local_stack(
+    device_id: Option<&str>,
+    relay_env: Option<String>,
+) -> Result<EnsureLocalStackResult, HostError> {
+    let docker = crate::docker_status::docker_status_snapshot();
     const NATIVE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(90);
 
     // 1) Pure-Rust native path when pg_ctl + redis-server are available.
-    if super::native_stack::native_tools_available() {
-        let report = match tokio::time::timeout(
-            NATIVE_TIMEOUT,
-            tokio::task::spawn_blocking(super::native_stack::ensure_native),
-        )
-        .await
+    if crate::native_stack::native_tools_available() {
+        let device_owned = device_id.map(str::to_string);
+        let ensure =
+            move || crate::native_stack::ensure_native(device_owned.as_deref(), relay_env);
+        let report = match tokio::time::timeout(NATIVE_TIMEOUT, tokio::task::spawn_blocking(ensure))
+            .await
         {
             Ok(Ok(r)) => r,
             Ok(Err(e)) => {
-                return Err(IpcApiError::internal(format!("native ensure join: {e}")));
+                return Err(HostError::internal(format!("native ensure join: {e}")));
             }
             Err(_) => {
                 let status = build_status();
@@ -369,7 +371,7 @@ pub async fn ensure_local_stack() -> Result<EnsureLocalStackResult, IpcApiError>
         if let Ok((code, stdout, stderr)) =
             tokio::task::spawn_blocking(|| run_stack_script("ensure"))
                 .await
-                .map_err(|e| IpcApiError::internal(format!("ensure task join error: {e}")))?
+                .map_err(|e| HostError::internal(format!("ensure task join error: {e}")))?
         {
             let status = build_status();
             let config = build_runtime_config();
@@ -429,7 +431,7 @@ pub async fn ensure_local_stack() -> Result<EnsureLocalStackResult, IpcApiError>
                     .rev()
                     .find(|l| !l.trim().is_empty())
                     .unwrap_or("see stderr");
-                let hint = if !docker.overall_ok && !super::native_stack::native_tools_available()
+                let hint = if !docker.overall_ok && !crate::native_stack::native_tools_available()
                 {
                     " · 请安装 postgresql-16 + pgvector + redis-server，或 STACK_MODE=docker"
                 } else {
@@ -462,17 +464,16 @@ pub async fn ensure_local_stack() -> Result<EnsureLocalStackResult, IpcApiError>
                 config,
             })
         }
-        Err(e) => Err(IpcApiError::internal(format!("ensure task join error: {e}"))),
+        Err(e) => Err(HostError::internal(format!("ensure task join error: {e}"))),
     }
     }
 }
 
 /// Stop data plane: native stop + optional bash down.
-#[tauri::command]
-pub async fn stop_local_stack() -> Result<EnsureLocalStackResult, IpcApiError> {
-    let native = tokio::task::spawn_blocking(super::native_stack::stop_native)
+pub async fn stop_local_stack() -> Result<EnsureLocalStackResult, HostError> {
+    let native = tokio::task::spawn_blocking(crate::native_stack::stop_native)
         .await
-        .map_err(|e| IpcApiError::internal(format!("native stop join: {e}")))?;
+        .map_err(|e| HostError::internal(format!("native stop join: {e}")))?;
 
     let mut stdout = format!("--- native ---\n{}\n", native.log);
     let mut stderr = String::new();

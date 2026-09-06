@@ -339,11 +339,11 @@ fn bin(pg_bin: &Path, name: &str) -> PathBuf {
 }
 
 fn apply_windows_no_window(cmd: &mut Command) {
-    super::win_cmd::hide_console(cmd);
+    crate::win_cmd::hide_console(cmd);
 }
 
 fn apply_windows_detached(cmd: &mut Command) {
-    super::win_cmd::hide_and_detach(cmd);
+    crate::win_cmd::hide_and_detach(cmd);
 }
 
 fn run_capture(cmd: &mut Command) -> (i32, String, String) {
@@ -392,9 +392,10 @@ fn flush_ensure_log(state_rt: &Path, log: &str) {
 /// Deterministic local account identity derived from the machine id.
 /// Personal B2C model: owner == user (one `users` row IS the account), so both
 /// ids must be the SAME uuid — `user_provider_secrets.owner_user_id` FK → `users.id`.
-fn local_identity_uuids() -> (String, String) {
-    let device_id = crate::commands::license::compute_device_id()
-        .unwrap_or_else(|_| "cos-local-device".to_string());
+/// `device_id` comes from the host shell (license module); None falls back to a
+/// stable placeholder so the uuid is still deterministic per machine.
+fn local_identity_uuids(device_id: Option<&str>) -> (String, String) {
+    let device_id = device_id.unwrap_or("cos-local-device");
     let id = uuid::Uuid::new_v5(
         &uuid::Uuid::NAMESPACE_OID,
         format!("cos-local:{device_id}").as_bytes(),
@@ -402,7 +403,51 @@ fn local_identity_uuids() -> (String, String) {
     (id.to_string(), id.to_string())
 }
 
-fn write_client_env(rt: &Path, migrations: Option<&Path>, log: &mut String) -> Result<(), String> {
+/// 云登录官方模型中继块（host 传入；无云会话时 None = BYOK-only）。
+#[derive(Debug, Clone)]
+pub struct RelayEnv {
+    pub base_url: String,
+    pub desktop_token: String,
+    pub chat_model: String,
+    pub ingestion_model: String,
+    pub embedding_model: String,
+    pub rerank_model: String,
+}
+
+pub fn render_relay_env(relay: &RelayEnv) -> String {
+    format!(
+        "# 云登录官方模型（走余额）— cloud metered relay (W3)\n\
+         AGENT_LLM_BASE_URL={relay_base}\n\
+         AGENT_LLM_API_KEY={token}\n\
+         AGENT_LLM_MODEL={chat_model}\n\
+         EMBEDDING_BASE_URL={relay_base}\n\
+         EMBEDDING_API_KEY={token}\n\
+         EMBEDDING_MODEL={embedding_model}\n\
+         INGESTION_LLM_BASE_URL={relay_base}/ingestion\n\
+         INGESTION_LLM_API_KEY={token}\n\
+         INGESTION_LLM_MODEL={ingestion_model}\n\
+         INGESTION_LLM_ENABLE_THINKING=false\n\
+         INGESTION_LLM_TIMEOUT_MS=60000\n\
+         RERANK_BASE_URL={relay_base}\n\
+         RERANK_API_KEY={token}\n\
+         RERANK_MODEL={rerank_model}\n\
+         AVRAG_PLATFORM_KEYS_RELAY=1\n",
+        relay_base = relay.base_url,
+        token = relay.desktop_token,
+        chat_model = relay.chat_model,
+        ingestion_model = relay.ingestion_model,
+        embedding_model = relay.embedding_model,
+        rerank_model = relay.rerank_model,
+    )
+}
+
+fn write_client_env(
+    rt: &Path,
+    migrations: Option<&Path>,
+    device_id: Option<&str>,
+    relay_env: Option<&str>,
+    log: &mut String,
+) -> Result<(), String> {
     let env_path = rt.join("client.env");
     let jwt_path = rt.join("jwt.secret");
     let objects = rt.join("objects");
@@ -415,7 +460,7 @@ fn write_client_env(rt: &Path, migrations: Option<&Path>, log: &mut String) -> R
     } else {
         let s = format!("{:x}", uuid::Uuid::new_v4().as_u128());
         fs::write(&jwt_path, format!("{s}\n")).map_err(|e| e.to_string())?;
-        super::secret_fs::restrict_secret_file(&jwt_path);
+        crate::secret_fs::restrict_secret_file(&jwt_path);
         s
     };
     // BYOK envelope key for `user_provider_secrets` (ADR-0010 G1). Must be stable
@@ -434,7 +479,7 @@ fn write_client_env(rt: &Path, migrations: Option<&Path>, log: &mut String) -> R
         bytes[16..].copy_from_slice(b.as_bytes());
         let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
         fs::write(&byok_path, format!("{encoded}\n")).map_err(|e| e.to_string())?;
-        super::secret_fs::restrict_secret_file(&byok_path);
+        crate::secret_fs::restrict_secret_file(&byok_path);
         encoded
     };
     // Upload PUT HMAC (fail-closed since 2026-08-18). Persist like jwt.secret so
@@ -452,10 +497,10 @@ fn write_client_env(rt: &Path, migrations: Option<&Path>, log: &mut String) -> R
             uuid::Uuid::new_v4().as_u128()
         );
         fs::write(&upload_path, format!("{s}\n")).map_err(|e| e.to_string())?;
-        super::secret_fs::restrict_secret_file(&upload_path);
+        crate::secret_fs::restrict_secret_file(&upload_path);
         s
     };
-    let (owner_id, user_id) = local_identity_uuids();
+    let (owner_id, user_id) = local_identity_uuids(device_id);
     let mig = migrations
         .map(|p| p.display().to_string())
         .unwrap_or_default();
@@ -488,34 +533,8 @@ fn write_client_env(rt: &Path, migrations: Option<&Path>, log: &mut String) -> R
     // official models run through the cloud metered relay (`<cloud>/v1/relay`,
     // models pinned server-side) and the local api/worker must skip wallet
     // debit — the cloud already charged. No session → BYOK-only, unchanged.
-    let mut relay_env = String::new();
-    if let Some(session) = super::cloud_session::load_session_standalone() {
-        let relay = &session.relay;
-        relay_env = format!(
-            "# 云登录官方模型（走余额）— cloud metered relay (W3)\n\
-             AGENT_LLM_BASE_URL={relay_base}\n\
-             AGENT_LLM_API_KEY={token}\n\
-             AGENT_LLM_MODEL={chat_model}\n\
-             EMBEDDING_BASE_URL={relay_base}\n\
-             EMBEDDING_API_KEY={token}\n\
-             EMBEDDING_MODEL={embedding_model}\n\
-             INGESTION_LLM_BASE_URL={relay_base}/ingestion\n\
-             INGESTION_LLM_API_KEY={token}\n\
-             INGESTION_LLM_MODEL={ingestion_model}\n\
-             INGESTION_LLM_ENABLE_THINKING=false\n\
-             INGESTION_LLM_TIMEOUT_MS=60000\n\
-             RERANK_BASE_URL={relay_base}\n\
-             RERANK_API_KEY={token}\n\
-             RERANK_MODEL={rerank_model}\n\
-             AVRAG_PLATFORM_KEYS_RELAY=1\n",
-            relay_base = relay.base_url,
-            token = session.desktop_token,
-            chat_model = relay.chat_model,
-            ingestion_model = relay.ingestion_model,
-            embedding_model = relay.embedding_model,
-            rerank_model = relay.rerank_model,
-        );
-    }
+    // 云登录官方模型中继块由 host 注入（cloud session 属 D0.4 云端抽库）。
+    let relay_env = relay_env.unwrap_or_default();
     let body = format!(
         r#"# Generated by desktop native_stack (no Docker / no bash)
 STACK_MODE=native
@@ -561,10 +580,10 @@ AVRAG_EMBEDDING_DIM=1024
         relay_env = relay_env,
     );
     fs::write(&env_path, body).map_err(|e| e.to_string())?;
-    super::secret_fs::restrict_secret_file(&env_path);
-    super::secret_fs::restrict_secret_file(&jwt_path);
-    super::secret_fs::restrict_secret_file(&upload_path);
-    super::secret_fs::restrict_secret_file(&byok_path);
+    crate::secret_fs::restrict_secret_file(&env_path);
+    crate::secret_fs::restrict_secret_file(&jwt_path);
+    crate::secret_fs::restrict_secret_file(&upload_path);
+    crate::secret_fs::restrict_secret_file(&byok_path);
     fs::write(rt.join("stack.mode"), "native\n").ok();
     append_log(log, format!("wrote {}", env_path.display()));
     Ok(())
@@ -1042,7 +1061,10 @@ pub fn native_tools_available() -> bool {
 /// when a cloud session exists). Called by cloud login/logout so an already
 /// running local product can be restarted onto the new credentials without a
 /// full stack ensure.
-pub(crate) fn refresh_client_env() -> Result<String, String> {
+pub fn refresh_client_env(
+    device_id: Option<&str>,
+    relay_env: Option<String>,
+) -> Result<String, String> {
     let mut log = String::new();
     let Some(state_rt) = runtime_home() else {
         return Err(
@@ -1052,12 +1074,15 @@ pub(crate) fn refresh_client_env() -> Result<String, String> {
     };
     let bins_rt = bins_runtime_home().unwrap_or_else(|| state_rt.clone());
     let mig = resolve_migrations_dir(&bins_rt, &state_rt);
-    write_client_env(&state_rt, mig.as_deref(), &mut log)?;
+    write_client_env(&state_rt, mig.as_deref(), device_id, relay_env.as_deref(), &mut log)?;
     flush_ensure_log(&state_rt, &log);
     Ok(log)
 }
 
-pub fn ensure_native() -> NativeEnsureReport {
+pub fn ensure_native(
+    device_id: Option<&str>,
+    relay_env: Option<String>,
+) -> NativeEnsureReport {
     // Serialize concurrent ensures: bootstrap / product / login paths can race
     // (e.g. right after the W3 gate releases), and two passes running initdb
     // or createdb against the same half-initialized cluster fail in ways the
@@ -1103,7 +1128,7 @@ pub fn ensure_native() -> NativeEnsureReport {
             }
         }
         let mig = resolve_migrations_dir(&bins_rt, &state_rt);
-        if let Err(e) = write_client_env(&state_rt, mig.as_deref(), &mut log) {
+        if let Err(e) = write_client_env(&state_rt, mig.as_deref(), device_id, relay_env.as_deref(), &mut log) {
             flush_ensure_log(&state_rt, &log);
             return NativeEnsureReport {
                 ok: false,
@@ -1192,7 +1217,7 @@ pub fn ensure_native() -> NativeEnsureReport {
     }
 
     let mig = resolve_migrations_dir(&bins_rt, &state_rt);
-    if let Err(e) = write_client_env(&state_rt, mig.as_deref(), &mut log) {
+    if let Err(e) = write_client_env(&state_rt, mig.as_deref(), device_id, relay_env.as_deref(), &mut log) {
         flush_ensure_log(&state_rt, &log);
         return NativeEnsureReport {
             ok: false,
@@ -1236,7 +1261,7 @@ pub fn stop_native() -> NativeEnsureReport {
                 if let Ok(pid) = first.trim().parse::<u32>() {
                     #[cfg(windows)]
                     {
-                        let n = super::win_cmd::kill_pid_tree(pid);
+                        let n = crate::win_cmd::kill_pid_tree(pid);
                         append_log(&mut log, format!("postgres TerminateProcess pid={pid} n={n}"));
                     }
                     #[cfg(not(windows))]
@@ -1254,7 +1279,7 @@ pub fn stop_native() -> NativeEnsureReport {
     } else {
         #[cfg(windows)]
         {
-            let n = super::win_cmd::kill_named_under(
+            let n = crate::win_cmd::kill_named_under(
                 &["postgres", "pg_ctl"],
                 &[state_rt.clone()],
             );
@@ -1282,7 +1307,7 @@ pub fn stop_native() -> NativeEnsureReport {
             if let Ok(pid) = pid_s.trim().parse::<i32>() {
                 #[cfg(windows)]
                 {
-                    let n = super::win_cmd::kill_pid_tree(pid as u32);
+                    let n = crate::win_cmd::kill_pid_tree(pid as u32);
                     append_log(&mut log, format!("redis TerminateProcess tree n={n}"));
                 }
                 #[cfg(not(windows))]

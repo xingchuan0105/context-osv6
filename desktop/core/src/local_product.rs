@@ -12,7 +12,7 @@ use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use super::api::IpcApiError;
+use crate::host_error::HostError;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct LocalProductStatus {
@@ -84,7 +84,7 @@ fn monorepo_root() -> Option<PathBuf> {
 
 /// State dir for client.env / run / logs (install AppData or monorepo desktop/runtime).
 fn state_runtime_dir() -> Option<PathBuf> {
-    super::native_stack::runtime_home()
+    crate::native_stack::runtime_home()
 }
 
 /// Sidecars bundled via Tauri externalBin land next to the main executable.
@@ -298,7 +298,7 @@ fn stop_pidfile(pidfile: &Path) {
             #[cfg(windows)]
             {
                 if let Ok(p) = pid.parse::<u32>() {
-                    let _ = super::win_cmd::kill_pid_tree(p);
+                    let _ = crate::win_cmd::kill_pid_tree(p);
                 }
             }
         }
@@ -321,7 +321,7 @@ fn run_log_dir() -> (PathBuf, PathBuf) {
 }
 
 /// Logs dir (api.log / worker.log). `pub(crate)` for the 数据/诊断 open-logs command.
-pub(crate) fn log_dir_path() -> PathBuf {
+pub fn log_dir_path() -> PathBuf {
     run_log_dir().1
 }
 
@@ -474,7 +474,7 @@ fn spawn_with_env(
     cmd.stderr(Stdio::from(log_err));
     cmd.stdin(Stdio::null());
 
-    super::win_cmd::hide_and_detach(&mut cmd);
+    crate::win_cmd::hide_and_detach(&mut cmd);
 
     let child = cmd
         .spawn()
@@ -490,7 +490,7 @@ fn spawn_with_env(
 
 /// Run the bundled `avrag-migrate` sidecar to completion, then re-apply the
 /// runtime DML grants (fresh migration-created tables need them). Migrations
-/// must go through the owner role (`super::native_stack::migration_database_url`)
+/// must go through the owner role (`crate::native_stack::migration_database_url`)
 /// — the DATABASE_URL role in client.env is the DML-only runtime role and has
 /// no DDL rights. Fails product start on any non-zero exit — an unmigrated or
 /// ungranted database only produces a worse API failure.
@@ -514,8 +514,8 @@ fn run_product_migrations(
     for (k, v) in env_pairs {
         cmd.env(k, v);
     }
-    cmd.env("MIGRATION_DATABASE_URL", super::native_stack::migration_database_url());
-    super::win_cmd::hide_console(&mut cmd);
+    cmd.env("MIGRATION_DATABASE_URL", crate::native_stack::migration_database_url());
+    crate::win_cmd::hide_console(&mut cmd);
     cmd.stdin(Stdio::null())
         .stdout(Stdio::from(out))
         .stderr(Stdio::from(out_err));
@@ -528,7 +528,7 @@ fn run_product_migrations(
             migrate_log.display()
         ));
     }
-    super::native_stack::apply_runtime_grants(log)?;
+    crate::native_stack::apply_runtime_grants(log)?;
     log.push_str(format!("migrations ok ({})\n", migrate_bin.display()).as_str());
     Ok(())
 }
@@ -682,7 +682,7 @@ fn stop_pidfile_tree(pidfile: &Path) {
             #[cfg(windows)]
             {
                 if let Ok(p) = pid.parse::<u32>() {
-                    let _ = super::win_cmd::kill_pid_tree(p);
+                    let _ = crate::win_cmd::kill_pid_tree(p);
                 }
             }
         }
@@ -690,16 +690,16 @@ fn stop_pidfile_tree(pidfile: &Path) {
     let _ = fs::remove_file(pidfile);
 }
 
-fn run_product_script(arg: &str) -> Result<(i32, String, String), IpcApiError> {
+fn run_product_script(arg: &str) -> Result<(i32, String, String), HostError> {
     let root = monorepo_root().ok_or_else(|| {
-        IpcApiError::bad_request(
+        HostError::bad_request(
             "monorepo_not_found",
             "Cannot find scripts/desktop-local-product.sh. Set CONTEXT_OS_ROOT.",
         )
     })?;
     let script = product_script(&root);
     if !script.is_file() {
-        return Err(IpcApiError::bad_request(
+        return Err(HostError::bad_request(
             "script_missing",
             format!("Product script missing: {}", script.display()),
         ));
@@ -709,10 +709,10 @@ fn run_product_script(arg: &str) -> Result<(i32, String, String), IpcApiError> {
         .arg(arg)
         .current_dir(&root)
         .env("CONTEXT_OS_ROOT", root.as_os_str());
-    super::win_cmd::hide_console(&mut bash);
+    crate::win_cmd::hide_console(&mut bash);
     let output = bash.output()
         .map_err(|e| {
-            IpcApiError::internal(format!(
+            HostError::internal(format!(
                 "Failed to run desktop-local-product.sh {arg}: {e}"
             ))
         })?;
@@ -723,13 +723,11 @@ fn run_product_script(arg: &str) -> Result<(i32, String, String), IpcApiError> {
     ))
 }
 
-#[tauri::command]
 pub fn get_local_product_status() -> LocalProductStatus {
     build_status()
 }
 
-#[tauri::command]
-pub async fn ensure_local_product() -> Result<EnsureLocalProductResult, IpcApiError> {
+pub async fn ensure_local_product() -> Result<EnsureLocalProductResult, HostError> {
     // Fast path.
     let early = build_status();
     if early.api_ok {
@@ -745,7 +743,7 @@ pub async fn ensure_local_product() -> Result<EnsureLocalProductResult, IpcApiEr
     // 1) Pure-Rust native spawn (install + monorepo).
     let native = tokio::task::spawn_blocking(ensure_product_native)
         .await
-        .map_err(|e| IpcApiError::internal(format!("ensure product native join: {e}")))?;
+        .map_err(|e| HostError::internal(format!("ensure product native join: {e}")))?;
 
     match native {
         Ok(msg) => {
@@ -765,7 +763,7 @@ pub async fn ensure_local_product() -> Result<EnsureLocalProductResult, IpcApiEr
             if monorepo_root().is_some() {
                 let script_result = tokio::task::spawn_blocking(|| run_product_script("ensure"))
                     .await
-                    .map_err(|e| IpcApiError::internal(format!("ensure product join: {e}")))?;
+                    .map_err(|e| HostError::internal(format!("ensure product join: {e}")))?;
                 if let Ok((code, stdout, stderr)) = script_result {
                     let status = build_status();
                     let ok = code == 0 && status.api_ok;
@@ -807,7 +805,7 @@ pub async fn ensure_local_product() -> Result<EnsureLocalProductResult, IpcApiEr
     if monorepo_root().is_some() {
         if let Ok((code, stdout, stderr)) = tokio::task::spawn_blocking(|| run_product_script("ensure"))
             .await
-            .map_err(|e| IpcApiError::internal(format!("ensure product join: {e}")))?
+            .map_err(|e| HostError::internal(format!("ensure product join: {e}")))?
         {
             let status = build_status();
             let ok = code == 0 && status.api_ok;
@@ -846,18 +844,17 @@ pub async fn ensure_local_product() -> Result<EnsureLocalProductResult, IpcApiEr
     })
 }
 
-#[tauri::command]
-pub async fn stop_local_product() -> Result<EnsureLocalProductResult, IpcApiError> {
+pub async fn stop_local_product() -> Result<EnsureLocalProductResult, HostError> {
     let native_log = tokio::task::spawn_blocking(stop_product_native)
         .await
-        .map_err(|e| IpcApiError::internal(format!("stop product join: {e}")))?;
+        .map_err(|e| HostError::internal(format!("stop product join: {e}")))?;
 
     let mut stdout = format!("--- native ---\n{native_log}\n");
     let mut stderr = String::new();
     if monorepo_root().is_some() {
         if let Ok((code, out, err)) = tokio::task::spawn_blocking(|| run_product_script("stop"))
             .await
-            .map_err(|e| IpcApiError::internal(format!("stop product script join: {e}")))?
+            .map_err(|e| HostError::internal(format!("stop product script join: {e}")))?
         {
             stdout.push_str("--- bash ---\n");
             stdout.push_str(&out);
@@ -884,12 +881,11 @@ pub async fn stop_local_product() -> Result<EnsureLocalProductResult, IpcApiErro
 /// Force restart the local product (api + worker) so newly upserted provider
 /// secrets (BYOK embedding/rerank) are resolved at bootstrap. Bypasses the
 /// `ensure_local_product` "already healthy" fast path by stopping first.
-#[tauri::command]
-pub async fn restart_local_product() -> Result<EnsureLocalProductResult, IpcApiError> {
+pub async fn restart_local_product() -> Result<EnsureLocalProductResult, HostError> {
     let stop_log = tokio::task::spawn_blocking(stop_product_native)
         .await
-        .map_err(|e| IpcApiError::internal(format!("stop product join: {e}")))?;
-    let mut stdout = format!("--- stop ---\n{stop_log}\n");
+        .map_err(|e| HostError::internal(format!("stop product join: {e}")))?;
+    let stdout = format!("--- stop ---\n{stop_log}\n");
     // Give the OS a beat to release the listen port before re-ensure.
     tokio::time::sleep(Duration::from_secs(2)).await;
 

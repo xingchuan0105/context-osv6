@@ -5,7 +5,7 @@ use tauri::{AppHandle, Emitter};
 
 use super::api::{api_call, IpcApiError};
 use super::cloud_session::{cloud_api_call, cloud_put_zstd, require_cloud_session};
-use super::local_session::local_session_token;
+use super::local_host::local_session_token;
 
 const PROGRESS_EVENT: &str = "workspace-publish-progress";
 

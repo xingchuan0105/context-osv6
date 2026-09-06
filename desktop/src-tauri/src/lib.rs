@@ -20,19 +20,16 @@ use commands::cloud_session::{
     cloud_api_call, cloud_gate_bypassed, cloud_login, cloud_logout, cloud_wallet_balance,
     get_cloud_session,
 };
-use commands::docker_status::get_docker_status;
 use commands::documents::reindex_local_documents;
 use commands::license::{
     activate_license, get_device_id, get_license_status, heartbeat_license, open_in_browser,
     revoke_this_device, start_trial,
 };
 use commands::local::{get_backend_status, init_local_backend, list_local_documents};
-use commands::local_product::{
-    ensure_local_product, get_local_product_status, restart_local_product, stop_local_product,
-};
-use commands::local_session::{ensure_local_session, get_local_session};
-use commands::local_stack::{
-    ensure_local_stack, get_client_runtime_config, get_local_stack_status, stop_local_stack,
+use commands::local_host::{
+    ensure_local_product, ensure_local_session, ensure_local_stack, get_client_runtime_config,
+    get_docker_status, get_local_product_status, get_local_session, get_local_stack_status,
+    restart_local_product, stop_local_product, stop_local_stack,
 };
 use commands::publish::{get_publish_status, publish_workspace};
 use commands::system::{
@@ -258,7 +255,7 @@ pub fn run() {
             // Closed product: tear down data plane + product when the shell exits.
             // Covers window close, process quit, and OS shutdown of the app.
             if let tauri::RunEvent::Exit = event {
-                let log = commands::lifecycle::shutdown_all_local_runtime();
+                let log = desktop_core::lifecycle::shutdown_all_local_runtime();
                 eprintln!("{log}");
             }
         });

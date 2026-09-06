@@ -413,18 +413,22 @@ fn extract_auth_payload(value: &serde_json::Value) -> Option<(String, CloudUser)
 /// running, so api/worker observe the new relay env (or its absence after
 /// logout). Best-effort: login/logout itself already succeeded at this point.
 async fn apply_env_and_restart() -> (bool, bool, Option<String>) {
-    let env_updated = match super::native_stack::refresh_client_env() {
+    let device_id = crate::commands::license::compute_device_id().ok();
+    let env_updated = match desktop_core::native_stack::refresh_client_env(
+        device_id.as_deref(),
+        super::local_host::relay_env(),
+    ) {
         Ok(_) => true,
         Err(e) => {
             tracing::warn!(error = %e, "cloud session: client.env refresh failed (stack not initialized yet?)");
             false
         }
     };
-    let status = super::local_product::get_local_product_status();
+    let status = super::local_host::get_local_product_status();
     if !(status.api_ok || status.worker_ok) {
         return (env_updated, false, None);
     }
-    match super::local_product::restart_local_product().await {
+    match super::local_host::restart_local_product().await {
         Ok(result) if result.ok => (env_updated, true, None),
         Ok(result) => (
             env_updated,

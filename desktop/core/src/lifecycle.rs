@@ -14,8 +14,8 @@ use std::path::{Path, PathBuf};
 #[cfg(unix)]
 use std::process::Command;
 
-use super::local_product;
-use super::native_stack;
+use crate::local_product;
+use crate::native_stack;
 
 /// Full local runtime teardown (product + PG + Redis + scoped leftovers).
 /// Safe to call multiple times; errors are absorbed into the returned log.
@@ -116,7 +116,7 @@ fn sweep_scoped_children() -> String {
     #[cfg(windows)]
     {
         // Win32 Toolhelp + TerminateProcess — no powershell/taskkill console flash.
-        let lines = super::win_cmd::kill_named_under(
+        let lines = crate::win_cmd::kill_named_under(
             &[
                 "avrag-api",
                 "avrag-worker",
