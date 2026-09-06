@@ -52,7 +52,14 @@ fn render_doc(doc: &'static crate::components::help::public_content::Integration
     let description = doc_seo_description(doc.slug);
 
     view! {
-        <PublicSeoHead title=title description=description canonical=canonical en_href=None/>
+        <PublicSeoHead
+            locale="zh"
+            title=title
+            description=description
+            canonical=canonical
+            zh_href=canonical
+            en_href=None
+        />
         <main class="pub-shell" data-testid="integrations-doc-page">
             <div class="pub-center">
                 <header class="pub-header">

@@ -135,19 +135,19 @@
 
 | # | 规范路径 (Canonical URL) | Next.js 源文件 | 鉴权 (Auth) | 渲染 (Render) | SEO / noindex | Rust 挂载状态 | 归属阶段 |
 |---|---|---|---|---|---|---|---|
-| 56 | `/en` | `app/en/page.tsx` | 公开 | SSR | indexable | 待挂载 | E4 |
-| 57 | `/en/pricing` | `app/en/pricing/page.tsx` | 公开 | SSR | indexable | 待挂载 | E4 |
-| 58 | `/en/desktop` | `app/en/desktop/page.tsx` | 公开 | SSR | indexable | 待挂载 | E4 |
-| 59 | `/en/help/faq` | `app/en/help/faq/page.tsx` | 公开 | SSR | indexable | 待挂载 | E4 |
-| 60 | `/en/help/compare` | `app/en/help/compare/page.tsx` | 公开 | SSR | indexable | 待挂载 | E4 |
-| 61 | `/en/help/api-access` | `app/en/help/api-access/page.tsx` | 公开 | SSR | indexable | 待挂载 | E4 |
-| 62 | `/en/help/api-access/agents` | `app/en/help/api-access/agents/page.tsx` | 公开 | SSR | indexable | 待挂载 | E4 |
-| 63 | `/en/legal` | `app/en/legal/page.tsx` | 公开 | SSR | indexable | 待挂载 | E4 |
-| 64 | `/en/legal/terms` | `app/en/legal/terms/page.tsx` | 公开 | SSR | indexable | 待挂载 | E4 |
-| 65 | `/en/legal/privacy` | `app/en/legal/privacy/page.tsx` | 公开 | SSR | indexable | 待挂载 | E4 |
-| 66 | `/en/legal/licenses` | `app/en/legal/licenses/page.tsx` | 公开 | SSR | indexable | 待挂载 | E4 |
-| 67 | `/en/legal/licenses/project` | `app/en/legal/licenses/project/page.tsx` | 公开 | SSR | indexable | 待挂载 | E4 |
-| 68 | `/en/legal/licenses/third-party` | `app/en/legal/licenses/third-party/page.tsx` | 公开 | SSR | indexable | 待挂载 | E4 |
+| 56 | `/en` | `app/en/page.tsx` | 公开 | SSR | indexable | 已挂载 | E4.4 |
+| 57 | `/en/pricing` | `app/en/pricing/page.tsx` | 公开 | SSR | indexable | 已挂载 | E4.4 |
+| 58 | `/en/desktop` | `app/en/desktop/page.tsx` | 公开 | SSR | indexable | 已挂载 | E4.4 |
+| 59 | `/en/help/faq` | `app/en/help/faq/page.tsx` | 公开 | SSR | indexable | 已挂载 | E4.4 |
+| 60 | `/en/help/compare` | `app/en/help/compare/page.tsx` | 公开 | SSR | indexable | 已挂载 | E4.4 |
+| 61 | `/en/help/api-access` | `app/en/help/api-access/page.tsx` | 公开 | SSR | indexable | 已挂载 | E4.4 |
+| 62 | `/en/help/api-access/agents` | `app/en/help/api-access/agents/page.tsx` | 公开 | SSR | indexable | 已挂载 | E4.4 |
+| 63 | `/en/legal` | `app/en/legal/page.tsx` | 公开 | SSR | indexable | 已挂载 | E4.4 |
+| 64 | `/en/legal/terms` | `app/en/legal/terms/page.tsx` | 公开 | SSR | indexable | 已挂载 | E4.4 |
+| 65 | `/en/legal/privacy` | `app/en/legal/privacy/page.tsx` | 公开 | SSR | indexable | 已挂载 | E4.4 |
+| 66 | `/en/legal/licenses` | `app/en/legal/licenses/page.tsx` | 公开 | SSR | indexable | 已挂载 | E4.4 |
+| 67 | `/en/legal/licenses/project` | `app/en/legal/licenses/project/page.tsx` | 公开 | SSR | indexable | 已挂载 | E4.4 |
+| 68 | `/en/legal/licenses/third-party` | `app/en/legal/licenses/third-party/page.tsx` | 公开 | SSR | indexable | 已挂载 | E4.4 |
 
 ---
 
@@ -174,5 +174,5 @@
 | **E4.1** | 8 | 公开帮助与集成生态 (`/help/faq`, `/help/compare`, `/help/api-access*`, `/integrations/*`)，含 canonical/hreflang SEO 头 |
 | **E4.2** | 9 | 桌面产品与法务公开族 (`/desktop`, `/activate`, `/setup`, `/legal*`) + `/legal/third-party-notices.md` 下载路由 |
 | **E4.3** | 3 | 首页产品根 (`/`, SSR 价值主张 + 会话分流 + Organization/WebSite/SoftwareApplication JSON-LD)、`/llms.txt`、百度站长验证 |
-| **E4.4** | 13 | `/en/*` 英文公共站（首页 / 定价 / 桌面 / 帮助 4 / 法务 6） |
+| **E4.4** | 13 | `/en/*` 英文公共站（首页 / 定价 / 桌面 / 帮助 4 / 法务 6），71/71 全量挂载完成 |
 | **总计** | **71** | **100% 覆盖现有 `frontend_next` 的全部端点** |

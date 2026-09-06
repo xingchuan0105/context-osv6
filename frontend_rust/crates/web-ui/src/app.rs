@@ -9,7 +9,7 @@ use crate::components::auth::{
     ResetPasswordVerifyPage,
 };
 use crate::components::billing::{
-    DesktopBuyPage, PaywallPage, PricingPage, UpgradeSuccessPage,
+    DesktopBuyPage, EnPricingPage, PaywallPage, PricingPage, UpgradeSuccessPage,
 };
 use crate::components::chat::ChatCanvasModel;
 use crate::components::chat::chat_page::ChatPage;
@@ -17,17 +17,19 @@ use crate::components::dashboard::{
     DashboardOverviewPage, GlobalAnalyticsPage, WorkspaceAnalyzePage, WorkspaceWorkbenchPage,
 };
 use crate::components::help::{
-    HelpApiAccessPage, HelpAgentApiPage, HelpComparePage, HelpFaqPage, HelpPage, HelpWritePage,
+    EnHelpApiAccessPage, EnHelpAgentApiPage, EnHelpComparePage, EnHelpFaqPage, HelpApiAccessPage,
+    HelpAgentApiPage, HelpComparePage, HelpFaqPage, HelpPage, HelpWritePage,
 };
 use crate::components::integrations::{
     IntegrationClaudeDesktopPage, IntegrationCursorPage, IntegrationIndexPage, IntegrationMcpPage,
 };
 use crate::components::legal::{
-    LegalCenterPage, LegalLicensesPage, LegalPrivacyPage, LegalProjectLicensePage, LegalTermsPage,
-    LegalThirdPartyPage,
+    EnLegalCenterPage, EnLegalLicensesPage, EnLegalPrivacyPage, EnLegalProjectLicensePage,
+    EnLegalTermsPage, EnLegalThirdPartyPage, LegalCenterPage, LegalLicensesPage, LegalPrivacyPage,
+    LegalProjectLicensePage, LegalTermsPage, LegalThirdPartyPage,
 };
 use crate::components::marketing::{
-    DesktopActivatePage, DesktopPage, DesktopSetupPage, HomePage,
+    DesktopActivatePage, DesktopPage, DesktopSetupPage, EnDesktopPage, EnHomePage, HomePage,
 };
 use crate::components::settings::{SettingsPage, UsagePage};
 use crate::components::share::{
@@ -108,6 +110,19 @@ pub fn App() -> impl IntoView {
                 <Route path=path!("/legal/licenses") view=LegalLicensesPage/>
                 <Route path=path!("/legal/licenses/project") view=LegalProjectLicensePage/>
                 <Route path=path!("/legal/licenses/third-party") view=LegalThirdPartyPage/>
+                <Route path=path!("/en") view=EnHomePage/>
+                <Route path=path!("/en/pricing") view=EnPricingPage/>
+                <Route path=path!("/en/desktop") view=EnDesktopPage/>
+                <Route path=path!("/en/help/faq") view=EnHelpFaqPage/>
+                <Route path=path!("/en/help/compare") view=EnHelpComparePage/>
+                <Route path=path!("/en/help/api-access") view=EnHelpApiAccessPage/>
+                <Route path=path!("/en/help/api-access/agents") view=EnHelpAgentApiPage/>
+                <Route path=path!("/en/legal") view=EnLegalCenterPage/>
+                <Route path=path!("/en/legal/terms") view=EnLegalTermsPage/>
+                <Route path=path!("/en/legal/privacy") view=EnLegalPrivacyPage/>
+                <Route path=path!("/en/legal/licenses") view=EnLegalLicensesPage/>
+                <Route path=path!("/en/legal/licenses/project") view=EnLegalProjectLicensePage/>
+                <Route path=path!("/en/legal/licenses/third-party") view=EnLegalThirdPartyPage/>
                 <Route path=path!("/pricing") view=PricingPage/>
                 <Route path=path!("/upgrade/paywall") view=PaywallPage/>
                 <Route path=path!("/upgrade/success") view=UpgradeSuccessPage/>

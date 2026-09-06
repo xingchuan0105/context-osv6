@@ -186,6 +186,19 @@ pub enum AppRoute {
     LegalLicenses,
     LegalLicensesProject,
     LegalLicensesThirdParty,
+    EnHome,
+    EnPricing,
+    EnDesktop,
+    EnHelpFaq,
+    EnHelpCompare,
+    EnHelpApiAccess,
+    EnHelpApiAccessAgents,
+    EnLegal,
+    EnLegalTerms,
+    EnLegalPrivacy,
+    EnLegalLicenses,
+    EnLegalLicensesProject,
+    EnLegalLicensesThirdParty,
     Pricing,
     UpgradePaywall,
     UpgradeSuccess,
@@ -300,6 +313,19 @@ impl AppRoute {
             ["legal", "licenses"] => Self::LegalLicenses,
             ["legal", "licenses", "project"] => Self::LegalLicensesProject,
             ["legal", "licenses", "third-party"] => Self::LegalLicensesThirdParty,
+            ["en"] => Self::EnHome,
+            ["en", "pricing"] => Self::EnPricing,
+            ["en", "desktop"] => Self::EnDesktop,
+            ["en", "help", "faq"] => Self::EnHelpFaq,
+            ["en", "help", "compare"] => Self::EnHelpCompare,
+            ["en", "help", "api-access"] => Self::EnHelpApiAccess,
+            ["en", "help", "api-access", "agents"] => Self::EnHelpApiAccessAgents,
+            ["en", "legal"] => Self::EnLegal,
+            ["en", "legal", "terms"] => Self::EnLegalTerms,
+            ["en", "legal", "privacy"] => Self::EnLegalPrivacy,
+            ["en", "legal", "licenses"] => Self::EnLegalLicenses,
+            ["en", "legal", "licenses", "project"] => Self::EnLegalLicensesProject,
+            ["en", "legal", "licenses", "third-party"] => Self::EnLegalLicensesThirdParty,
             ["pricing"] => Self::Pricing,
             ["upgrade", "paywall"] => Self::UpgradePaywall,
             ["upgrade", "success"] => Self::UpgradeSuccess,
@@ -436,6 +462,34 @@ mod tests {
         assert_eq!(
             AppRoute::parse("/legal/licenses/third-party"),
             AppRoute::LegalLicensesThirdParty
+        );
+        assert_eq!(AppRoute::parse("/en"), AppRoute::EnHome);
+        assert_eq!(AppRoute::parse("/en/pricing"), AppRoute::EnPricing);
+        assert_eq!(AppRoute::parse("/en/desktop"), AppRoute::EnDesktop);
+        assert_eq!(AppRoute::parse("/en/help/faq"), AppRoute::EnHelpFaq);
+        assert_eq!(AppRoute::parse("/en/help/compare"), AppRoute::EnHelpCompare);
+        assert_eq!(
+            AppRoute::parse("/en/help/api-access"),
+            AppRoute::EnHelpApiAccess
+        );
+        assert_eq!(
+            AppRoute::parse("/en/help/api-access/agents"),
+            AppRoute::EnHelpApiAccessAgents
+        );
+        assert_eq!(AppRoute::parse("/en/legal"), AppRoute::EnLegal);
+        assert_eq!(AppRoute::parse("/en/legal/terms"), AppRoute::EnLegalTerms);
+        assert_eq!(AppRoute::parse("/en/legal/privacy"), AppRoute::EnLegalPrivacy);
+        assert_eq!(
+            AppRoute::parse("/en/legal/licenses"),
+            AppRoute::EnLegalLicenses
+        );
+        assert_eq!(
+            AppRoute::parse("/en/legal/licenses/project"),
+            AppRoute::EnLegalLicensesProject
+        );
+        assert_eq!(
+            AppRoute::parse("/en/legal/licenses/third-party"),
+            AppRoute::EnLegalLicensesThirdParty
         );
         assert_eq!(AppRoute::parse("/admin/nope"), AppRoute::NotFound);
         assert_eq!(AppRoute::parse("/help/nope"), AppRoute::NotFound);

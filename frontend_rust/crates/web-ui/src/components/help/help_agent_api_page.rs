@@ -3,10 +3,10 @@ use super::public_content::{AGENT_DOC_MD, AGENT_DOC_UPDATED};
 use leptos::prelude::*;
 use web_sdk::render_assistant_markdown;
 
-/// `/help/api-access/agents` Agent 可读接入文档（英文正文，zh/en 路由共用）。
-/// 文档单一事实源：`assets/docs/api-access-for-agents.md`（编译期内嵌）。
+/// `/help/api-access/agents`（zh 路由）与 `/en/help/api-access/agents`（en 路由）：
+/// 正文为英文（面向 Agent），两语言路由共用；canonical/hreflang 按 locale 切换。
 #[component]
-pub fn HelpAgentApiPage() -> impl IntoView {
+pub fn HelpAgentApiPageView(locale: &'static str) -> impl IntoView {
     // 与 Next 一致：剥掉文档级 `#` 标题，避免双 H1（页面已有一个 H1）。
     let body_md = AGENT_DOC_MD
         .lines()
@@ -14,15 +14,30 @@ pub fn HelpAgentApiPage() -> impl IntoView {
         .collect::<Vec<_>>()
         .join("\n");
     let rendered = render_assistant_markdown(&body_md);
+    let (seo_title, seo_description, canonical) = if locale == "en" {
+        (
+            "Agent API access docs",
+            "Agent-facing Context OS API access guide: MCP / HTTP calls, workspace keys, and permission boundaries.",
+            "/en/help/api-access/agents",
+        )
+    } else {
+        (
+            "Agent API 接入文档",
+            "面向 Agent 的 Context OS API 接入说明：MCP / HTTP 调用、工作区密钥与权限边界。",
+            "/help/api-access/agents",
+        )
+    };
 
     view! {
         <PublicSeoHead
-            title="Agent API 接入文档"
-            description="面向 Agent 的 Context OS API 接入说明：MCP / HTTP 调用、工作区密钥与权限边界。"
-            canonical="/help/api-access/agents"
+    locale=locale
+            title=seo_title
+            description=seo_description
+            canonical=canonical
+            zh_href="/help/api-access/agents"
             en_href=Some("/en/help/api-access/agents")
         />
-        <main class="pub-shell" data-testid="help-agent-api-page">
+        <main class="pub-shell" data-testid=if locale == "en" { "help-agent-api-page-en" } else { "help-agent-api-page" }>
             <div class="pub-center">
                 <header class="pub-header">
                     <p class="pub-subtitle">"Agent-readable API access"</p>
@@ -45,4 +60,14 @@ pub fn HelpAgentApiPage() -> impl IntoView {
             </div>
         </main>
     }
+}
+
+#[component]
+pub fn HelpAgentApiPage() -> impl IntoView {
+    view! { <HelpAgentApiPageView locale="zh"/> }
+}
+
+#[component]
+pub fn EnHelpAgentApiPage() -> impl IntoView {
+    view! { <HelpAgentApiPageView locale="en"/> }
 }

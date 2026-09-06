@@ -1,14 +1,14 @@
-# Rust 前端与桌面宿主库交接文档 (E0–E3.5 交付与下一棒指引)
+# Rust 前端与桌面宿主库交接文档 (E0–E4.4 交付与下一棒指引)
 
 | 字段 | 内容 |
 |---|---|
 | 日期 | 2026-09-05 |
 | 状态 | **Active（现行有效交接文档）** |
-| 当前 HEAD | `81de3587`（E3.4 时点；E3.5 已在其上完成，见 git log 与任务记录） |
+| 当前 HEAD | E4.4 之后（见 git log；切片提交 E3.5 / E4.1 / E4.2 / E4.3 / E4.4） |
 | 权威计划 | [`2026-09-05-development-execution-plan.md`](2026-09-05-development-execution-plan.md) |
 | 全量路由矩阵 | [`docs/design/ROUTE_MIGRATION_MATRIX.md`](../design/ROUTE_MIGRATION_MATRIX.md) (71 个真实端点) |
-| 达成门禁 | **Gate 0 (G0)**、**Gate 1 (G1)**、**Gate 2 (G2)** 达成；**D0.1** 完成；**E3.1–E3.5 完成，G3 达成** |
-| 下一棒任务 | **E4**（W4 公共 SSR / SEO / 双语） |
+| 达成门禁 | **G0 / G1 / G2 / G3 / G4 全部达成**；**D0.1** 完成；**71/71 端点全量挂载** |
+| 下一棒任务 | **W5 Web 切流准备** 与 **D0.2–D1 桌面里程碑（GD1：Windows 真机）** |
 
 ---
 
@@ -31,62 +31,23 @@
 | **E3.4** | `82076d9b` | 套餐定价对比 (`/pricing`)、钱包充值面板 (`#topup`)、拦截墙 (`/upgrade/paywall`)、成功回跳与桌面购买说明 | [`2026-09-05-e3-4-billing-pricing-task.md`](2026-09-05-e3-4-billing-pricing-task.md) |
 | **E3.5** | 本切片提交 | `/admin/*` 管理后台 13 端点（门禁 401→login?next / 403→无权面板、分页、空态、CSV 导出、变更请求复核闭环）与 `/help`、`/help/write` 应用内帮助；**G3 达成** | [`2026-09-05-e3-5-admin-help-task.md`](2026-09-05-e3-5-admin-help-task.md) |
 | **E4.1** | 本切片提交 | 公开帮助与集成生态 8 端点（`/help/faq`, `/help/compare`, `/help/api-access*`, `/integrations/*`），内容对齐 Next 单一数据源 + canonical/hreflang SEO 头 | [`2026-09-05-e4-1-public-help-integrations-task.md`](2026-09-05-e4-1-public-help-integrations-task.md) |
+| **E4.2** | 本切片提交 | 桌面产品与法务公开族 9 端点（`/desktop`, `/activate`, `/setup`, `/legal*`，法务 MDX 内嵌 + TOC）+ 第三方声明下载路由；`/desktop` 规范链接恢复 | [`2026-09-05-e4-2-desktop-legal-task.md`](2026-09-05-e4-2-desktop-legal-task.md) |
+| **E4.3** | 本切片提交 | 首页产品根 `/`（SSR 价值主张 + 会话分流 + Organization/WebSite/SoftwareApplication JSON-LD，FAQPage 同源标注）、`/llms.txt`、百度站长验证 | [`2026-09-05-e4-3-home-crawl-protocol-task.md`](2026-09-05-e4-3-home-crawl-protocol-task.md) |
+| **E4.4** | 本切片提交 | `/en/*` 英文公共站 13 端点（首页 / 定价 / 桌面 / 帮助 4 / 法务 6），公开组件 locale 参数化；**71/71 全量挂载，G4 达成** | [`2026-09-05-e4-4-en-public-site-task.md`](2026-09-05-e4-4-en-public-site-task.md) |
 
 ---
 
 ## 2. 架构现状与已挂载路由清单
 
-当前 `frontend_rust` 已挂载并实现 **47 个产品端点**，涵盖对话、工作区、分享、公开知识库、主页、邀请、认证、设置、定价与交易、管理后台运维、应用内帮助与公开帮助/集成生态全链路：
+当前 `frontend_rust` 已挂载并实现 **71 个产品端点**（100% 覆盖 Next 全量路由矩阵）：zh 全量 + `/en/*` 英文公共站 + 管理后台 + 抓取协议。路由级清单以 `ROUTE_MIGRATION_MATRIX.md` 为权威（71 行全部「已挂载」，归属阶段 E0–E4.4）；另含两条辅助静态路由：`/legal/third-party-notices.md`（下载）与 `/healthz`。主要家族概览：
 
-```text
-/                                   -> Redirect to /chat
-/chat/:session_id?                 -> ChatPage (个人对话与流式画布)
-/dashboard                          -> DashboardOverviewPage (工作区概览卡片与创建弹窗)
-/dashboard/analytics                -> GlobalAnalyticsPage (全局分享访问统计)
-/dashboard/:workspace_id            -> WorkspaceWorkbenchPage (工作区工作台，复用 ChatPage + 右轨资料与笔记)
-/dashboard/:workspace_id/analyze    -> WorkspaceAnalyzePage (工作区切片健康度分析)
-/dashboard/:workspace_id/share      -> WorkspaceSharePage (分享中心与公开链接生成)
-/dashboard/:workspace_id/share/access-logs -> WorkspaceShareLogsPage (访问审计日志)
-/dashboard/:workspace_id/share/analytics   -> WorkspaceShareAnalyticsPage (分享互动统计)
-/shared/kb/:token                   -> SharedKbPage (公开只读知识库问答与受限画布)
-/shared/u/:user_id                  -> SharedUserPage (分享者公开名片主页)
-/invite/:workspace_id/:member_id    -> InvitePage (工作区受邀加入页面)
-/login                              -> LoginPage (登录与 next 回跳)
-/register                           -> RegisterPage (注册与条款勾选)
-/reset-password                     -> ResetPasswordRequestPage (找回密码申请)
-/reset-password/verify              -> ResetPasswordVerifyPage (验证码核验)
-/reset-password/confirm             -> ResetPasswordConfirmPage (重设新密码)
-/settings                           -> SettingsPage (设置主页与退出登录)
-/settings?tab=providers             -> ProvidersPanel (四大模型 BYOK 密钥配置与撤销)
-/settings/usage                     -> UsagePage (用量总览只读页)
-/admin                              -> AdminOverviewPage (管理后台概览入口网格)
-/admin/accounts                     -> AdminAccountsPage (账户列表与客户端分页)
-/admin/accounts/:owner_user_id      -> AdminAccountDetailPage (账户详情与封禁/解封)
-/admin/users                        -> AdminUsersPage (按 owner 查询用户与两步确认删除)
-/admin/usage                        -> AdminUsagePage (账户用量监控 owner+period)
-/admin/billing                      -> AdminBillingPage (全平台计费概览)
-/admin/health                       -> AdminHealthPage (服务健康检查)
-/admin/rag-health                   -> AdminRagHealthPage (RAG 检索质量与降级指标)
-/admin/system/workers               -> AdminWorkersPage (后台队列与 Worker 状态)
-/admin/system/degradation           -> AdminDegradationPage (服务降级观测)
-/admin/broadcast                    -> AdminBroadcastPage (全平台公告广播)
-/admin/audit-logs                   -> AdminAuditLogsPage (审计日志过滤/分页/CSV 导出)
-/admin/feature-flags                -> AdminFeatureFlagsPage (功能开关与变更请求复核)
-/help                               -> HelpPage (应用内帮助中心)
-/help/write                         -> HelpWritePage (长文与提示词编写建议)
-/help/faq                           -> HelpFaqPage (公开产品 FAQ)
-/help/compare                       -> HelpComparePage (公开中立选型对照)
-/help/api-access                    -> HelpApiAccessPage (公开人类接入说明)
-/help/api-access/agents             -> HelpAgentApiPage (Agent 可读接入文档)
-/integrations                       -> IntegrationIndexPage (集成承接索引)
-/integrations/mcp                   -> IntegrationMcpPage (MCP 总入口承接)
-/integrations/claude-desktop        -> IntegrationClaudeDesktopPage (Claude Desktop 承接)
-/integrations/cursor                -> IntegrationCursorPage (Cursor 承接)
-/pricing                            -> PricingPage (套餐对比与钱包充值面板)
-/upgrade/paywall                    -> PaywallPage (配额与高级会员拦截墙说明)
-/upgrade/success                    -> UpgradeSuccessPage (支付成功回跳与订单查询)
-/desktop/buy                        -> DesktopBuyPage (桌面客户端购买与说明)
-```
+- 对话与工作区：`/chat/:session_id?`、`/dashboard/*`（8）、`/shared/*`、`/invite/*`
+- 认证与设置：`/login`、`/register`、`/reset-password/*`、`/settings/*`
+- 交易与桌面：`/pricing`、`/upgrade/*`、`/desktop`、`/desktop/buy`、`/activate`、`/setup`
+- 管理后台：`/admin/*`（13）
+- 公开站 zh：`/`、`/help/*`（5）、`/integrations/*`（4）、`/legal/*`（6）
+- 公开站 en：`/en`、`/en/pricing`、`/en/desktop`、`/en/help/*`（4）、`/en/legal/*`（6）
+- 抓取协议：`/llms.txt`、`/baidu_verify_codeva-THd6TRYMwv.html`
 
 ### 核心分工体系
 1. **`contracts`**：跨端统一协议源头（DTO 契约），保证前端、后端与桌面端零协议分叉。
@@ -102,20 +63,25 @@
 
 | 验证维度 | 命令与覆盖 | 结果 |
 |---|---|:---:|
-| **Rust 模型与集成测试** | `CARGO_BUILD_JOBS=2 cargo test -p web-sdk -p web-ui` | **24 个测试套件，120 passed / 0 failed** |
+| **Rust 模型与集成测试** | `CARGO_BUILD_JOBS=2 cargo test -p web-sdk -p web-ui` | **24 个测试套件，122 passed / 0 failed** |
 | **desktop-core 单元测试** | `CARGO_BUILD_JOBS=2 cargo test --manifest-path desktop/core/Cargo.toml` | **4 passed / 0 failed** (中文跨 chunk 切片测试通过) |
 | **SSR 检查** | `cargo check -p web-server --features ssr` | **exit code 0** |
 | **WASM Hydrate 检查** | `cargo check -p web-ui --target wasm32-unknown-unknown --features hydrate` | **exit code 0** |
 | **Tauri 宿主检查** | `cargo +1.96.1 check --manifest-path desktop/src-tauri/Cargo.toml` | **exit code 0** |
 | **设计系统样式守卫** | `cargo test -p web-ui --test style_baseline_guard` | **1 passed** (无字重 ≥500、无裸十六进制、无未授权阴影) |
-| **Playwright 端到端旅程** | `pnpm exec playwright test (9 个 spec 文件)` | **全量 48 项测试 100% passed** |
+| **Playwright 端到端旅程** | `pnpm exec playwright test (11 个 spec 文件)` | **全量 74 项测试 100% passed** |
 | **Live Backend Smoke** | `LIVE_BACKEND=1 LIVE_API_BASE=http://127.0.0.1:18081 pnpm exec playwright test --config playwright.live.config.ts` | **2 passed / 0 failed** (真实 API 对接通过) |
 
 ---
 
-## 4. 下一棒执行指南：E4 剩余（营销/桌面下载族、SEO 基建、双语）
+## 4. 下一棒执行指南：W5 Web 切流准备 与 D0.2–D1 桌面里程碑
 
-E4.1（公开帮助与集成生态 8 端点）已完成（见 [`2026-09-05-e4-1-public-help-integrations-task.md`](2026-09-05-e4-1-public-help-integrations-task.md)）。E4 剩余：`/desktop`（row 47，挂载后把 FAQ/compare/integrations 的「免费客户端」链接从 `/desktop/buy` 恢复为 `/desktop`）与营销页族、结构化数据 JSON-LD、robots/sitemap/manifest/llms.txt、OG/验证文件、状态码与重定向、`/en/*` 双语。范围以权威计划 §6 E4 与 `ROUTE_MIGRATION_MATRIX.md` §9–§11 为准。
+E3 / E4 已全部完成，**71/71 端点挂载，G3 / G4 达成**（切片记录见 §1 与 `plans/2026-09-05-e4-*` 任务文档）。下一棒两条线：
+
+1. **W5 Web 切流**（G3/G4 已过，沿用现行排期）：所有在线路由完成；切流前按基线冻结观测窗口、样本量、错误率/成功率/延迟阈值；版本化产物可回滚。权威条件见权威计划 §8。
+2. **D0.2–D1 桌面里程碑**（依赖 G4、D0.1）：GPUI 本地登录、真实聊天、取消，冲刺 GD1（Windows 真机）。
+
+遗留偏差备忘：`/en/pricing` UI 文案为 zh（en 文案后续补齐）；`contracts::admin` 与后端 DTO 分叉待另立切片；MarketingShell 营销导航壳未移植（公开页统一轻壳）。
 
 ### 4.1 常用命令与操作提示
 - **构建工作目录**：`frontend_rust`

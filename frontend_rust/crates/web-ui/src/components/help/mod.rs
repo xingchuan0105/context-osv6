@@ -8,9 +8,9 @@ pub mod help_agent_api_page;
 pub mod help_compare_page;
 pub mod help_faq_page;
 
-pub use help_api_access_page::HelpApiAccessPage;
-pub use help_agent_api_page::HelpAgentApiPage;
-pub use help_compare_page::HelpComparePage;
-pub use help_faq_page::HelpFaqPage;
+pub use help_api_access_page::{EnHelpApiAccessPage, HelpApiAccessPage, HelpApiAccessPageView};
+pub use help_agent_api_page::{EnHelpAgentApiPage, HelpAgentApiPage, HelpAgentApiPageView};
+pub use help_compare_page::{EnHelpComparePage, HelpComparePage, HelpComparePageView};
+pub use help_faq_page::{EnHelpFaqPage, HelpFaqPage, HelpFaqPageView};
 pub use help_page::HelpPage;
 pub use help_write_page::HelpWritePage;

@@ -6,9 +6,19 @@ pub const AGENT_DOC_MD: &str = include_str!("../../../../../assets/docs/api-acce
 
 pub const FAQ_UPDATED_LINE: &str = "页面说明更新日期：2026-08-29";
 pub const COMPARE_UPDATED_LINE: &str = "页面说明更新日期：2026-08-29";
+pub const FAQ_UPDATED_LINE_EN: &str = "Page copy last updated: 2026-08-29";
+pub const COMPARE_UPDATED_LINE_EN: &str = "Page copy last updated: 2026-08-29";
 pub const INTEGRATIONS_UPDATED: &str = "2026-09-02";
 pub const API_ACCESS_UPDATED: &str = "2026-08-12";
 pub const AGENT_DOC_UPDATED: &str = "2026-08-12";
+
+pub fn faq_updated_line(locale: &str) -> &'static str {
+    if locale == "en" { FAQ_UPDATED_LINE_EN } else { FAQ_UPDATED_LINE }
+}
+
+pub fn compare_updated_line(locale: &str) -> &'static str {
+    if locale == "en" { COMPARE_UPDATED_LINE_EN } else { COMPARE_UPDATED_LINE }
+}
 
 /// 品牌署名行（i18n `home.seoPublisher`）。hub 作者外链依赖营销站 origin，E4.1 先渲染纯文本。
 pub const AUTHOR_LINE: &str = "产品：Context OS · 品牌：ContextLM · 作者：邢川";
@@ -593,4 +603,216 @@ pub const INTEGRATION_DOCS: &[IntegrationDoc] = &[
 
 pub fn integration_doc(slug: &str) -> Option<&'static IntegrationDoc> {
     INTEGRATION_DOCS.iter().find(|doc| doc.slug == slug)
+}
+
+// ---------- en 内容（/en/* 路由；逐字对齐 lib/content/*.ts en 与 i18n en 值） ----------
+
+pub const FAQ_EN: FaqCopy = FaqCopy {
+    subtitle: "Product facts FAQ",
+    h1: "Context OS FAQ",
+    updated_label: "Page copy last updated: ",
+    evidence_prefix: "Claims summarize public product capabilities (source: ",
+    evidence_suffix: ").",
+    link_pricing: "Pricing",
+    link_api_access: "API access",
+    link_agents: "Agent docs",
+    button_compare: "Compare",
+    button_api_access: "API access",
+    button_pricing: "Pricing",
+    button_desktop: "Free desktop client",
+    evidence_title: "Evidence & further reading",
+    evidence_pricing: "Pricing & top-up",
+    evidence_api_access: "API access (human)",
+    evidence_agents: "Agent API docs",
+    evidence_compare: "Context OS comparison",
+    evidence_integrations: "Integrations (Cursor / Claude / MCP)",
+    items: &[
+        FaqItem {
+            question: "What is Context OS?",
+            answer: "Context OS is a locally deployable personal AI knowledge base: ingest documents, then query and chat against each library, or open a library to guests and external agents (MCP / API). The product is Context OS; the brand is ContextLM.",
+        },
+        FaqItem {
+            question: "What is an AI knowledge base?",
+            answer: "An AI knowledge base ingests documents, web pages, notes, and other material, then has the model search first and answer second: each question first retrieves the most relevant passages from the library, and the model answers from those passages. Answers can therefore cite sources and stay grounded in library facts instead of relying on training memory. Context OS is this kind of product: documents become a searchable knowledge base on ingest, with follow-up questions, source tracing, and external agent access.",
+        },
+        FaqItem {
+            question: "What is a RAG knowledge base, and how do you build one?",
+            answer: "RAG (Retrieval-Augmented Generation) is the method underneath AI knowledge bases: a retrieval layer finds passages relevant to the question, and a generation layer has the model answer from those passages, reducing fabrication. With Context OS you don't write retrieval code: upload files or paste URLs to ingest, and parsing, indexing, and retrieval orchestration happen automatically; the desktop client can run fully private on your machine. See the Agent API docs for connecting a library to Cursor, Claude, and other external agents.",
+        },
+        FaqItem {
+            question: "What is MCP?",
+            answer: "MCP (Model Context Protocol) is an open protocol connecting AI applications to external data sources and tools: an MCP server exposes resources such as a knowledge base through a uniform interface for agents like Claude and Cursor. Context OS provides MCP HTTP access per workspace — create a workspace key and copy the Agent Pack to let an external agent query that library (see the next item).",
+        },
+        FaqItem {
+            question: "How do I connect via MCP / an external agent?",
+            answer: "Create an API key for the workspace in the share center, then copy the full Agent Pack into Cursor, Claude, or another client. The pack contains workspace_id, api_base, mcp_http, and key usage. See the Agent API docs for steps and tool boundaries, or API access for a human-readable summary.",
+        },
+        FaqItem {
+            question: "What can a workspace key do — and not do?",
+            answer: "A workspace API key is scoped per library, for material management and knowledge-base queries (indexing / query permissions are selected at creation). Chat and web search do not go through the key by default. User-level actions such as creating libraries and managing sharing require a signed-in user or a separately issued agent token — a workspace key cannot substitute. See Authentication / Scope in the Agent docs.",
+        },
+        FaqItem {
+            question: "How do membership tiers relate to share slots?",
+            answer: "The membership product is the number of workspaces you can share at once: Free 3 / Plus 10 / Pro 100. The client and private, self-only workspaces are always free. Upgrading adds share slots; it does not automatically add model usage quota.",
+        },
+        FaqItem {
+            question: "What's the difference between wallet top-up and membership?",
+            answer: "They are independent. The wallet pays for platform model calls, vector retrieval, and guest Q&A on shared pages billed to the owner (owner-pays). You can top up without upgrading, or do both. With a custom provider (BYOK), final answers use your own model quota, reducing platform chat charges. Qwen3.7 Flash is the fast model used for document indexing and the retrieval sub-agent, billed from the wallet.",
+        },
+        FaqItem {
+            question: "What is BYOK?",
+            answer: "BYOK (Bring Your Own Key) means configuring your own model provider in settings; final answers then use your own quota. Qwen3.7 Flash is the fast model used for document indexing and the retrieval sub-agent. Entry: Settings · Model provider (sign-in required); see the pricing page for details.",
+        },
+        FaqItem {
+            question: "Who pays for guest Q&A on a shared page?",
+            answer: "Once sharing is on, guest Q&A on the public page is billed to the workspace owner (owner-pays), settled from the owner's wallet or BYOK policy — guests are not charged separately. See the pricing page and billing notes for specifics.",
+        },
+        FaqItem {
+            question: "Is the desktop client free?",
+            answer: "The desktop client is free per the product narrative; see the client page for local-private and local-agent scenarios. Sharing a local library externally requires publishing it to the cloud first (vector import, no re-ingest), and share slots still follow your membership tier.",
+        },
+        FaqItem {
+            question: "How do I choose between note AI / general RAG and Context OS?",
+            answer: "If you need workspace-isolated knowledge bases plus sharing plus external agent access (MCP), look at Context OS first. If you mostly write inside a single notes product and use its built-in AI, a notes suite may fit better. See the comparison page for a neutral table.",
+        },
+    ],
+};
+
+pub const COMPARE_EN: CompareCopy = CompareCopy {
+    subtitle: "Neutral comparison",
+    h1: "AI knowledge base comparison: Context OS vs other knowledge approaches",
+    updated_label: "Page copy last updated: ",
+    evidence_text: "This table describes product-shape differences and cites no unverified competitor traffic, ranking, or price figures (method: cross-check our public pricing and API docs; competitor columns describe common product-category traits only). Sources: ",
+    link_pricing: "Pricing",
+    link_agents: "Agent docs",
+    link_faq: "FAQ",
+    button_faq: "FAQ",
+    button_agents: "Agent access",
+    button_pricing: "Pricing",
+    button_desktop: "Free desktop client",
+    positioning_title: "One-line positioning",
+    positioning: &[
+        ComparePositioning {
+            label: "Context OS",
+            text: "Turns personal / small-team knowledge into workspaces that are searchable, shareable, and callable by external agents.",
+        },
+        ComparePositioning {
+            label: "Notes AI / second-brain apps",
+            text: "Writing and organizing first; AI serves the document workflow.",
+        },
+        ComparePositioning {
+            label: "General RAG / self-built stacks",
+            text: "Maximum flexibility, with the highest engineering and ops cost.",
+        },
+    ],
+    table_title: "Capability comparison (category-level, not per-product scores)",
+    table_headers: &["Dimension", "Context OS", "Notes AI / second brain", "General RAG / self-built"],
+    rows: &[
+        CompareRow {
+            dim: "Core object",
+            cos: "Workspace is the product's source of truth; sources / notes / chats hang off the library",
+            notes: "Page or notebook centered; AI is mostly an in-document capability",
+            rag: "Pipelines / indexes / app code centered",
+        },
+        CompareRow {
+            dim: "Ingest & Q&A",
+            cos: "Upload files or URLs as sources; per-library retrieval with answers traceable to documents",
+            notes: "Strong writing and organizing; cross-library retrieval depth varies by product",
+            rag: "Build any retrieval stack; you own ops and tuning",
+        },
+        CompareRow {
+            dim: "External sharing",
+            cos: "Library-level sharing; guest Q&A billed to the owner (owner-pays); membership controls share slots",
+            notes: "Usually page/space collaboration; the guest-Q&A + owner-billing model may not be equivalent",
+            rag: "Build your own auth, quotas, and billing",
+        },
+        CompareRow {
+            dim: "External agents",
+            cos: "First-class: workspace key + MCP HTTP + Agent Pack, copy once to connect",
+            notes: "Some products offer APIs/plugins; a workspace-key MCP path is not their default story",
+            rag: "Fully customizable; integration cost is on your team",
+        },
+        CompareRow {
+            dim: "Models & cost",
+            cos: "Membership (share slots) is separate from wallet (platform models/retrieval); BYOK supported",
+            notes: "Mostly plans or seats; model billing varies by vendor",
+            rag: "Infrastructure + model bills are yours",
+        },
+        CompareRow {
+            dim: "Client",
+            cos: "Desktop client is free per the product narrative; see the client page for local-private and local-agent scenarios",
+            notes: "Usually tied to the notes editing experience",
+            rag: "Choose your own deployment",
+        },
+    ],
+    fits_title: "When Context OS fits better",
+    fits: &[
+        "Knowledge must be isolated per workspace and may be opened to guest Q&A.",
+        "You want external agents like Cursor / Claude to read the same library over MCP, not just chat inside a notes UI.",
+        "You accept the split of membership for share slots and wallet for models, rather than a single notes seat.",
+        "You need a publicly copyable Agent Pack and workspace-key boundaries (see Agent docs).",
+    ],
+    other_title: "When other options may fit better",
+    other: &[
+        "Your main work is long-form writing, block editing, and team wikis, with AI only as a writing aid.",
+        "You must deeply customize retrieval, reranking, permissions, and multi-tenant billing, and have an engineering team to maintain it.",
+        "You don't need external sharing or agent access and want everything inside a single notes app.",
+    ],
+    no_claim_title: "What we don't claim",
+    no_claim: "This page does not claim Context OS is 'better overall' than any specific competitor, and gives no unverified market-share, latency, or accuracy figures. Competitor capabilities follow each vendor's current documentation; if you evaluate a specific product, use its official docs as evidence.",
+    next_title: "Next steps",
+    next_faq: "Product facts: ",
+    next_agents: "External agents: ",
+    next_api_access: "Human access guide",
+    next_pricing: "Slots & wallet: ",
+    next_integrations: "Connect the library to Cursor / Claude and other tools: ",
+    next_integrations_label: "Integrations",
+    next_enter: "Enter the product: ",
+    next_enter_label: "Enter app",
+    next_register: "Sign up",
+};
+
+pub const API_ACCESS_EN: ApiAccessCopy = ApiAccessCopy {
+    title: "API Access",
+    subtitle: "API access for personal users. Each workspace has its own keys; automated agents should use the agent docs.",
+    updated: "Page copy last updated: 2026-08-12",
+    evidence_line: "Claims summarize public product capabilities (source: help / pricing docs).",
+    back_help: "Back to help",
+    agent_docs: "Open the agent API docs",
+    cta_faq: "FAQ",
+    cta_compare: "Compare",
+    cta_integrations: "Integrations",
+    overview_title: "What this page covers",
+    overview_items: &[
+        "Each workspace can create and revoke its own API keys.",
+        "API Access shows scopes, rate limits, and one-time plaintext key reveal.",
+        "Workspace API keys only cover uploads, URL imports, and knowledge-base queries for that workspace. Create the workspace in the app first, then mint a key here.",
+    ],
+    automation_title: "For automation",
+    automation_body: "Scripts and coding agents should use a workspace API key with MCP. On the desktop client, context-os-mcp (stdio) forwards to 127.0.0.1:18080; HTTP POST /api/v1/mcp also works. Copy snippets from workspace API Access → For agents.",
+    automation_steps: &[
+        "Create a workspace in the UI, open API Access on that workspace, and mint a key with index/query.",
+        "Desktop: build or stage context-os (includes context-os-mcp), set CONTEXT_OS_API_KEY, then run context-os status.",
+        "Agents use stdio MCP (command = context-os-mcp); scripts can use context-os ingest/ask; always pass workspace_id.",
+        "Share, members, and key management stay on the signed-in user UI only.",
+    ],
+};
+
+pub fn faq_copy(locale: &str) -> &'static FaqCopy {
+    if locale == "en" { &FAQ_EN } else { &FAQ }
+}
+
+pub fn compare_copy(locale: &str) -> &'static CompareCopy {
+    if locale == "en" { &COMPARE_EN } else { &COMPARE }
+}
+
+pub fn api_access_copy(locale: &str) -> &'static ApiAccessCopy {
+    if locale == "en" { &API_ACCESS_EN } else { &API_ACCESS }
+}
+
+/// 署名行（en 版）。
+pub const AUTHOR_LINE_EN: &str = "Product: Context OS · Brand: ContextLM · Author: Xing Chuan";
+
+pub fn author_line(locale: &str) -> &'static str {
+    if locale == "en" { AUTHOR_LINE_EN } else { AUTHOR_LINE }
 }

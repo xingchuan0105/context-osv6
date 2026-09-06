@@ -137,7 +137,7 @@ pub fn ProductHomePage(locale: &'static str) -> impl IntoView {
 
                 <p class="pub-muted" data-testid="home-redirect-hint">{t.entering}</p>
             </div>
-            <LegalFooterLinks/>
+            <LegalFooterLinks locale=locale/>
         </main>
     }
 }
@@ -145,4 +145,9 @@ pub fn ProductHomePage(locale: &'static str) -> impl IntoView {
 #[component]
 pub fn HomePage() -> impl IntoView {
     view! { <ProductHomePage locale="zh"/> }
+}
+
+#[component]
+pub fn EnHomePage() -> impl IntoView {
+    view! { <ProductHomePage locale="en"/> }
 }

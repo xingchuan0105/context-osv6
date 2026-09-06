@@ -1,41 +1,63 @@
 use super::public_common::{PublicPageHeader, PublicSeoHead};
-use super::public_content::{COMPARE, COMPARE_UPDATED_LINE};
+use super::public_content::{author_line, compare_copy, compare_updated_line};
 use leptos::prelude::*;
 
-/// `/help/compare` 公开中立选型对照（zh-CN）。
+fn compare_seo(locale: &str) -> (&'static str, &'static str, &'static str) {
+    if locale == "en" {
+        (
+            "AI knowledge base comparison",
+            "How to choose a personal AI knowledge base? A neutral comparison of Context OS vs notes AI, second-brain apps, and general RAG stacks: use cases, sharing, external agents — no fabricated competitor data.",
+            "/en/help/compare",
+        )
+    } else {
+        (
+            "AI 知识库工具对比",
+            "个人 AI 知识库怎么选？Context OS 与笔记内置 AI、第二大脑应用、通用 RAG 套件的中立对比：适用场景、分享、外接 Agent，不编造竞品数据。",
+            "/help/compare",
+        )
+    }
+}
+
 #[component]
-pub fn HelpComparePage() -> impl IntoView {
+pub fn HelpComparePageView(locale: &'static str) -> impl IntoView {
+    let c = compare_copy(locale);
+    let (seo_title, seo_description, canonical) = compare_seo(locale);
+
     view! {
         <PublicSeoHead
-            title="AI 知识库工具对比"
-            description="个人 AI 知识库怎么选？Context OS 与笔记内置 AI、第二大脑应用、通用 RAG 套件的中立对比：适用场景、分享、外接 Agent，不编造竞品数据。"
-            canonical="/help/compare"
+    locale=locale
+            title=seo_title
+            description=seo_description
+            canonical=canonical
+            zh_href="/help/compare"
             en_href=Some("/en/help/compare")
         />
-        <main class="pub-shell" data-testid="help-compare-page">
+        <main class="pub-shell" data-testid=if locale == "en" { "help-compare-page-en" } else { "help-compare-page" }>
             <div class="pub-center">
                 <PublicPageHeader
-                    subtitle=COMPARE.subtitle
-                    title=COMPARE.h1
-                    updated=COMPARE_UPDATED_LINE
+                    subtitle=c.subtitle
+                    title=c.h1
+                    updated=compare_updated_line(locale)
+                    author=author_line(locale)
                     buttons=view! {
-                            <a href="/help/faq" class="pub-btn">{COMPARE.button_faq}</a>
-                            <a href="/help/api-access/agents" class="pub-btn">{COMPARE.button_agents}</a>
-                            <a href="/pricing" class="pub-btn">{COMPARE.button_pricing}</a>
-                            <a href="/desktop" class="pub-btn">{COMPARE.button_desktop}</a>
+                            <a href="/help/faq" class="pub-btn">{c.button_faq}</a>
+                            <a href="/help/api-access/agents" class="pub-btn">{c.button_agents}</a>
+                            <a href="/pricing" class="pub-btn">{c.button_pricing}</a>
+                            <a href="/desktop" class="pub-btn">{c.button_desktop}</a>
                         }
                         .into_any()
                 />
                 <article class="pub-card" data-testid="help-compare-body">
-                    <h2 class="pub-h2">{COMPARE.positioning_title}</h2>
+                    <h2 class="pub-h2">{c.positioning_title}</h2>
                     <p class="pub-p">
-                        {COMPARE.positioning
+                        {c.positioning
                             .iter()
                             .map(|item| {
+                                let colon = if locale == "en" { ": " } else { "：" };
                                 view! {
                                     <span>
                                         <strong>{item.label}</strong>
-                                        {"："}
+                                        {colon}
                                         {item.text}
                                         {"  "}
                                     </span>
@@ -44,12 +66,12 @@ pub fn HelpComparePage() -> impl IntoView {
                             .collect_view()}
                     </p>
 
-                    <h2 class="pub-h2">{COMPARE.table_title}</h2>
+                    <h2 class="pub-h2">{c.table_title}</h2>
                     <div class="pub-table-wrap">
                         <table class="pub-table" data-testid="help-compare-table">
                             <thead>
                                 <tr>
-                                    {COMPARE.table_headers
+                                    {c.table_headers
                                         .iter()
                                         .map(|header| {
                                             view! { <th class="pub-th">{*header}</th> }
@@ -58,7 +80,7 @@ pub fn HelpComparePage() -> impl IntoView {
                                 </tr>
                             </thead>
                             <tbody>
-                                {COMPARE.rows
+                                {c.rows
                                     .iter()
                                     .map(|row| {
                                         view! {
@@ -75,57 +97,67 @@ pub fn HelpComparePage() -> impl IntoView {
                         </table>
                     </div>
 
-                    <h2 class="pub-h2">{COMPARE.fits_title}</h2>
+                    <h2 class="pub-h2">{c.fits_title}</h2>
                     <ul class="pub-list">
-                        {COMPARE.fits.iter().map(|item| view! { <li>{*item}</li> }).collect_view()}
+                        {c.fits.iter().map(|item| view! { <li>{*item}</li> }).collect_view()}
                     </ul>
 
-                    <h2 class="pub-h2">{COMPARE.other_title}</h2>
+                    <h2 class="pub-h2">{c.other_title}</h2>
                     <ul class="pub-list">
-                        {COMPARE.other.iter().map(|item| view! { <li>{*item}</li> }).collect_view()}
+                        {c.other.iter().map(|item| view! { <li>{*item}</li> }).collect_view()}
                     </ul>
 
-                    <h2 class="pub-h2">{COMPARE.no_claim_title}</h2>
-                    <p class="pub-p">{COMPARE.no_claim}</p>
+                    <h2 class="pub-h2">{c.no_claim_title}</h2>
+                    <p class="pub-p">{c.no_claim}</p>
 
-                    <h2 class="pub-h2">{COMPARE.next_title}</h2>
+                    <h2 class="pub-h2">{c.next_title}</h2>
                     <ul class="pub-list">
                         <li>
-                            {COMPARE.next_faq}
+                            {c.next_faq}
                             <a href="/help/faq">FAQ</a>
                         </li>
                         <li>
-                            {COMPARE.next_agents}
+                            {c.next_agents}
                             <a href="/help/api-access/agents">Agent API</a>
                             {" · "}
-                            <a href="/help/api-access">{COMPARE.next_api_access}</a>
+                            <a href="/help/api-access">{c.next_api_access}</a>
                         </li>
                         <li>
-                            {COMPARE.next_pricing}
-                            <a href="/pricing">{COMPARE.link_pricing}</a>
+                            {c.next_pricing}
+                            <a href="/pricing">{c.link_pricing}</a>
                         </li>
                         <li>
-                            {COMPARE.next_integrations}
-                            <a href="/integrations">{COMPARE.next_integrations_label}</a>
+                            {c.next_integrations}
+                            <a href="/integrations">{c.next_integrations_label}</a>
                         </li>
                         <li>
-                            {COMPARE.next_enter}
-                            <a href="/chat">{COMPARE.next_enter_label}</a>
+                            {c.next_enter}
+                            <a href="/chat">{c.next_enter_label}</a>
                             {" · "}
-                            <a href="/register">{COMPARE.next_register}</a>
+                            <a href="/register">{c.next_register}</a>
                         </li>
                     </ul>
                     <p class="pub-muted">
-                        {COMPARE.evidence_text}
-                        <a href="/pricing">{COMPARE.link_pricing}</a>
+                        {c.evidence_text}
+                        <a href="/pricing">{c.link_pricing}</a>
                         {" · "}
-                        <a href="/help/api-access/agents">{COMPARE.link_agents}</a>
+                        <a href="/help/api-access/agents">{c.link_agents}</a>
                         {" · "}
-                        <a href="/help/faq">{COMPARE.link_faq}</a>
+                        <a href="/help/faq">{c.link_faq}</a>
                         {"。"}
                     </p>
                 </article>
             </div>
         </main>
     }
+}
+
+#[component]
+pub fn HelpComparePage() -> impl IntoView {
+    view! { <HelpComparePageView locale="zh"/> }
+}
+
+#[component]
+pub fn EnHelpComparePage() -> impl IntoView {
+    view! { <HelpComparePageView locale="en"/> }
 }

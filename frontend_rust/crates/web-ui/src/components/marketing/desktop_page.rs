@@ -4,6 +4,8 @@ use leptos_router::hooks::use_navigate;
 use leptos_router::NavigateOptions;
 use serde::Deserialize;
 
+use crate::components::legal::legal_pages::LegalFooterLinks;
+
 /// 桌面发布清单（对齐 Next `lib/desktop/release-manifest.ts`）。
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct DesktopPlatformManifest {
@@ -302,7 +304,7 @@ pub fn DesktopProductPage(locale: &'static str) -> impl IntoView {
                     <a href="/help/api-access" class="pub-btn">{t.learn_more}</a>
                     <a href="/dashboard" class="pub-btn">{t.open_saas}</a>
                 </div>
-                <crate::components::legal::legal_pages::LegalFooterLinks/>
+                <LegalFooterLinks locale=locale/>
             </div>
         </main>
     }
@@ -311,6 +313,11 @@ pub fn DesktopProductPage(locale: &'static str) -> impl IntoView {
 #[component]
 pub fn DesktopPage() -> impl IntoView {
     view! { <DesktopProductPage locale="zh"/> }
+}
+
+#[component]
+pub fn EnDesktopPage() -> impl IntoView {
+    view! { <DesktopProductPage locale="en"/> }
 }
 
 /// `/activate`：客户端免费、无需激活（ADR-0010）；旧深链重定向到下载页。

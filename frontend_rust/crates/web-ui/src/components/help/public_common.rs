@@ -3,25 +3,28 @@ use leptos::prelude::*;
 use leptos_meta::{Link, Meta, Title};
 
 /// 公开页 SEO 头（title / description / canonical / hreflang + (open) 布局的 JSON-LD）。
-/// `en_href` 为 `/en/*` 对应路由；集成族暂无 en 页（与 Next metadata 一致）。
+/// `zh_href` 是 zh-CN alternate（也作为 x-default，对齐 Next：x-default 恒指 zh 路径）；
+/// `en_href` 为 `/en/*` 对应路由，无 en 页时传 None（集成族）。
 #[component]
 pub fn PublicSeoHead(
+    locale: &'static str,
     title: &'static str,
     description: &'static str,
     canonical: &'static str,
+    zh_href: &'static str,
     en_href: Option<&'static str>,
 ) -> impl IntoView {
     view! {
         <Title text=title/>
         <Meta name="description" content=description/>
         <Link rel="canonical" href=canonical/>
-        <Link rel="alternate" hreflang="zh-CN" href=canonical/>
+        <Link rel="alternate" hreflang="zh-CN" href=zh_href/>
         {en_href.map(|en| {
             view! { <Link rel="alternate" hreflang="en" href=en/> }
         })}
-        <Link rel="alternate" hreflang="x-default" href=canonical/>
-        <OrganizationJsonLd locale="zh"/>
-        <SoftwareApplicationJsonLd locale="zh"/>
+        <Link rel="alternate" hreflang="x-default" href=zh_href/>
+        <OrganizationJsonLd locale=locale/>
+        <SoftwareApplicationJsonLd locale=locale/>
     }
 }
 
@@ -31,13 +34,14 @@ pub fn PublicPageHeader(
     subtitle: &'static str,
     title: &'static str,
     updated: &'static str,
+    author: &'static str,
     buttons: AnyView,
 ) -> impl IntoView {
     view! {
         <header class="pub-header">
             <p class="pub-subtitle">{subtitle}</p>
             <h1 class="pub-title">{title}</h1>
-            <p class="pub-muted">{crate::components::help::public_content::AUTHOR_LINE}</p>
+            <p class="pub-muted">{author}</p>
             <p class="pub-muted">{updated}</p>
             <div class="pub-btn-row">{buttons}</div>
         </header>
