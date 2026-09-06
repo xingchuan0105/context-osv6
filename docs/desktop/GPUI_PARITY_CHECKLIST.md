@@ -25,9 +25,9 @@
 
 | # | 能力 | 状态 | 证据 |
 |---|---|---|---|
-| D0.3a | documents/reindex 命令逻辑抽库 | 未开始 | — |
-| D0.3b | api_call/upload_bytes 代理抽库 | 未开始 | — |
-| D0.3c | 上传范围、失败恢复、目录/本地服务不可达行为 | 未开始 | — |
+| D0.3a | documents/reindex 命令逻辑抽库（token 由宿主注入） | 完成 (本次) | core tests (extract shapes) + src-tauri 薄包装回归 |
+| D0.3b | api_call/upload_bytes 代理抽库（REST 代理、上传安全边界、zstd 导出解码、超时分级） | 完成 (本次) | core tests 7 例（上传 URL 拒绝远端/错路径/错端口、zstd 往返、路径归一） |
+| D0.3c | 上传范围、失败恢复、目录与本地服务不可达行为（HostError 503 映射 + loopback/端口匹配断言） | 完成 (本次) | 同上测试 |
 
 ## D0.4 cloud session / Publish / 深链抽库
 

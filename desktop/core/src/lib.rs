@@ -4,7 +4,9 @@
 //! 本地 B2C 会话、进程安全工具全部在此，宿主（Tauri / GPUI）只做 IPC 绑定。
 //! 无 tauri / gpui 依赖；host 通过参数注入 device_id 与云中继块。
 
+pub mod api_proxy;
 pub mod chat_stream;
+pub mod documents;
 pub mod docker_status;
 pub mod host_error;
 pub mod lifecycle;
@@ -15,7 +17,9 @@ pub mod native_stack;
 pub mod secret_fs;
 pub mod win_cmd;
 
+pub use api_proxy::{api_call, assert_desktop_upload_url, upload_bytes};
 pub use chat_stream::{DesktopStreamError, decode_stream_chunks, stream_chat_sse};
+pub use documents::reindex_local_documents;
 pub use host_error::HostError;
 pub use lifecycle::shutdown_all_local_runtime;
 pub use local_product::{

@@ -17,6 +17,7 @@ tracing = "0.1"
 base64 = "0.22"
 uuid = { version = "1", features = ["v4", "v5"] }
 url = "2"
+zstd = "0.13"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = [

@@ -7,9 +7,8 @@ use tauri::Manager;
 use super::api::IpcApiError;
 use super::cloud_session::load_session_standalone;
 use super::license::compute_device_id;
-use desktop_core::HostError;
 
-fn device_id() -> Option<String> {
+pub(crate) fn device_id() -> Option<String> {
     compute_device_id().ok()
 }
 
@@ -33,12 +32,6 @@ fn app_data_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, IpcApiErro
         .app_data_dir()
         .map_err(|e| IpcApiError::internal(format!("app_data_dir: {e}")))?;
     Ok(dir)
-}
-
-impl From<HostError> for IpcApiError {
-    fn from(e: HostError) -> Self {
-        IpcApiError::new(e.status, e.code, e.message)
-    }
 }
 
 // ---------- local_stack ----------

@@ -1,6 +1,6 @@
 # Rust 在线优先与 GPUI 对等：开发执行计划
 
-日期：2026-09-05。状态：E0/E1/E2/D0.1/E3.1–E3.5（**G3 达成**）、E4.1–E4.4（**G4 达成**）全部完成并通过，**71/71 端点全量挂载**；**D0.2 宿主抽库完成**（本地数据栈/产品生命周期/本地会话入 `desktop/core`，Tauri 薄包装回归绿；`GPUI_PARITY_CHECKLIST.md` 已建立）。下一步：D0.3（documents/REST/上传/目录接口抽库）。
+日期：2026-09-05。状态：E0/E1/E2/D0.1/E3.1–E3.5（**G3 达成**）、E4.1–E4.4（**G4 达成**）全部完成并通过，**71/71 端点全量挂载**；**D0.2–D0.3 宿主抽库完成**（本地数据栈/产品生命周期/本地会话/documents/REST 代理/上传安全边界入 `desktop/core`，Tauri 薄包装回归绿；`GPUI_PARITY_CHECKLIST.md` 已建立）。下一步：D0.4（cloud session/Publish/深链抽库）。
 
 本计划细化 [09-04 路线图](2026-09-04-rust-web-first-gpui-parity-roadmap.md)，保留其阶段编号与优先级；架构以 [ADR-0011](../adr/0011-rust-web-gpui-desktop.md) 晚间修订为准，产品路径以 [PRODUCT_IA](../design/PRODUCT_IA.md) 为准。旧迁移设计只引用仍有效的产品不变量、路由和内容要求；Tauri CSR 与性能 20% 开发门不再执行。
 
