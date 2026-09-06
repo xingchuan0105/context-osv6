@@ -5,5 +5,7 @@ pub mod chat;
 pub mod dashboard;
 pub mod help;
 pub mod integrations;
+pub mod legal;
+pub mod marketing;
 pub mod settings;
 pub mod share;

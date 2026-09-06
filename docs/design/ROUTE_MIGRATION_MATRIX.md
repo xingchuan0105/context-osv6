@@ -112,9 +112,9 @@
 
 | # | 规范路径 (Canonical URL) | Next.js 源文件 | 鉴权 (Auth) | 渲染 (Render) | SEO / noindex | Rust 挂载状态 | 归属阶段 |
 |---|---|---|---|---|---|---|---|
-| 47 | `/desktop` | `app/(marketing)/desktop/page.tsx` | 公开 | SSR | indexable | 待挂载 | E4 |
-| 48 | `/activate` | `app/(desktop)/activate/page.tsx` | 必需 | SSR + Hydrate | noindex | 待挂载 | E4 |
-| 49 | `/setup` | `app/(desktop)/setup/page.tsx` | 必需 | SSR + Hydrate | noindex | 待挂载 | E4 |
+| 47 | `/desktop` | `app/(marketing)/desktop/page.tsx` | 公开 | SSR | indexable | 已挂载 | E4.2 |
+| 48 | `/activate` | `app/(desktop)/activate/page.tsx` | 必需 | SSR + Hydrate | noindex | 已挂载 | E4.2 |
+| 49 | `/setup` | `app/(desktop)/setup/page.tsx` | 必需 | SSR + Hydrate | noindex | 已挂载 | E4.2 |
 
 ---
 
@@ -122,12 +122,12 @@
 
 | # | 规范路径 (Canonical URL) | Next.js 源文件 | 鉴权 (Auth) | 渲染 (Render) | SEO / noindex | Rust 挂载状态 | 归属阶段 |
 |---|---|---|---|---|---|---|---|
-| 50 | `/legal` | `app/(marketing)/legal/page.tsx` | 公开 | SSR | indexable | 待挂载 | E4 |
-| 51 | `/legal/terms` | `app/(marketing)/legal/terms/page.tsx` | 公开 | SSR | indexable | 待挂载 | E4 |
-| 52 | `/legal/privacy` | `app/(marketing)/legal/privacy/page.tsx` | 公开 | SSR | indexable | 待挂载 | E4 |
-| 53 | `/legal/licenses` | `app/(marketing)/legal/licenses/page.tsx` | 公开 | SSR | indexable | 待挂载 | E4 |
-| 54 | `/legal/licenses/project` | `app/(marketing)/legal/licenses/project/page.tsx` | 公开 | SSR | indexable | 待挂载 | E4 |
-| 55 | `/legal/licenses/third-party` | `app/(marketing)/legal/licenses/third-party/page.tsx` | 公开 | SSR | indexable | 待挂载 | E4 |
+| 50 | `/legal` | `app/(marketing)/legal/page.tsx` | 公开 | SSR | indexable | 已挂载 | E4.2 |
+| 51 | `/legal/terms` | `app/(marketing)/legal/terms/page.tsx` | 公开 | SSR | indexable | 已挂载 | E4.2 |
+| 52 | `/legal/privacy` | `app/(marketing)/legal/privacy/page.tsx` | 公开 | SSR | indexable | 已挂载 | E4.2 |
+| 53 | `/legal/licenses` | `app/(marketing)/legal/licenses/page.tsx` | 公开 | SSR | indexable | 已挂载 | E4.2 |
+| 54 | `/legal/licenses/project` | `app/(marketing)/legal/licenses/project/page.tsx` | 公开 | SSR | indexable | 已挂载 | E4.2 |
+| 55 | `/legal/licenses/third-party` | `app/(marketing)/legal/licenses/third-party/page.tsx` | 公开 | SSR | indexable | 已挂载 | E4.2 |
 
 ---
 
@@ -172,5 +172,6 @@
 | **E3.4** | 4 | 交易计费、定价与购买流程 (`/pricing`, `/upgrade/*`, `/desktop/buy`) |
 | **E3.5** | 15 | 管理后台运维 (`/admin/*`) 与应用内帮助 (`/help`, `/help/write`) |
 | **E4.1** | 8 | 公开帮助与集成生态 (`/help/faq`, `/help/compare`, `/help/api-access*`, `/integrations/*`)，含 canonical/hreflang SEO 头 |
-| **E4** | 25 | 公开营销站、桌面下载激活、双语帮助、双语法律文本、首页与抓取协议（剩余） |
+| **E4.2** | 9 | 桌面产品与法务公开族 (`/desktop`, `/activate`, `/setup`, `/legal*`) + `/legal/third-party-notices.md` 下载路由 |
+| **E4** | 16 | 首页产品根、双语帮助、双语法律文本、抓取协议（剩余） |
 | **总计** | **71** | **100% 覆盖现有 `frontend_next` 的全部端点** |

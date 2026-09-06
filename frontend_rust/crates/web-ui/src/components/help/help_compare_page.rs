@@ -22,7 +22,7 @@ pub fn HelpComparePage() -> impl IntoView {
                             <a href="/help/faq" class="pub-btn">{COMPARE.button_faq}</a>
                             <a href="/help/api-access/agents" class="pub-btn">{COMPARE.button_agents}</a>
                             <a href="/pricing" class="pub-btn">{COMPARE.button_pricing}</a>
-                            <a href="/desktop/buy" class="pub-btn">{COMPARE.button_desktop}</a>
+                            <a href="/desktop" class="pub-btn">{COMPARE.button_desktop}</a>
                         }
                         .into_any()
                 />

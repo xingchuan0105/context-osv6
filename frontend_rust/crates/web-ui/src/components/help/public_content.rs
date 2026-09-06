@@ -362,7 +362,7 @@ pub const INTEGRATIONS_SHARED: IntegrationsShared = IntegrationsShared {
         ("产品 FAQ", "/help/faq"),
         ("选型对比", "/help/compare"),
         ("定价与充值", "/pricing"),
-        ("免费桌面客户端", "/desktop/buy"),
+        ("免费桌面客户端", "/desktop"),
     ],
     back_label: "全部集成",
 };

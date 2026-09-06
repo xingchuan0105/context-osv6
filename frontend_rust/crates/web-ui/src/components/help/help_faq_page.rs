@@ -22,7 +22,7 @@ pub fn HelpFaqPage() -> impl IntoView {
                             <a href="/help/compare" class="pub-btn">{FAQ.button_compare}</a>
                             <a href="/help/api-access" class="pub-btn">{FAQ.button_api_access}</a>
                             <a href="/pricing" class="pub-btn">{FAQ.button_pricing}</a>
-                            <a href="/desktop/buy" class="pub-btn">{FAQ.button_desktop}</a>
+                            <a href="/desktop" class="pub-btn">{FAQ.button_desktop}</a>
                         }
                         .into_any()
                 />

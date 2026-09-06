@@ -40,6 +40,11 @@ impl BrowserRestClient {
         )))
     }
 
+    /// 原始 GET 字节（与 wasm32 版对齐；native 一律 Unavailable）。
+    pub async fn get_bytes(&self, _url: &str) -> Result<Vec<u8>, TransportError> {
+        self.unavailable()
+    }
+
     pub async fn list_sessions(&self) -> Result<ChatSessionListResponse, TransportError> {
         self.unavailable()
     }
@@ -508,6 +513,11 @@ mod wasm_request {
 
 #[cfg(target_arch = "wasm32")]
 impl BrowserRestClient {
+    /// 原始 GET 字节（与 native stub 同名对齐；供非 /api/v1 的公开静态资源使用）。
+    pub async fn get_bytes(&self, url: &str) -> Result<Vec<u8>, TransportError> {
+        wasm_request::get_bytes(self, url).await
+    }
+
     pub async fn list_sessions(&self) -> Result<ChatSessionListResponse, TransportError> {
         parse_session_list(&wasm_request::get_bytes(self, &sessions_url(&self.base_url)).await?)
     }

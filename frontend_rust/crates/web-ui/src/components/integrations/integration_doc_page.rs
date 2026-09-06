@@ -61,7 +61,7 @@ fn render_doc(doc: &'static crate::components::help::public_content::Integration
                     <p class="pub-muted">{shared.author_line}</p>
                     <div class="pub-btn-row">
                         <a href="/help/api-access/agents" class="pub-btn">{shared.button_agents}</a>
-                        <a href="/desktop/buy" class="pub-btn">{shared.button_desktop}</a>
+                        <a href="/desktop" class="pub-btn">{shared.button_desktop}</a>
                         <a href="/pricing" class="pub-btn">{shared.button_pricing}</a>
                         <a href="/integrations" class="pub-btn">{shared.back_label}</a>
                     </div>

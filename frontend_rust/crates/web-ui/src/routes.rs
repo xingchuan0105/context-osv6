@@ -176,6 +176,15 @@ pub enum AppRoute {
     IntegrationsMcp,
     IntegrationsClaudeDesktop,
     IntegrationsCursor,
+    Desktop,
+    DesktopActivate,
+    DesktopSetup,
+    Legal,
+    LegalTerms,
+    LegalPrivacy,
+    LegalLicenses,
+    LegalLicensesProject,
+    LegalLicensesThirdParty,
     Pricing,
     UpgradePaywall,
     UpgradeSuccess,
@@ -280,6 +289,15 @@ impl AppRoute {
             ["integrations", "mcp"] => Self::IntegrationsMcp,
             ["integrations", "claude-desktop"] => Self::IntegrationsClaudeDesktop,
             ["integrations", "cursor"] => Self::IntegrationsCursor,
+            ["desktop"] => Self::Desktop,
+            ["activate"] => Self::DesktopActivate,
+            ["setup"] => Self::DesktopSetup,
+            ["legal"] => Self::Legal,
+            ["legal", "terms"] => Self::LegalTerms,
+            ["legal", "privacy"] => Self::LegalPrivacy,
+            ["legal", "licenses"] => Self::LegalLicenses,
+            ["legal", "licenses", "project"] => Self::LegalLicensesProject,
+            ["legal", "licenses", "third-party"] => Self::LegalLicensesThirdParty,
             ["pricing"] => Self::Pricing,
             ["upgrade", "paywall"] => Self::UpgradePaywall,
             ["upgrade", "success"] => Self::UpgradeSuccess,
@@ -401,6 +419,21 @@ mod tests {
         assert_eq!(
             AppRoute::parse("/integrations/cursor"),
             AppRoute::IntegrationsCursor
+        );
+        assert_eq!(AppRoute::parse("/desktop"), AppRoute::Desktop);
+        assert_eq!(AppRoute::parse("/activate"), AppRoute::DesktopActivate);
+        assert_eq!(AppRoute::parse("/setup"), AppRoute::DesktopSetup);
+        assert_eq!(AppRoute::parse("/legal"), AppRoute::Legal);
+        assert_eq!(AppRoute::parse("/legal/terms"), AppRoute::LegalTerms);
+        assert_eq!(AppRoute::parse("/legal/privacy"), AppRoute::LegalPrivacy);
+        assert_eq!(AppRoute::parse("/legal/licenses"), AppRoute::LegalLicenses);
+        assert_eq!(
+            AppRoute::parse("/legal/licenses/project"),
+            AppRoute::LegalLicensesProject
+        );
+        assert_eq!(
+            AppRoute::parse("/legal/licenses/third-party"),
+            AppRoute::LegalLicensesThirdParty
         );
         assert_eq!(AppRoute::parse("/admin/nope"), AppRoute::NotFound);
         assert_eq!(AppRoute::parse("/help/nope"), AppRoute::NotFound);

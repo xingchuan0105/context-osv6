@@ -25,7 +25,7 @@ pub fn IntegrationIndexPage() -> impl IntoView {
                     <p class="pub-muted">{updated}</p>
                     <div class="pub-btn-row">
                         <a href="/help/api-access/agents" class="pub-btn">{shared.button_agents}</a>
-                        <a href="/desktop/buy" class="pub-btn">{shared.button_desktop}</a>
+                        <a href="/desktop" class="pub-btn">{shared.button_desktop}</a>
                         <a href="/pricing" class="pub-btn">{shared.button_pricing}</a>
                     </div>
                 </header>

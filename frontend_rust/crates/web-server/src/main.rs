@@ -14,6 +14,30 @@ async fn healthz() -> &'static str {
     "ok"
 }
 
+/// E4.4 抓取协议静态文本路由（public/ 在部署产物中不落盘，走 app 层）。
+async fn llms_txt() -> impl axum::response::IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
+        include_str!("../../../assets/site/llms.txt"),
+    )
+}
+
+/// Baidu 站长文件验证。
+async fn baidu_verify() -> impl axum::response::IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
+        "c3054d0735912577ce4407383c2a7965",
+    )
+}
+
+/// 第三方声明 Markdown 下载（licenses 页「下载 .md」入口）。
+async fn third_party_notices_md() -> impl axum::response::IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "text/markdown; charset=utf-8")],
+        include_str!("../../../assets/legal/third-party-notices.md"),
+    )
+}
+
 #[tokio::main]
 async fn main() {
     // 配置唯一源是 workspace Cargo.toml 的 [[workspace.metadata.leptos]]；
@@ -40,6 +64,12 @@ async fn main() {
 
     let app = Router::new()
         .route("/healthz", get(healthz))
+        .route("/llms.txt", get(llms_txt))
+        .route("/baidu_verify_codeva-THd6TRYMwv.html", get(baidu_verify))
+        .route(
+            "/legal/third-party-notices.md",
+            get(third_party_notices_md),
+        )
         .nest_service("/pkg", pkg)
         .leptos_routes(&leptos_options, routes, {
             let options = leptos_options.clone();

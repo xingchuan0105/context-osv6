@@ -22,6 +22,11 @@ use crate::components::help::{
 use crate::components::integrations::{
     IntegrationClaudeDesktopPage, IntegrationCursorPage, IntegrationIndexPage, IntegrationMcpPage,
 };
+use crate::components::legal::{
+    LegalCenterPage, LegalLicensesPage, LegalPrivacyPage, LegalProjectLicensePage, LegalTermsPage,
+    LegalThirdPartyPage,
+};
+use crate::components::marketing::{DesktopActivatePage, DesktopPage, DesktopSetupPage};
 use crate::components::settings::{SettingsPage, UsagePage};
 use crate::components::share::{
     InvitePage, SharedKbPage, SharedUserPage, WorkspaceShareAnalyticsPage,
@@ -99,6 +104,15 @@ pub fn App() -> impl IntoView {
                 <Route path=path!("/integrations/mcp") view=IntegrationMcpPage/>
                 <Route path=path!("/integrations/claude-desktop") view=IntegrationClaudeDesktopPage/>
                 <Route path=path!("/integrations/cursor") view=IntegrationCursorPage/>
+                <Route path=path!("/desktop") view=DesktopPage/>
+                <Route path=path!("/activate") view=DesktopActivatePage/>
+                <Route path=path!("/setup") view=DesktopSetupPage/>
+                <Route path=path!("/legal") view=LegalCenterPage/>
+                <Route path=path!("/legal/terms") view=LegalTermsPage/>
+                <Route path=path!("/legal/privacy") view=LegalPrivacyPage/>
+                <Route path=path!("/legal/licenses") view=LegalLicensesPage/>
+                <Route path=path!("/legal/licenses/project") view=LegalProjectLicensePage/>
+                <Route path=path!("/legal/licenses/third-party") view=LegalThirdPartyPage/>
                 <Route path=path!("/pricing") view=PricingPage/>
                 <Route path=path!("/upgrade/paywall") view=PaywallPage/>
                 <Route path=path!("/upgrade/success") view=UpgradeSuccessPage/>
