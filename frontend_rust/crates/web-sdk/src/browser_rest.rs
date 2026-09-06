@@ -1220,8 +1220,8 @@ impl BrowserRestClient {
         query: &crate::admin_api::AdminAuditLogQuery,
     ) -> Result<Vec<u8>, TransportError> {
         let mut export_query = query.clone();
-        export_query.page = 0;
-        export_query.per_page = 0;
+        export_query.page = None;
+        export_query.per_page = None;
         let list_url =
             crate::admin_api::admin_audit_logs_url(&self.base_url, &export_query);
         let url = if list_url.contains('?') {

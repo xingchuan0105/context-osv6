@@ -66,8 +66,8 @@ pub fn AdminAuditLogsPage() -> impl IntoView {
     let filter_actor = RwSignal::new(String::new());
     let filter_window = RwSignal::new(String::new());
     let applied = RwSignal::new(AdminAuditLogQuery {
-        page: 1,
-        per_page: AUDIT_PAGE_SIZE,
+        page: Some(1),
+        per_page: Some(AUDIT_PAGE_SIZE),
         ..AdminAuditLogQuery::default()
     });
     let logs = RwSignal::new(AdminAuditLogPage {
@@ -112,21 +112,22 @@ pub fn AdminAuditLogsPage() -> impl IntoView {
             resource_type: opt(filter_resource),
             actor: opt(filter_actor),
             window: opt(filter_window),
-            page: 1,
-            per_page: AUDIT_PAGE_SIZE,
+            page: Some(1),
+            per_page: Some(AUDIT_PAGE_SIZE),
         });
     };
 
     let on_prev = move |_| {
-        applied.update(|q| q.page = q.page.saturating_sub(1).max(1));
+        applied.update(|q| q.page = Some(q.page.unwrap_or(1).saturating_sub(1).max(1)));
     };
-    let prev_disabled = Signal::derive(move || applied.get().page <= 1);
+    let prev_disabled = Signal::derive(move || applied.get().page.unwrap_or(1) <= 1);
     let on_next = move |_| {
         applied.update(|q| {
             let total = logs.get_untracked().total;
-            let max_page = total.div_ceil(q.per_page.max(1)).max(1);
-            if q.page < max_page {
-                q.page += 1;
+            let max_page = total.div_ceil(q.per_page.unwrap_or(AUDIT_PAGE_SIZE).max(1)).max(1);
+            let current = q.page.unwrap_or(1);
+            if current < max_page {
+                q.page = Some(current + 1);
             }
         });
     };
@@ -155,8 +156,8 @@ pub fn AdminAuditLogsPage() -> impl IntoView {
                         {move || {
                             let q = applied.get();
                             let total = logs.get().total;
-                            let max_page = total.div_ceil(q.per_page.max(1)).max(1);
-                            format!("共 {} 条 · 第 {} / {} 页", total, q.page, max_page)
+                            let max_page = total.div_ceil(q.per_page.unwrap_or(AUDIT_PAGE_SIZE).max(1)).max(1);
+                            format!("共 {} 条 · 第 {} / {} 页", total, q.page.unwrap_or(1), max_page)
                         }}
                     </span>
                 </header>
@@ -277,7 +278,7 @@ pub fn AdminAuditLogsPage() -> impl IntoView {
                         "上一页"
                     </button>
                     <span class="admin-pager-label" data-testid="admin-audit-page-label">
-                        {move || format!("第 {} 页", applied.get().page)}
+                        {move || format!("第 {} 页", applied.get().page.unwrap_or(1))}
                     </span>
                     <button
                         type="button"

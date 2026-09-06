@@ -430,7 +430,7 @@ fn export_golden_fixtures() {
         serde_json::to_value(response).expect("serialize response"),
     );
 
-    use contracts::{HealthResponse, Workspace, WorkspaceListResponse};
+    use contracts::{AdminHealthStatus, Workspace, WorkspaceListResponse};
 
     write(
         "workspace_list_minimal.json",
@@ -454,10 +454,10 @@ fn export_golden_fixtures() {
 
     write(
         "admin_health_minimal.json",
-        serde_json::to_value(HealthResponse {
+        serde_json::to_value(AdminHealthStatus {
             status: "ok".to_string(),
-            service: "avrag-api".to_string(),
             version: "0.1.0".to_string(),
+            uptime_secs: 3600,
         })
         .expect("serialize health response"),
     );

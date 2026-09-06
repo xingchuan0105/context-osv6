@@ -1,4 +1,4 @@
-use contracts::{HealthResponse, WorkspaceListResponse};
+use contracts::{AdminHealthStatus, WorkspaceListResponse};
 
 // Restored from the pre-C3 `module_fixtures.rs` (P1-1): the C3 billing commit
 // deleted this whole file, taking two billing-unrelated fixture round-trip
@@ -36,14 +36,15 @@ fn workspace_list_minimal_fixture_roundtrips() {
 fn admin_health_minimal_fixture_roundtrips() {
     let json = serde_json::json!({
         "status": "ok",
-        "service": "avrag-api",
-        "version": "0.1.0"
+        "version": "0.1.0",
+        "uptime_secs": 3600
     });
 
-    let parsed: HealthResponse =
+    let parsed: AdminHealthStatus =
         serde_json::from_value(json.clone()).expect("health response should deserialize");
     assert_eq!(parsed.status, "ok");
-    assert_eq!(parsed.service, "avrag-api");
+    assert_eq!(parsed.version, "0.1.0");
+    assert_eq!(parsed.uptime_secs, 3600);
 
     let serialized = serde_json::to_value(parsed).expect("health response should serialize");
     assert_eq!(serialized, json);

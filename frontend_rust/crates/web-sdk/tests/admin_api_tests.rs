@@ -32,7 +32,10 @@ fn admin_urls_are_canonical() {
     assert_eq!(admin_feature_flag_change_request_review_url("http://x", "req-9"), "http://x/api/v1/admin/feature-flags/change-requests/req-9/review");
     assert_eq!(admin_broadcast_url("http://x"), "http://x/api/v1/admin/notifications/broadcast");
     assert_eq!(
-        admin_audit_logs_url("http://x", &AdminAuditLogQuery { page: 2, per_page: 50, ..Default::default() }),
+        admin_audit_logs_url(
+            "http://x",
+            &AdminAuditLogQuery { page: Some(2), per_page: Some(50), ..Default::default() }
+        ),
         "http://x/api/v1/admin/audit-logs?page=2&per_page=50"
     );
 }
