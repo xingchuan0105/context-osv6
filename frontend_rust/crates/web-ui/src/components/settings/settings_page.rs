@@ -1,4 +1,5 @@
 use super::providers_panel::ProvidersPanel;
+use crate::components::shell::ProductChrome;
 use leptos::prelude::*;
 use leptos_router::hooks::{query_signal, use_navigate};
 use leptos_router::NavigateOptions;
@@ -24,10 +25,10 @@ pub fn SettingsPage() -> impl IntoView {
     };
 
     view! {
+        <ProductChrome>
         <div class="settings-shell" data-testid="settings-page">
             <header class="settings-header">
                 <div class="settings-header-left">
-                    <a href="/chat" class="settings-back-link">"← 返回对话"</a>
                     <h1 class="settings-title">"账号与设置"</h1>
                 </div>
                 <button
@@ -111,5 +112,6 @@ pub fn SettingsPage() -> impl IntoView {
                 }}
             </main>
         </div>
+        </ProductChrome>
     }
 }

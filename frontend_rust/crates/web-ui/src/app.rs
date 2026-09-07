@@ -9,7 +9,7 @@ use crate::components::auth::{
     ResetPasswordVerifyPage,
 };
 use crate::components::billing::{
-    DesktopBuyPage, EnPricingPage, PaywallPage, PricingPage, UpgradeSuccessPage,
+    DesktopBuyPage, EnPricingPage, PaywallPage, UpgradeSuccessPage, ZhPricingPage,
 };
 use crate::components::chat::ChatCanvasModel;
 use crate::components::chat::chat_page::ChatPage;
@@ -123,7 +123,7 @@ pub fn App() -> impl IntoView {
                 <Route path=path!("/en/legal/licenses") view=EnLegalLicensesPage/>
                 <Route path=path!("/en/legal/licenses/project") view=EnLegalProjectLicensePage/>
                 <Route path=path!("/en/legal/licenses/third-party") view=EnLegalThirdPartyPage/>
-                <Route path=path!("/pricing") view=PricingPage/>
+                <Route path=path!("/pricing") view=ZhPricingPage/>
                 <Route path=path!("/upgrade/paywall") view=PaywallPage/>
                 <Route path=path!("/upgrade/success") view=UpgradeSuccessPage/>
                 <Route path=path!("/desktop/buy") view=DesktopBuyPage/>

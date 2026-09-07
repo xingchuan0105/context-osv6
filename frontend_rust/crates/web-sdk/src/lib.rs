@@ -9,6 +9,7 @@ pub mod conversation_api;
 pub mod fixture_transport;
 pub mod citations;
 pub mod markdown;
+pub mod notifications;
 pub mod progress;
 pub mod providers;
 pub mod scope;
@@ -62,6 +63,10 @@ pub use conversation_api::{
 pub use fixture_transport::FixtureTransport;
 pub use citations::{CitationView, RenderedAnswer, SourceCard, render_assistant_answer};
 pub use markdown::render_assistant_markdown;
+pub use notifications::{
+    NotificationRow, NotificationsResponse, notification_read_url, notifications_url,
+    parse_notifications,
+};
 pub use progress::{activities_for_display, progress_folded, progress_summary_label};
 pub use providers::{
     ProviderSecretRow, ProviderSecretsResponse, has_quick_chat_byok, model_role_label,

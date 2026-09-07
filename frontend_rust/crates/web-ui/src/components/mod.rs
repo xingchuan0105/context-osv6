@@ -9,3 +9,4 @@ pub mod legal;
 pub mod marketing;
 pub mod settings;
 pub mod share;
+pub mod shell;

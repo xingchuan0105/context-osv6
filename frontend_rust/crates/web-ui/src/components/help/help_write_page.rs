@@ -1,9 +1,11 @@
+use crate::components::shell::ProductChrome;
 use leptos::prelude::*;
 
 /// 长文与提示词编写建议（应用内静态长文）。
 #[component]
 pub fn HelpWritePage() -> impl IntoView {
     view! {
+        <ProductChrome>
         <div class="help-shell" data-testid="help-write-page">
             <header class="help-header">
                 <a href="/help" class="settings-back-link">"← 返回帮助中心"</a>
@@ -57,5 +59,6 @@ pub fn HelpWritePage() -> impl IntoView {
                 </section>
             </main>
         </div>
+        </ProductChrome>
     }
 }

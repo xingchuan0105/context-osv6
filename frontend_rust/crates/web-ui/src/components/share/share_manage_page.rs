@@ -1,4 +1,5 @@
 use crate::api_base::poc_api_base;
+use crate::components::shell::ProductChrome;
 use contracts::share::{AccessLogEntry, ShareAnalyticsResponse, ShareSettings};
 use leptos::prelude::*;
 use leptos_router::hooks::use_params;
@@ -116,6 +117,7 @@ pub fn WorkspaceSharePage() -> impl IntoView {
     };
 
     view! {
+        <ProductChrome>
         <div class="settings-shell" data-testid="workspace-share-page">
             <header class="settings-header">
                 <div class="settings-header-left">
@@ -191,6 +193,7 @@ pub fn WorkspaceSharePage() -> impl IntoView {
                 </section>
             </main>
         </div>
+        </ProductChrome>
     }
 }
 
@@ -229,6 +232,7 @@ pub fn WorkspaceShareLogsPage() -> impl IntoView {
     });
 
     view! {
+        <ProductChrome>
         <div class="settings-shell" data-testid="share-logs-page">
             <header class="settings-header">
                 <div class="settings-header-left">
@@ -258,6 +262,7 @@ pub fn WorkspaceShareLogsPage() -> impl IntoView {
                 </section>
             </main>
         </div>
+        </ProductChrome>
     }
 }
 
@@ -296,6 +301,7 @@ pub fn WorkspaceShareAnalyticsPage() -> impl IntoView {
     });
 
     view! {
+        <ProductChrome>
         <div class="settings-shell" data-testid="share-analytics-page">
             <header class="settings-header">
                 <div class="settings-header-left">
@@ -324,5 +330,6 @@ pub fn WorkspaceShareAnalyticsPage() -> impl IntoView {
                 </section>
             </main>
         </div>
+        </ProductChrome>
     }
 }

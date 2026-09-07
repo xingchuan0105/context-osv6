@@ -130,6 +130,40 @@ pub const ROUTE_FAMILIES: &[RouteFamily] = &[
     },
 ];
 
+/// Canonical in-app destinations used by E5.2 chrome. Keep in lockstep with
+/// `ROUTE_FAMILIES` / Next `nav-config.ts` (PRODUCT_IA §4).
+pub mod dest {
+    pub const CHAT: &str = "/chat";
+    pub const DASHBOARD: &str = "/dashboard";
+    pub const SHARE_TRAFFIC: &str = "/dashboard/analytics";
+    pub const SETTINGS: &str = "/settings";
+    pub const PRICING: &str = "/pricing";
+    pub const TOPUP: &str = "/pricing#topup";
+    pub const DESKTOP: &str = "/desktop";
+    pub const HELP: &str = "/help";
+    pub const API_ACCESS: &str = "/help/api-access";
+    pub const LEGAL: &str = "/legal";
+    pub const LEGAL_TERMS: &str = "/legal/terms";
+    pub const LEGAL_PRIVACY: &str = "/legal/privacy";
+    pub const LEGAL_LICENSES: &str = "/legal/licenses";
+}
+
+pub const SHELL_ENTRY_HREFS: &[&str] = &[
+    dest::CHAT,
+    dest::DASHBOARD,
+    dest::SHARE_TRAFFIC,
+    dest::SETTINGS,
+    dest::PRICING,
+    dest::TOPUP,
+    dest::DESKTOP,
+    dest::HELP,
+    dest::API_ACCESS,
+    dest::LEGAL,
+    dest::LEGAL_TERMS,
+    dest::LEGAL_PRIVACY,
+    dest::LEGAL_LICENSES,
+];
+
 pub fn route_family(id: &str) -> Option<&'static RouteFamily> {
     ROUTE_FAMILIES.iter().find(|family| family.id == id)
 }

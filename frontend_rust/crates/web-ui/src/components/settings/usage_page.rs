@@ -1,8 +1,10 @@
+use crate::components::shell::ProductChrome;
 use leptos::prelude::*;
 
 #[component]
 pub fn UsagePage() -> impl IntoView {
     view! {
+        <ProductChrome>
         <div class="settings-shell" data-testid="usage-page">
             <header class="settings-header">
                 <div class="settings-header-left">
@@ -29,5 +31,6 @@ pub fn UsagePage() -> impl IntoView {
                 </section>
             </main>
         </div>
+        </ProductChrome>
     }
 }

@@ -1,5 +1,6 @@
 use crate::api_base::poc_api_base;
 use crate::components::chat::chat_page::ChatPage;
+use crate::components::shell::ProductChrome;
 use contracts::documents::Document;
 use contracts::workspaces::{Workspace, WorkspaceNote};
 use leptos::prelude::*;
@@ -131,6 +132,7 @@ pub fn WorkspaceWorkbenchPage() -> impl IntoView {
     };
 
     view! {
+        <ProductChrome footer=false>
         <div class="workspace-workbench-shell" data-testid="workspace-workbench">
             <header class="workbench-top-bar">
                 <div class="workbench-top-left">
@@ -310,5 +312,6 @@ pub fn WorkspaceWorkbenchPage() -> impl IntoView {
                 </aside>
             </div>
         </div>
+        </ProductChrome>
     }
 }

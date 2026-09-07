@@ -1,4 +1,5 @@
 use crate::api_base::poc_api_base;
+use crate::components::shell::{MarketingChrome, ProductChromeFooter};
 use leptos::prelude::*;
 use web_sdk::{
     BillingPlan, BrowserRestClient, CheckoutRequest, TopupPack, WalletBalanceResponse,
@@ -79,7 +80,6 @@ pub fn PricingPage() -> impl IntoView {
         <div class="pricing-shell" data-testid="pricing-page">
             <header class="pricing-header">
                 <div class="pricing-header-left">
-                    <a href="/chat" class="settings-back-link">"← 返回对话"</a>
                     <h1 class="pricing-title">"套餐定价与会员权益"</h1>
                     <p class="pricing-subtitle">"选择适合您的生产力方案，支持随时充值或升降级"</p>
                 </div>
@@ -225,5 +225,14 @@ pub fn PricingPage() -> impl IntoView {
                 </section>
             </main>
         </div>
+    }
+}
+
+#[component]
+pub fn ZhPricingPage() -> impl IntoView {
+    view! {
+        <MarketingChrome locale="zh" active="pricing"/>
+        <PricingPage/>
+        <ProductChromeFooter/>
     }
 }

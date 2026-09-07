@@ -1,5 +1,6 @@
 use super::pricing_page::PricingPage;
 use crate::components::help::json_ld::{OrganizationJsonLd, SoftwareApplicationJsonLd};
+use crate::components::shell::MarketingChrome;
 use crate::components::legal::legal_pages::LegalFooterLinks;
 use leptos::prelude::*;
 use leptos_meta::{Link, Meta, Title};
@@ -17,6 +18,7 @@ pub fn EnPricingPage() -> impl IntoView {
         <Link rel="alternate" hreflang="x-default" href="/pricing"/>
         <OrganizationJsonLd locale="en"/>
         <SoftwareApplicationJsonLd locale="en"/>
+        <MarketingChrome locale="en" active="pricing"/>
         <PricingPage/>
         <LegalFooterLinks locale="en"/>
     }

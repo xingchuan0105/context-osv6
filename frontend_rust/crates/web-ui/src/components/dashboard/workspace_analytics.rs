@@ -1,3 +1,4 @@
+use crate::components::shell::ProductChrome;
 use leptos::prelude::*;
 use leptos_router::hooks::use_params;
 use leptos_router::params::Params;
@@ -20,6 +21,7 @@ pub fn WorkspaceAnalyzePage() -> impl IntoView {
     });
 
     view! {
+        <ProductChrome>
         <div class="dashboard-shell" data-testid="workspace-analyze-page">
             <header class="dashboard-header">
                 <div class="dashboard-header-left">
@@ -53,12 +55,14 @@ pub fn WorkspaceAnalyzePage() -> impl IntoView {
                 </section>
             </main>
         </div>
+        </ProductChrome>
     }
 }
 
 #[component]
 pub fn GlobalAnalyticsPage() -> impl IntoView {
     view! {
+        <ProductChrome>
         <div class="dashboard-shell" data-testid="global-analytics-page">
             <header class="dashboard-header">
                 <div class="dashboard-header-left">
@@ -87,5 +91,6 @@ pub fn GlobalAnalyticsPage() -> impl IntoView {
                 </section>
             </main>
         </div>
+        </ProductChrome>
     }
 }

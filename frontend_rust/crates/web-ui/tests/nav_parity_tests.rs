@@ -1,5 +1,5 @@
 use regex_lite::Regex;
-use web_ui::{ROUTE_FAMILIES, route_family};
+use web_ui::{ROUTE_FAMILIES, SHELL_ENTRY_HREFS, route_family};
 
 const NAV_CONFIG: &str = include_str!("../../../../frontend_next/lib/navigation/nav-config.ts");
 
@@ -46,6 +46,21 @@ fn route_families_match_next_nav_config() {
             entries.iter().any(|(id, _)| id == family.id),
             "route family {} is not in nav-config.ts",
             family.id
+        );
+    }
+}
+
+#[test]
+fn shell_entry_hrefs_are_in_nav_config() {
+    let entries = nav_config_entries(NAV_CONFIG);
+    for href in SHELL_ENTRY_HREFS {
+        assert!(
+            entries.iter().any(|(_, nav_href)| nav_href == href),
+            "shell href {href} is not in nav-config.ts APP_NAV_ENTRIES (PRODUCT_IA §4)"
+        );
+        assert!(
+            ROUTE_FAMILIES.iter().any(|family| family.href == *href),
+            "shell href {href} is not in ROUTE_FAMILIES"
         );
     }
 }

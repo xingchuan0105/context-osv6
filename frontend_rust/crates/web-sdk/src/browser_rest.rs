@@ -245,6 +245,23 @@ impl BrowserRestClient {
         self.unavailable()
     }
 
+    pub async fn list_notifications(
+        &self,
+    ) -> Result<crate::notifications::NotificationsResponse, TransportError> {
+        self.unavailable()
+    }
+
+    pub async fn mark_notification_read(
+        &self,
+        _notification_id: &str,
+    ) -> Result<(), TransportError> {
+        self.unavailable()
+    }
+
+    pub async fn probe_admin_access(&self) -> bool {
+        false
+    }
+
     pub async fn get_billing_plans(
         &self,
     ) -> Result<crate::billing_api::BillingPlansResponse, TransportError> {
@@ -923,6 +940,36 @@ impl BrowserRestClient {
         )
         .await?;
         serde_json::from_slice(&bytes).map_err(TransportError::from)
+    }
+
+    pub async fn list_notifications(
+        &self,
+    ) -> Result<crate::notifications::NotificationsResponse, TransportError> {
+        crate::notifications::parse_notifications(
+            &wasm_request::get_bytes(self, &crate::notifications::notifications_url(&self.base_url))
+                .await?,
+        )
+    }
+
+    pub async fn mark_notification_read(
+        &self,
+        notification_id: &str,
+    ) -> Result<(), TransportError> {
+        let body = b"{}";
+        wasm_request::request_bytes(
+            self,
+            "POST",
+            &crate::notifications::notification_read_url(&self.base_url, notification_id),
+            Some(body),
+            Some("application/json"),
+            true,
+        )
+        .await?;
+        Ok(())
+    }
+
+    pub async fn probe_admin_access(&self) -> bool {
+        self.get_admin_health().await.is_ok()
     }
 
     pub async fn get_billing_plans(

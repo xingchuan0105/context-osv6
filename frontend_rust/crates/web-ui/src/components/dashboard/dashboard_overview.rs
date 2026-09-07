@@ -1,4 +1,6 @@
 use crate::api_base::poc_api_base;
+use crate::components::shell::ProductChrome;
+use crate::routes::dest;
 use contracts::workspaces::Workspace;
 use leptos::prelude::*;
 use leptos_router::hooks::use_navigate;
@@ -85,14 +87,15 @@ pub fn DashboardOverviewPage() -> impl IntoView {
     };
 
     view! {
+        <ProductChrome>
         <div class="dashboard-shell" data-testid="dashboard-overview">
             <header class="dashboard-header">
                 <div class="dashboard-header-left">
-                    <a href="/chat" class="dashboard-chat-link">"← 返回个人对话"</a>
                     <h1 class="dashboard-title">"工作区与持久知识库"</h1>
                 </div>
                 <div class="dashboard-header-actions">
-                    <a href="/dashboard/analytics" class="dashboard-header-btn">"分享流量分析"</a>
+                    <a href=dest::SHARE_TRAFFIC class="dashboard-header-btn">"分享访问"</a>
+                    <a href=dest::DESKTOP class="dashboard-header-btn" data-testid="dashboard-client-link">"客户端"</a>
                     <button
                         type="button"
                         class="dashboard-create-btn"
@@ -207,5 +210,6 @@ pub fn DashboardOverviewPage() -> impl IntoView {
                 </div>
             </main>
         </div>
+        </ProductChrome>
     }
 }

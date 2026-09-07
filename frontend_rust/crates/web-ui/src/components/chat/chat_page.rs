@@ -2,6 +2,8 @@ use crate::api_base::poc_api_base;
 use crate::components::chat::{
     ChatCanvasModel, MessageActions, ModelRoleBadge, PreparedUserTurn, ScopeBar, SessionFileTray,
 };
+use crate::components::shell::AppTopBar;
+use crate::routes::dest;
 use crate::reducer::{ActivityEntry, TurnStatus};
 use crate::session::{ConversationMessage, MessageRole, messages_from_wire};
 use contracts::workspaces::ChatSession;
@@ -369,7 +371,13 @@ pub fn ChatPage() -> impl IntoView {
         })
     };
 
+    let show_app_bar = Signal::derive(move || route_workspace_id.get().is_none());
+
     view! {
+        <div class=move || if show_app_bar.get() { "app-frame" } else { "chat-embed" }>
+            <Show when=move || show_app_bar.get()>
+                <AppTopBar/>
+            </Show>
         <div class="chat-shell">
             <aside class="chat-sessions" aria-label="会话列表" data-testid="session-list">
                 {move || {
@@ -393,6 +401,46 @@ pub fn ChatPage() -> impl IntoView {
                 >
                     "新对话"
                 </button>
+                <div class="chat-workspaces" data-testid="chat-workspaces">
+                    <span class="chat-workspaces-label">"工作区"</span>
+                    <a href=dest::DASHBOARD class="chat-workspaces-all" data-testid="all-workspaces-link">
+                        "全部工作区"
+                    </a>
+                    {move || {
+                        let mut seen = std::collections::BTreeSet::new();
+                        let items: Vec<(String, String)> = model.with(|m| {
+                            m.manager()
+                                .session_list
+                                .iter()
+                                .filter_map(|session| {
+                                    let id = session.workspace_id.as_ref()?;
+                                    if seen.insert(id.clone()) {
+                                        Some((
+                                            id.clone(),
+                                            session
+                                                .workspace_name
+                                                .clone()
+                                                .unwrap_or_else(|| id.clone()),
+                                        ))
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .collect()
+                        });
+                        items
+                            .into_iter()
+                            .map(|(id, name)| {
+                                let href = format!("/dashboard/{id}");
+                                view! {
+                                    <a class="chat-workspace-link" href=href>
+                                        {name}
+                                    </a>
+                                }
+                            })
+                            .collect_view()
+                    }}
+                </div>
                 <Show when=move || token.with(|value| value.is_empty())>
                     <p class="chat-sessions-hint" data-testid="session-auth-hint">"登录后即可加载会话"</p>
                 </Show>
@@ -684,6 +732,7 @@ pub fn ChatPage() -> impl IntoView {
                     </div>
                 </form>
             </main>
+        </div>
         </div>
     }
 }
