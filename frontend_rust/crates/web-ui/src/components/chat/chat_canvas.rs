@@ -138,8 +138,18 @@ impl ChatCanvasModel {
                 Some(self.live_turn.reasoning_summary.as_str())
             };
             let citations = self.live_turn.citations.clone();
-            self.manager
-                .append_assistant_message(&answer, answer_blocks, reasoning, citations);
+            let tool_results = self.live_turn.tool_results.clone();
+            let degrade_reasons = self.live_turn.degrade_reasons.clone();
+            let guarded = self.live_turn.guarded;
+            self.manager.append_assistant_message(
+                &answer,
+                answer_blocks,
+                reasoning,
+                citations,
+                tool_results,
+                degrade_reasons,
+                guarded,
+            );
         }
 
         if self.live_turn.status.is_terminal() {

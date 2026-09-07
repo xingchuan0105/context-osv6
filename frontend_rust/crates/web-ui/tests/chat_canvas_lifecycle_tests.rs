@@ -23,6 +23,42 @@ fn done_payload_with(
     })
 }
 
+fn done_payload_with_tools() -> serde_json::Value {
+    serde_json::json!({
+        "answer": "检索观察已写入工具卡。",
+        "answer_blocks": [],
+        "session_id": "fixture-session",
+        "agent_type": "search",
+        "sources": [],
+        "citations": [{
+            "citation_id": 1,
+            "doc_id": "https://example.com/alloy",
+            "doc_name": "Alloy handbook",
+            "preview": "titanium",
+            "score": 0.8,
+            "source_locator": { "url": "https://example.com/alloy" }
+        }],
+        "trace": { "mode": "search" },
+        "degrade_trace": [{
+            "stage": "retrieve",
+            "reason": "no_retrieval_evidence",
+            "impact": "quality"
+        }],
+        "guard_report": {
+            "blocked": true,
+            "input_results": [],
+            "output_results": [],
+            "degrade_trace": []
+        },
+        "tool_results": [{
+            "tool": "web_search",
+            "version": "v1",
+            "status": "ok",
+            "data": { "hits": 2 }
+        }]
+    })
+}
+
 #[test]
 fn test_chat_canvas_personal_conversation_lifecycle() {
     let mut canvas = ChatCanvasModel::new();
@@ -89,6 +125,46 @@ fn test_chat_canvas_personal_conversation_lifecycle() {
         canvas.manager().active.session_id.as_deref(),
         Some("sess-101")
     );
+}
+
+#[test]
+fn test_done_payload_commits_tool_degrade_and_guard() {
+    let mut canvas = ChatCanvasModel::new();
+    let turn = canvas.prepare_user_turn("查合金");
+    let scope = turn.stream_scope;
+    canvas.on_event(
+        scope,
+        ChatEvent::Start {
+            request_id: "req-tools".to_string(),
+            session_id: "sess-tools".to_string(),
+        },
+    );
+    canvas.on_event(
+        scope,
+        ChatEvent::Done {
+            request_id: "req-tools".to_string(),
+            session_id: "sess-tools".to_string(),
+            message_id: 9,
+            payload: done_payload_with_tools(),
+        },
+    );
+
+    assert_eq!(canvas.live_turn().status, TurnStatus::Done);
+    assert_eq!(canvas.live_turn().tool_results.len(), 1);
+    assert_eq!(canvas.live_turn().tool_results[0]["tool"], "web_search");
+    assert_eq!(canvas.live_turn().degrade_reasons, vec!["no_retrieval_evidence"]);
+    assert!(canvas.live_turn().guarded);
+
+    let assistant = canvas
+        .manager()
+        .active
+        .messages
+        .iter()
+        .find(|message| message.role == MessageRole::Assistant)
+        .expect("assistant message");
+    assert_eq!(assistant.tool_results.len(), 1);
+    assert_eq!(assistant.degrade_reasons, vec!["no_retrieval_evidence"]);
+    assert!(assistant.guarded);
 }
 
 #[test]
@@ -665,6 +741,9 @@ fn history_messages() -> Vec<ConversationMessage> {
             answer_blocks: Vec::new(),
             reasoning: None,
             citations: Vec::new(),
+            tool_results: Vec::new(),
+            degrade_reasons: Vec::new(),
+            guarded: false,
             created_at: "2026-09-04T00:00:00Z".to_string(),
         },
         ConversationMessage {
@@ -676,6 +755,9 @@ fn history_messages() -> Vec<ConversationMessage> {
             answer_blocks: Vec::new(),
             reasoning: None,
             citations: vec![serde_json::json!({"doc_name": "手册"})],
+            tool_results: Vec::new(),
+            degrade_reasons: Vec::new(),
+            guarded: false,
             created_at: "2026-09-04T00:00:01Z".to_string(),
         },
     ]

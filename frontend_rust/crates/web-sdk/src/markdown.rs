@@ -13,7 +13,79 @@ pub fn render_assistant_markdown(src: &str) -> String {
     let parser = Parser::new_ext(src, options);
     let mut html_out = String::new();
     html::push_html(&mut html_out, filter_markdown_events(parser));
-    html_out.replace("<a href=\"", "<a rel=\"noopener noreferrer\" href=\"")
+    let html_out = html_out.replace("<a href=\"", "<a rel=\"noopener noreferrer\" href=\"");
+    wrap_figures(&decorate_code_blocks(&html_out))
+}
+
+fn decorate_code_blocks(html: &str) -> String {
+    let mut out = String::with_capacity(html.len() + 64);
+    let mut rest = html;
+    while let Some(idx) = rest.find("<pre><code") {
+        out.push_str(&rest[..idx]);
+        let after = &rest[idx..];
+        let Some(gt) = after.find('>') else {
+            out.push_str(after);
+            return out;
+        };
+        let open = &after[..=gt];
+        let lang = code_language(open).unwrap_or("code");
+        let inner_and_rest = &after[gt + 1..];
+        let Some(end) = inner_and_rest.find("</code></pre>") else {
+            out.push_str(after);
+            return out;
+        };
+        out.push_str("<div class=\"chat-code-block\" data-testid=\"chat-code-block\">");
+        out.push_str("<div class=\"chat-code-toolbar\">");
+        out.push_str("<span class=\"chat-code-lang\" data-testid=\"chat-code-lang\">");
+        out.push_str(lang);
+        out.push_str("</span>");
+        out.push_str(
+            "<button type=\"button\" class=\"chat-code-copy\" data-testid=\"chat-code-copy\">复制</button>",
+        );
+        out.push_str("</div>");
+        out.push_str(open);
+        out.push_str(&inner_and_rest[..end]);
+        out.push_str("</code></pre></div>");
+        rest = &inner_and_rest[end + "</code></pre>".len()..];
+    }
+    out.push_str(rest);
+    out
+}
+
+fn code_language(open_tag: &str) -> Option<&'static str> {
+    const KNOWN: &[&str] = &[
+        "rust", "ts", "tsx", "js", "json", "py", "python", "bash", "sh", "sql", "go", "yaml",
+        "toml", "html", "css", "md", "text",
+    ];
+    let class = open_tag.split("language-").nth(1)?;
+    let token = class
+        .split(|c: char| !c.is_ascii_alphanumeric() && c != '-')
+        .next()
+        .unwrap_or("");
+    KNOWN
+        .iter()
+        .copied()
+        .find(|name| name.eq_ignore_ascii_case(token))
+}
+
+fn wrap_figures(html: &str) -> String {
+    let mut out = String::with_capacity(html.len() + 32);
+    let mut rest = html;
+    while let Some(idx) = rest.find("<img ") {
+        out.push_str(&rest[..idx]);
+        let after = &rest[idx..];
+        let Some(end) = after.find('>') else {
+            out.push_str(after);
+            return out;
+        };
+        let tag = &after[..=end];
+        out.push_str("<figure class=\"chat-figure\" data-testid=\"chat-figure\">");
+        out.push_str(tag);
+        out.push_str("</figure>");
+        rest = &after[end + 1..];
+    }
+    out.push_str(rest);
+    out
 }
 
 fn filter_markdown_events<'a, I>(events: I) -> impl Iterator<Item = Event<'a>>
@@ -58,11 +130,31 @@ where
                 None
             }
             Event::End(TagEnd::MetadataBlock(_)) => None,
-            Event::Start(Tag::Image { .. }) => {
-                skip_image = true;
-                None
+            Event::Start(Tag::Image {
+                dest_url,
+                title,
+                id,
+                link_type,
+            }) => {
+                if is_safe_href(&dest_url) {
+                    Some(Event::Start(Tag::Image {
+                        dest_url,
+                        title,
+                        id,
+                        link_type,
+                    }))
+                } else {
+                    skip_image = true;
+                    None
+                }
             }
-            Event::End(TagEnd::Image) => None,
+            Event::End(TagEnd::Image) => {
+                if skip_image {
+                    None
+                } else {
+                    Some(Event::End(TagEnd::Image))
+                }
+            }
             Event::Start(Tag::Link {
                 link_type,
                 dest_url,

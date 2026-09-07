@@ -13,6 +13,9 @@ pub struct ConversationMessage {
     pub answer_blocks: Vec<AnswerBlock>,
     pub reasoning: Option<String>,
     pub citations: Vec<serde_json::Value>,
+    pub tool_results: Vec<serde_json::Value>,
+    pub degrade_reasons: Vec<String>,
+    pub guarded: bool,
     pub created_at: String,
 }
 
@@ -36,6 +39,13 @@ impl ConversationMessage {
                 .iter()
                 .filter_map(|citation| serde_json::to_value(citation).ok())
                 .collect(),
+            tool_results: message
+                .tool_results
+                .iter()
+                .filter_map(|result| serde_json::to_value(result).ok())
+                .collect(),
+            degrade_reasons: Vec::new(),
+            guarded: false,
             created_at: message.created_at.clone(),
         })
     }
@@ -151,6 +161,9 @@ impl ConversationManager {
             answer_blocks: Vec::new(),
             reasoning: None,
             citations: Vec::new(),
+            tool_results: Vec::new(),
+            degrade_reasons: Vec::new(),
+            guarded: false,
             created_at: "now".to_string(),
         });
     }
@@ -162,6 +175,9 @@ impl ConversationManager {
         answer_blocks: Vec<AnswerBlock>,
         reasoning: Option<&str>,
         citations: Vec<serde_json::Value>,
+        tool_results: Vec<serde_json::Value>,
+        degrade_reasons: Vec<String>,
+        guarded: bool,
     ) {
         let sid = self.active.session_id.clone();
         self.active.messages.push(ConversationMessage {
@@ -173,6 +189,9 @@ impl ConversationManager {
             answer_blocks,
             reasoning: reasoning.map(|s| s.to_string()),
             citations,
+            tool_results,
+            degrade_reasons,
+            guarded,
             created_at: "now".to_string(),
         });
     }

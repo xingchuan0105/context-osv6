@@ -570,3 +570,117 @@ test.describe('浏览器聊天旅程（Gate C/D）', () => {
     expect(errors).toEqual([]);
   });
 });
+
+test.describe('Chat 呈现（E5.3 / G5.3）', () => {
+  test('空态 hero、composer 手柄与移动会话抽屉', async ({ page }) => {
+    const errors = collectPageErrors(page);
+    await gotoChat(page, FIXTURE_BASE);
+    await expect(page.getByTestId('chat-hero')).toBeVisible();
+    await expect(page.getByTestId('chat-empty')).toContainText('开始一轮新的对话');
+    const handle = page.getByTestId('composer-resize');
+    await expect(handle).toBeVisible();
+    await expect(handle).toHaveAttribute('role', 'slider');
+    await handle.focus();
+    await page.keyboard.press('ArrowUp');
+    await expect(handle).toHaveAttribute('aria-valuenow', '112');
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(page.getByTestId('chat-rail-toggle')).toBeVisible();
+    await expect(page.getByTestId('session-list')).toBeHidden();
+    await page.getByTestId('chat-rail-toggle').click();
+    await expect(page.getByTestId('session-list')).toBeVisible();
+    await expect(page.getByTestId('chat-rail-dismiss')).toBeVisible();
+    expect(errors).toEqual([]);
+  });
+
+  test('代码块复制、图片卡、工具卡、网页来源弹窗、degrade 条与耗时', async ({
+    page,
+    context,
+  }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    const errors = collectPageErrors(page);
+    await gotoChat(page, `${FIXTURE_BASE}/case/e53`);
+    await page.getByTestId('composer-input').fill('呈现对齐');
+    await page.getByTestId('send-button').click();
+    await expect(page.getByTestId('status-line')).toHaveText('已完成', { timeout: 15_000 });
+
+    const live = page.getByTestId('live-answer');
+    await expect(live.getByTestId('chat-code-block')).toBeVisible();
+    await expect(live.getByTestId('chat-code-lang')).toBeVisible();
+    await expect(live.getByTestId('chat-code-block')).toContainText('fn main() {}');
+    await live.getByTestId('chat-code-copy').click();
+    await expect.poll(async () => page.evaluate(() => navigator.clipboard.readText())).toContain(
+      'fn main() {}',
+    );
+    await expect(live.getByTestId('chat-figure')).toBeVisible();
+    await expect(page.getByTestId('tool-result-card').first()).toBeVisible();
+    await expect(page.getByTestId('tool-result-card').first()).toContainText('web_search');
+    await expect(
+      page.locator('[data-testid="chat-degrade-notice"]:not([hidden])').first(),
+    ).toBeVisible();
+    await expect(
+      page.locator('[data-testid="chat-degrade-notice"]:not([hidden])').first(),
+    ).toContainText('no_retrieval_evidence');
+    await expect(page.getByTestId('workspace-progress-elapsed')).toBeVisible();
+
+    await page.getByTestId('web-sources-button').first().click();
+    await expect(page.getByTestId('workspace-web-sources-modal')).toBeVisible();
+    await expect(page.getByTestId('workspace-web-sources-list')).toContainText('example.com/alloy');
+    await page.getByTestId('web-sources-close').click();
+    await expect(page.getByTestId('workspace-web-sources-modal')).toHaveCount(0);
+
+    await page.getByTestId('edit-user-message').click();
+    await expect(page.getByTestId('composer-input')).toHaveValue('呈现对齐');
+    expect(errors).toEqual([]);
+  });
+
+  test('滚动离开底部后出现回到底部', async ({ page }) => {
+    const errors = collectPageErrors(page);
+    await gotoChat(page, `${FIXTURE_BASE}/case/e53`);
+    await page.addStyleTag({
+      content: '[data-testid="chat-transcript"] { max-height: 120px !important; }',
+    });
+    await page.getByTestId('composer-input').fill('滚动');
+    await page.getByTestId('send-button').click();
+    await expect(page.getByTestId('status-line')).toHaveText('已完成', { timeout: 15_000 });
+
+    await page.getByTestId('chat-transcript').evaluate((el) => {
+      el.scrollTop = 0;
+      el.dispatchEvent(new Event('scroll'));
+    });
+    await expect(page.getByTestId('scroll-to-bottom')).toBeVisible();
+    await page.getByTestId('scroll-to-bottom').click();
+    await expect(page.getByTestId('scroll-to-bottom')).toBeHidden();
+    expect(errors).toEqual([]);
+  });
+
+  test('会话栏 empty / error+retry / loading', async ({ page }) => {
+    const errors = collectPageErrors(page, [/Failed to load resource.*500/]);
+    await gotoChat(page, `${FIXTURE_BASE}/case/sessions-empty`, '/chat', 'poc-test-token');
+    await expect(page.getByTestId('session-empty')).toBeVisible();
+
+    await gotoChat(page, `${FIXTURE_BASE}/case/sessions-error`, '/chat', 'poc-test-token');
+    await expect(page.getByTestId('session-list-error')).toBeVisible();
+    await expect(page.getByTestId('session-retry')).toBeVisible();
+    await page.getByTestId('session-retry').click();
+    await expect(page.getByTestId('session-list-error')).toBeVisible();
+
+    await gotoChat(page, `${FIXTURE_BASE}/case/sessions-slow`, '/chat', 'poc-test-token');
+    await expect(page.getByTestId('session-loading')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('session-empty')).toBeVisible({ timeout: 10_000 });
+    expect(errors).toEqual([]);
+  });
+
+  test('流式中会话项锁定', async ({ page }) => {
+    const errors = collectPageErrors(page);
+    await gotoChat(page, `${FIXTURE_BASE}/case/slow`, '/chat', 'poc-test-token');
+    await page.getByTestId('composer-input').fill('锁导航');
+    await page.getByTestId('send-button').click();
+    await expect(page.getByTestId('live-answer')).toContainText('慢速片段', { timeout: 15_000 });
+    await expect(page.getByTestId('session-item').first()).toBeDisabled();
+    await page.getByTestId('session-item').first().click({ force: true });
+    await expect(page).not.toHaveURL(/sess-900/);
+    await page.getByTestId('stop-button').click();
+    expect(errors).toEqual([]);
+  });
+});

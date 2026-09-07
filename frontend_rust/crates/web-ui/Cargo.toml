@@ -31,6 +31,8 @@ web-sys = { workspace = true, features = [
     "Element",
     "HtmlElement",
     "HtmlInputElement",
+    "HtmlTextAreaElement",
+    "HtmlButtonElement",
     "File",
     "FileList",
     "Blob",
@@ -39,6 +41,8 @@ web-sys = { workspace = true, features = [
     "EventTarget",
     "Navigator",
     "Clipboard",
+    "CssStyleDeclaration",
+    "PointerEvent",
 ] }
 
 [features]

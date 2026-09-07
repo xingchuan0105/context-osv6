@@ -7,6 +7,8 @@
 // - POST /case/markdown/api/v1/chat → 含标题/列表/恶意 HTML 的短答案（W2 Markdown）
 // - POST /case/citations/api/v1/chat → 含 [[1]] marker 与 citations 事件（W2 引用）
 // - POST /case/progress/api/v1/chat → 一条 activity + reasoning，短答案（W2 终态折叠）
+// - POST /case/e53/api/v1/chat → 代码块/图片/工具卡/网页来源/degrade（E5.3）
+// - GET  /case/sessions-empty|error|slow/api/v1/chat/sessions → 会话栏三态
 // - /case/files/*                → Session files 签名上传（W2.4）
 // - /case/files-busy/*           → 列表里有一条 processing，发送闸
 // - GET  /admin/state            → { aborted, requests, bytesWritten, lastChatBody }
@@ -526,6 +528,93 @@ function streamCitations(req, res) {
   res.end();
 }
 
+function streamE53(req, res) {
+  sseHead(res);
+  const body = [
+    '见代码。',
+    '',
+    '```rust',
+    'fn main() {}',
+    '```',
+    '',
+    '![示意图](https://ok.example/a.png)',
+  ].join('\n');
+  const citations = [
+    {
+      citation_id: 1,
+      doc_id: 'https://example.com/alloy',
+      doc_name: 'Alloy handbook',
+      preview: 'titanium grade 5',
+      score: 0.8,
+      source_locator: { url: 'https://example.com/alloy' },
+    },
+  ];
+  writePiece(
+    res,
+    `event: start\ndata: ${JSON.stringify({ request_id: 'req-e53-1', session_id: 'sess-e53-1' })}\n\n`,
+  );
+  writePiece(
+    res,
+    `event: answer_start\ndata: ${JSON.stringify({
+      request_id: 'req-e53-1',
+      session_id: 'sess-e53-1',
+      message_id: 71,
+      agent_type: 'search',
+    })}\n\n`,
+  );
+  writePiece(
+    res,
+    `event: citations\ndata: ${JSON.stringify({
+      request_id: 'req-e53-1',
+      message_id: 71,
+      citations,
+    })}\n\n`,
+  );
+  writePiece(
+    res,
+    `event: token\ndata: ${JSON.stringify({
+      request_id: 'req-e53-1',
+      message_id: 71,
+      content: body,
+    })}\n\n`,
+  );
+  writePiece(
+    res,
+    `event: done\ndata: ${JSON.stringify({
+      request_id: 'req-e53-1',
+      session_id: 'sess-e53-1',
+      message_id: 71,
+      payload: {
+        answer: body,
+        answer_blocks: [],
+        session_id: 'sess-e53-1',
+        agent_type: 'search',
+        sources: [],
+        citations,
+        trace: { mode: 'search' },
+        degrade_trace: [
+          { stage: 'retrieve', reason: 'no_retrieval_evidence', impact: 'quality' },
+        ],
+        guard_report: {
+          blocked: true,
+          input_results: [],
+          output_results: [],
+          degrade_trace: [],
+        },
+        tool_results: [
+          {
+            tool: 'web_search',
+            version: 'v1',
+            status: 'ok',
+            data: { query: 'alloy', hits: 2 },
+          },
+        ],
+      },
+    })}\n\n`,
+  );
+  res.end();
+}
+
 function streamSlow(req, res) {
   sseHead(res);
   let finished = false;
@@ -918,6 +1007,21 @@ const server = http.createServer((req, res) => {
       return;
     }
     if (pathname.endsWith('/api/v1/chat/sessions')) {
+      if (pathname.includes('/case/sessions-error/')) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'sessions_unavailable', message: 'fixture list failed' }));
+        return;
+      }
+      if (pathname.includes('/case/sessions-empty/')) {
+        jsonOk(res, { sessions: [] });
+        return;
+      }
+      if (pathname.includes('/case/sessions-slow/')) {
+        setTimeout(() => {
+          jsonOk(res, { sessions: [] });
+        }, 2500);
+        return;
+      }
       const authed = Boolean(req.headers.authorization);
       jsonOk(res, {
         sessions: authed
@@ -1458,6 +1562,10 @@ const server = http.createServer((req, res) => {
       }
       if (url.pathname === '/case/progress/api/v1/chat') {
         streamProgress(req, res);
+        return;
+      }
+      if (url.pathname === '/case/e53/api/v1/chat') {
+        streamE53(req, res);
         return;
       }
       if (url.pathname === '/case/files/api/v1/chat') {

@@ -45,6 +45,12 @@ pub struct ChatTurnState {
     pub activities: Vec<ActivityEntry>,
     /// 诊断/跟踪阶段（不污染主气泡）
     pub trace_stages: Vec<String>,
+    /// Done 载荷中的工具卡（观察数据，不进入主气泡）
+    pub tool_results: Vec<serde_json::Value>,
+    /// Done 载荷 degrade_trace 的 reason 文本
+    pub degrade_reasons: Vec<String>,
+    /// GuardReport.blocked
+    pub guarded: bool,
     /// 服务端最终 Done payload 权威收束事实
     pub done_payload: Option<serde_json::Value>,
 }
@@ -164,6 +170,20 @@ pub fn reduce_chat_event(state: &mut ChatTurnState, event: ChatEvent) -> bool {
                             .collect(),
                         &state.citations,
                     );
+                    state.tool_results = response
+                        .tool_results
+                        .into_iter()
+                        .filter_map(|result| serde_json::to_value(result).ok())
+                        .collect();
+                    state.degrade_reasons = response
+                        .degrade_trace
+                        .iter()
+                        .map(|item| item.reason.as_str().to_string())
+                        .collect();
+                    state.guarded = response
+                        .guard_report
+                        .as_ref()
+                        .is_some_and(|report| report.blocked);
                     state.status = TurnStatus::Done;
                 }
                 Err(error) => {

@@ -118,7 +118,7 @@ img {
     }
 }
 
-.chat-live-answer::after {
+.chat-live-answer.is-streaming::after {
     content: "";
     display: inline-block;
     width: 0.45rem;
@@ -147,7 +147,7 @@ img {
         transition-duration: 0.01ms !important;
     }
 
-    .chat-live-answer::after {
+    .chat-live-answer.is-streaming::after {
         animation: none;
         opacity: 1;
     }

@@ -34,6 +34,23 @@ fn renders_headings_lists_tables_code_and_emphasis() {
     assert!(html.contains("<code>code</code>"), "{html}");
     assert!(html.contains("const value = 1;"), "{html}");
     assert!(html.contains("<del>删除</del>"), "{html}");
+    assert!(html.contains("chat-code-block"), "{html}");
+    assert!(html.contains("chat-code-copy"), "{html}");
+}
+
+#[test]
+fn fenced_code_keeps_language_and_copy_control() {
+    let html = render_assistant_markdown("```rust\nfn main() {}\n```");
+    assert!(html.contains("chat-code-lang"), "{html}");
+    assert!(html.contains("rust"), "{html}");
+    assert!(html.contains("fn main() {}"), "{html}");
+}
+
+#[test]
+fn safe_markdown_image_becomes_figure() {
+    let html = render_assistant_markdown("![示意图](https://ok.example/a.png)");
+    assert!(html.contains("chat-figure"), "{html}");
+    assert!(html.contains("https://ok.example/a.png"), "{html}");
 }
 
 #[test]

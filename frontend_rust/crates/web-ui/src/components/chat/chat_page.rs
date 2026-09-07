@@ -35,9 +35,18 @@ pub fn ChatPage() -> impl IntoView {
     let history_error = RwSignal::new(None::<String>);
     let history_loading = RwSignal::new(false);
     let history_load_gen = RwSignal::new(0_u64);
+    let sessions_error = RwSignal::new(None::<String>);
+    let sessions_loading = RwSignal::new(false);
 
     let composer = RwSignal::new(String::new());
     let composer_ref = NodeRef::<leptos::html::Textarea>::new();
+    let transcript_ref = NodeRef::<leptos::html::Section>::new();
+    let composer_height = RwSignal::new(96_i32);
+    let resize_origin = RwSignal::new(None::<(i32, i32)>);
+    let elapsed_secs = RwSignal::new(0_u32);
+    let rail_open = RwSignal::new(false);
+    let web_sources_open = RwSignal::new(false);
+    let follow_bottom = RwSignal::new(true);
     let active_cite = RwSignal::new(None::<String>);
     provide_context(active_cite);
     let progress_expanded = RwSignal::new(false);
@@ -70,6 +79,31 @@ pub fn ChatPage() -> impl IntoView {
     Effect::new(move |_| {
         if model.with(|m| matches!(m.live_turn().status, TurnStatus::Streaming)) {
             progress_expanded.set(false);
+        }
+    });
+
+    Effect::new(move |_| {
+        let streaming = model.with(|m| matches!(m.live_turn().status, TurnStatus::Streaming));
+        if !streaming {
+            return;
+        }
+        elapsed_secs.set(0);
+        #[cfg(target_arch = "wasm32")]
+        {
+            if let Ok(handle) = set_interval_with_handle(
+                move || elapsed_secs.update(|n| *n = n.saturating_add(1)),
+                std::time::Duration::from_secs(1),
+            ) {
+                on_cleanup(move || handle.clear());
+            }
+        }
+    });
+
+    Effect::new(move |_| {
+        let _chars = model.with(|m| m.live_turn().answer_text.len());
+        let _n = model.with(|m| m.manager().active.messages.len());
+        if follow_bottom.get() {
+            scroll_transcript_to_bottom();
         }
     });
 
@@ -168,7 +202,11 @@ pub fn ChatPage() -> impl IntoView {
             has_byok.set(false);
             return;
         }
-        spawn_refresh_sessions(model, Some(token_value.clone()));
+        spawn_refresh_sessions(
+            model,
+            Some(token_value.clone()),
+            Some((sessions_error, sessions_loading)),
+        );
         spawn_check_byok(has_byok, token_value.clone());
         let session_id = route_session_id.get_untracked();
         let Some(session_id) = session_id else {
@@ -251,6 +289,7 @@ pub fn ChatPage() -> impl IntoView {
                 return;
             };
             composer.set(String::new());
+            follow_bottom.set(true);
             spawn_chat_stream(model, turn, current_token(), navigate.clone());
             focus_composer(composer_ref);
         }
@@ -265,6 +304,7 @@ pub fn ChatPage() -> impl IntoView {
                     return;
                 };
                 composer.set(String::new());
+                follow_bottom.set(true);
                 spawn_chat_stream(model, turn, current_token(), navigate.clone());
             }
         }
@@ -286,6 +326,7 @@ pub fn ChatPage() -> impl IntoView {
             let caps = capabilities_to_wire(&capabilities.get_untracked());
             let turn = model.write().retry_last_with(&caps);
             if let Some(turn) = turn {
+                follow_bottom.set(true);
                 spawn_chat_stream(model, turn, current_token(), navigate.clone());
             }
             focus_composer(composer_ref);
@@ -331,6 +372,9 @@ pub fn ChatPage() -> impl IntoView {
     let open_session = {
         let navigate = navigate.clone();
         move |session: ChatSession| {
+            if model.with(|m| m.is_streaming()) {
+                return;
+            }
             if session.scope_kind == contracts::workspaces::ConversationScopeKind::Workspace {
                 if let Some(ws_id) = &session.workspace_id {
                     navigate(
@@ -378,8 +422,37 @@ pub fn ChatPage() -> impl IntoView {
             <Show when=move || show_app_bar.get()>
                 <AppTopBar/>
             </Show>
-        <div class="chat-shell">
-            <aside class="chat-sessions" aria-label="会话列表" data-testid="session-list">
+        <div class=move || {
+            if rail_open.get() {
+                "chat-shell is-rail-open"
+            } else {
+                "chat-shell"
+            }
+        }>
+            <button
+                type="button"
+                class="chat-rail-toggle"
+                data-testid="chat-rail-toggle"
+                aria-expanded=move || rail_open.get()
+                aria-controls="chat-session-drawer"
+                on:click=move |_| rail_open.update(|open| *open = !*open)
+            >
+                {move || if rail_open.get() { "关闭会话" } else { "会话" }}
+            </button>
+            <button
+                type="button"
+                class="chat-rail-dismiss"
+                data-testid="chat-rail-dismiss"
+                aria-label="关闭会话列表"
+                hidden=move || !rail_open.get()
+                on:click=move |_| rail_open.set(false)
+            ></button>
+            <aside
+                class="chat-sessions"
+                id="chat-session-drawer"
+                aria-label="会话列表"
+                data-testid="session-list"
+            >
                 {move || {
                     route_workspace_id.get().map(|ws_id| {
                         view! {
@@ -444,6 +517,40 @@ pub fn ChatPage() -> impl IntoView {
                 <Show when=move || token.with(|value| value.is_empty())>
                     <p class="chat-sessions-hint" data-testid="session-auth-hint">"登录后即可加载会话"</p>
                 </Show>
+                <Show when=move || sessions_loading.get()>
+                    <p class="chat-sessions-hint" data-testid="session-loading">"正在加载会话列表…"</p>
+                </Show>
+                <Show when=move || {
+                    !token.with(|value| value.is_empty())
+                        && !sessions_loading.get()
+                        && sessions_error.get().is_none()
+                        && model.with(|m| m.manager().session_list.is_empty())
+                }>
+                    <p class="chat-sessions-hint" data-testid="session-empty">"还没有会话。"</p>
+                </Show>
+                {move || {
+                    sessions_error.get().map(|message| {
+                        view! {
+                            <div class="chat-session-error" data-testid="session-list-error">
+                                <p class="chat-error" role="alert">{message}</p>
+                                <button
+                                    type="button"
+                                    class="chat-action-button"
+                                    data-testid="session-retry"
+                                    on:click=move |_| {
+                                        spawn_refresh_sessions(
+                                            model,
+                                            current_token(),
+                                            Some((sessions_error, sessions_loading)),
+                                        );
+                                    }
+                                >
+                                    "重试"
+                                </button>
+                            </div>
+                        }
+                    })
+                }}
                 <ul class="chat-session-items">
                     <For
                         each=move || model.with(|m| m.manager().session_list.clone())
@@ -469,6 +576,7 @@ pub fn ChatPage() -> impl IntoView {
                                                 "false"
                                             }
                                         }
+                                        disabled=move || is_streaming()
                                         on:click=move |_| open_session(item_session.clone())
                                     >
                                         {session_label(&session)}
@@ -488,7 +596,18 @@ pub fn ChatPage() -> impl IntoView {
                     })
                 }}
             </aside>
-            <main class="chat-canvas" aria-label="对话画布" data-testid="chat-canvas">
+            <main
+                class=move || {
+                    if model.with(|m| m.manager().active.messages.is_empty()) && !history_loading.get()
+                    {
+                        "chat-canvas is-hero"
+                    } else {
+                        "chat-canvas"
+                    }
+                }
+                aria-label="对话画布"
+                data-testid="chat-canvas"
+            >
                 <header class="chat-header">
                     <h1 class="chat-title">"Context-OS 对话"</h1>
                     <ModelRoleBadge
@@ -497,11 +616,22 @@ pub fn ChatPage() -> impl IntoView {
                     />
                 </header>
 
-                <section class="chat-transcript" aria-label="消息列表" data-testid="chat-transcript">
+                <section
+                    class="chat-transcript"
+                    aria-label="消息列表"
+                    data-testid="chat-transcript"
+                    node_ref=transcript_ref
+                    on:scroll=move |_| on_transcript_scroll(transcript_ref, follow_bottom)
+                >
                     <Show when=move || {
                         model.with(|m| m.manager().active.messages.is_empty()) && !history_loading.get()
                     }>
-                        <p class="chat-empty" data-testid="chat-empty">"开始一轮新的对话。"</p>
+                        <div class="chat-hero" data-testid="chat-hero">
+                            <p class="chat-hero-title">"Context-OS"</p>
+                            <p class="chat-hero-hint" data-testid="chat-empty">
+                                "开始一轮新的对话。可在下方选择知识库或网络搜索。"
+                            </p>
+                        </div>
                     </Show>
                     <Show when=move || history_loading.get()>
                         <p class="chat-empty" data-testid="history-loading">"正在加载会话…"</p>
@@ -509,7 +639,7 @@ pub fn ChatPage() -> impl IntoView {
                     <For
                         each=move || model.with(|m| m.manager().active.messages.clone())
                         key=|message| message.id.clone()
-                        children=message_view
+                        children=move |message| message_view(message, composer, web_sources_open)
                     />
 
                     <Show when=move || {
@@ -517,7 +647,15 @@ pub fn ChatPage() -> impl IntoView {
                     }>
                         <article class="chat-message chat-live" data-role="assistant">
                             <div
-                                class="chat-md chat-live-answer"
+                                class=move || {
+                                    if model.with(|m| {
+                                        matches!(m.live_turn().status, TurnStatus::Streaming)
+                                    }) {
+                                        "chat-md chat-live-answer is-streaming"
+                                    } else {
+                                        "chat-md chat-live-answer"
+                                    }
+                                }
                                 aria-live="polite"
                                 data-testid="live-answer"
                                 data-source-chars=move || {
@@ -526,10 +664,22 @@ pub fn ChatPage() -> impl IntoView {
                                         .to_string()
                                 }
                                 inner_html=move || live_rendered(&model).html
-                                on:click=move |ev| on_citation_chip_click(ev, active_cite)
+                                on:click=move |ev| on_markdown_click(ev, active_cite)
                             ></div>
                         </article>
                     </Show>
+
+                    {move || {
+                        let turn = model.with(|m| m.live_turn().clone());
+                        notice_view(turn.degrade_reasons, turn.guarded)
+                    }}
+                    {move || tool_cards_view(model.with(|m| m.live_turn().tool_results.clone()))}
+                    {move || {
+                        web_sources_button(
+                            model.with(|m| m.live_turn().citations.clone()),
+                            web_sources_open,
+                        )
+                    }}
 
                     {move || {
                         match model.with(|m| m.live_turn().status.clone()) {
@@ -677,9 +827,20 @@ pub fn ChatPage() -> impl IntoView {
                         </section>
                     </Show>
 
-                    <p class="chat-status" aria-live="polite" data-testid="status-line">
-                        {move || model.with(status_line)}
-                    </p>
+                    <div class="chat-status-row">
+                        <p class="chat-status" aria-live="polite" data-testid="status-line">
+                            {move || model.with(status_line)}
+                        </p>
+                        <span
+                            class="chat-elapsed"
+                            data-testid="workspace-progress-elapsed"
+                            hidden=move || {
+                                model.with(|m| matches!(m.live_turn().status, TurnStatus::Idle))
+                            }
+                        >
+                            {move || format_elapsed(elapsed_secs.get())}
+                        </span>
+                    </div>
                 </section>
 
                 <SessionFileTray
@@ -701,10 +862,35 @@ pub fn ChatPage() -> impl IntoView {
                         node_ref=composer_ref
                         rows=3
                         prop:value=move || composer.get()
-                        on:input=move |ev| composer.set(event_target_value(&ev))
+                        on:input=move |ev| {
+                            composer.set(event_target_value(&ev));
+                            autosize_composer(composer_ref, composer_height);
+                        }
                         on:keydown=send_keydown
                         placeholder="输入消息，Enter 发送（Shift+Enter 换行）"
                     ></textarea>
+                    <div
+                        class="chat-composer-resize"
+                        role="slider"
+                        tabindex="0"
+                        aria-label="调整输入框高度"
+                        aria-orientation="vertical"
+                        aria-valuemin="72"
+                        aria-valuemax="320"
+                        aria-valuenow=move || composer_height.get().to_string()
+                        data-testid="composer-resize"
+                        on:pointerdown=move |ev| {
+                            start_composer_resize(ev, composer_ref, composer_height, resize_origin)
+                        }
+                        on:pointermove=move |ev| {
+                            continue_composer_resize(ev, composer_ref, composer_height, resize_origin)
+                        }
+                        on:pointerup=move |_| resize_origin.set(None)
+                        on:pointercancel=move |_| resize_origin.set(None)
+                        on:keydown=move |ev| {
+                            nudge_composer_height(ev, composer_ref, composer_height)
+                        }
+                    ></div>
                     <div class="chat-composer-actions">
                         <button
                             type="submit"
@@ -731,6 +917,39 @@ pub fn ChatPage() -> impl IntoView {
                         </button>
                     </div>
                 </form>
+                <button
+                    type="button"
+                    class="chat-scroll-bottom"
+                    data-testid="scroll-to-bottom"
+                    hidden=move || follow_bottom.get()
+                    on:click=move |_| {
+                        follow_bottom.set(true);
+                        scroll_transcript_to_bottom();
+                    }
+                >
+                    "回到底部"
+                </button>
+                <Show when=move || web_sources_open.get()>
+                    {move || {
+                        let sources = collect_web_sources(
+                            &model.with(|m| {
+                                m.live_turn()
+                                    .citations
+                                    .clone()
+                                    .into_iter()
+                                    .chain(
+                                        m.manager()
+                                            .active
+                                            .messages
+                                            .iter()
+                                            .flat_map(|message| message.citations.clone()),
+                                    )
+                                    .collect::<Vec<_>>()
+                            }),
+                        );
+                        web_sources_dialog(sources, web_sources_open)
+                    }}
+                </Show>
             </main>
         </div>
         </div>
@@ -756,7 +975,11 @@ fn session_label(session: &ChatSession) -> String {
     }
 }
 
-fn message_view(message: ConversationMessage) -> impl IntoView {
+fn message_view(
+    message: ConversationMessage,
+    composer: RwSignal<String>,
+    web_sources_open: RwSignal<bool>,
+) -> impl IntoView {
     let active_cite = expect_context::<RwSignal<Option<String>>>();
     let role = match message.role {
         MessageRole::User => "user",
@@ -774,6 +997,8 @@ fn message_view(message: ConversationMessage) -> impl IntoView {
     };
     let html = rendered.as_ref().map(|value| value.html.clone());
     let cards = rendered.map(|value| value.cards).unwrap_or_default();
+    let edit_text = message.content.clone();
+    let is_user = message.role == MessageRole::User;
     view! {
         <article class="chat-message" data-role=role data-testid="chat-message">
             <div class="chat-message-role">{role_label}</div>
@@ -782,7 +1007,7 @@ fn message_view(message: ConversationMessage) -> impl IntoView {
                     <div
                         class="chat-md chat-message-content"
                         inner_html=html
-                        on:click=move |ev| on_citation_chip_click(ev, active_cite)
+                        on:click=move |ev| on_markdown_click(ev, active_cite)
                     ></div>
                 }
                 .into_any()
@@ -792,6 +1017,21 @@ fn message_view(message: ConversationMessage) -> impl IntoView {
                 }
                 .into_any()
             }}
+            {is_user.then(|| {
+                view! {
+                    <button
+                        type="button"
+                        class="chat-action-button"
+                        data-testid="edit-user-message"
+                        on:click=move |_| composer.set(edit_text.clone())
+                    >
+                        "编辑"
+                    </button>
+                }
+            })}
+            {notice_view(message.degrade_reasons.clone(), message.guarded)}
+            {tool_cards_view(message.tool_results.clone())}
+            {web_sources_button(message.citations.clone(), web_sources_open)}
             {reasoning.map(|text| view! {
                 <details class="chat-message-reasoning">
                     <summary>"推理摘要"</summary>
@@ -877,12 +1117,316 @@ fn source_card_view(card: SourceCard, active_cite: RwSignal<Option<String>>) -> 
     }
 }
 
+fn on_markdown_click(ev: leptos::ev::MouseEvent, active_cite: RwSignal<Option<String>>) {
+    if copy_code_from_click(&ev) {
+        return;
+    }
+    on_citation_chip_click(ev, active_cite);
+}
+
 fn on_citation_chip_click(ev: leptos::ev::MouseEvent, active_cite: RwSignal<Option<String>>) {
     let Some(key) = citation_key_from_click(&ev) else {
         return;
     };
     active_cite.set(Some(key.clone()));
     scroll_cite_card(&key);
+}
+
+fn notice_view(reasons: Vec<String>, guarded: bool) -> impl IntoView {
+    let body = if guarded && !reasons.is_empty() {
+        format!(
+            "本轮输出经过内容护栏处理。检索观察：{}",
+            reasons.join(" · ")
+        )
+    } else if guarded {
+        "本轮输出经过内容护栏处理。".to_string()
+    } else if !reasons.is_empty() {
+        format!("检索观察：{}", reasons.join(" · "))
+    } else {
+        String::new()
+    };
+    let show = !body.is_empty();
+    view! {
+        <p class="chat-notice" data-testid="chat-degrade-notice" role="status" hidden=!show>
+            {body}
+        </p>
+    }
+}
+
+fn tool_cards_view(results: Vec<serde_json::Value>) -> impl IntoView {
+    let cards: Vec<_> = results
+        .iter()
+        .map(|result| {
+            (
+                result
+                    .get("tool")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or("tool")
+                    .to_string(),
+                result
+                    .get("status")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or("ok")
+                    .to_string(),
+                result
+                    .get("data")
+                    .map(|data| {
+                        serde_json::to_string_pretty(data).unwrap_or_else(|_| data.to_string())
+                    })
+                    .unwrap_or_default(),
+            )
+        })
+        .collect();
+    let empty = cards.is_empty();
+    view! {
+        <ul class="chat-tool-list" data-testid="tool-result-list" hidden=empty>
+            {cards
+                .into_iter()
+                .map(|(tool, status, summary)| {
+                    view! {
+                        <li class="chat-tool-card" data-testid="tool-result-card">
+                            <header>
+                                <strong>{tool}</strong>
+                                <span>{status}</span>
+                            </header>
+                            <pre>{summary}</pre>
+                        </li>
+                    }
+                })
+                .collect_view()}
+        </ul>
+    }
+}
+
+fn collect_web_sources(citations: &[serde_json::Value]) -> Vec<(String, String, String)> {
+    let mut seen = std::collections::BTreeSet::new();
+    citations
+        .iter()
+        .filter_map(|value| {
+            let view = CitationView::from_value(value);
+            let url = view.url.clone()?;
+            if !seen.insert(url.clone()) {
+                return None;
+            }
+            Some((
+                if view.doc_name.is_empty() {
+                    url.clone()
+                } else {
+                    view.doc_name
+                },
+                url,
+                view.preview.unwrap_or_default(),
+            ))
+        })
+        .collect()
+}
+
+fn web_sources_button(
+    citations: Vec<serde_json::Value>,
+    open: RwSignal<bool>,
+) -> impl IntoView {
+    let count = collect_web_sources(&citations).len();
+    (count > 0).then(|| {
+        view! {
+            <button
+                type="button"
+                class="chat-action-button"
+                data-testid="web-sources-button"
+                on:click=move |_| open.set(true)
+            >
+                {format!("网页来源 {count}")}
+            </button>
+        }
+    })
+}
+
+fn web_sources_dialog(
+    sources: Vec<(String, String, String)>,
+    open: RwSignal<bool>,
+) -> impl IntoView {
+    view! {
+        <div class="chat-web-sources-backdrop">
+            <div
+                class="chat-web-sources-dialog"
+                role="dialog"
+                aria-label="网页来源"
+                data-testid="workspace-web-sources-modal"
+            >
+                <header>
+                    <h2>{format!("网页来源 {}", sources.len())}</h2>
+                    <button
+                        type="button"
+                        class="chat-action-button"
+                        data-testid="web-sources-close"
+                        on:click=move |_| open.set(false)
+                    >
+                        "关闭"
+                    </button>
+                </header>
+                <ul data-testid="workspace-web-sources-list">
+                    {sources
+                        .into_iter()
+                        .map(|(title, url, snippet)| {
+                            let snippet_empty = snippet.is_empty();
+                            view! {
+                                <li class="chat-web-source">
+                                    <a href=url.clone() rel="noopener noreferrer" target="_blank">
+                                        {title}
+                                    </a>
+                                    <p>{url}</p>
+                                    <p hidden=snippet_empty>{snippet}</p>
+                                </li>
+                            }
+                        })
+                        .collect_view()}
+                </ul>
+            </div>
+        </div>
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn copy_code_from_click(ev: &leptos::ev::MouseEvent) -> bool {
+    use wasm_bindgen::JsCast;
+    let Some(target) = ev.target().and_then(|t| t.dyn_into::<web_sys::Element>().ok()) else {
+        return false;
+    };
+    let Ok(Some(button)) = target.closest("[data-testid=\"chat-code-copy\"]") else {
+        return false;
+    };
+    let Some(block) = button.closest(".chat-code-block").ok().flatten() else {
+        return false;
+    };
+    let Ok(Some(code)) = block.query_selector("code") else {
+        return false;
+    };
+    let text = code.text_content().unwrap_or_default();
+    if let Some(window) = web_sys::window() {
+        let _ = window.navigator().clipboard().write_text(&text);
+    }
+    true
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn copy_code_from_click(_ev: &leptos::ev::MouseEvent) -> bool {
+    false
+}
+
+fn format_elapsed(total_seconds: u32) -> String {
+    if total_seconds < 60 {
+        format!("{total_seconds}s")
+    } else {
+        format!("{}m {}s", total_seconds / 60, total_seconds % 60)
+    }
+}
+
+fn apply_composer_height(composer_ref: NodeRef<leptos::html::Textarea>, px: i32) {
+    #[cfg(target_arch = "wasm32")]
+    {
+        if let Some(area) = composer_ref.get() {
+            let html: &web_sys::HtmlElement = &area;
+            let _ = html.style().set_property("height", &format!("{px}px"));
+        }
+    }
+    let _ = (composer_ref, px);
+}
+
+fn autosize_composer(
+    composer_ref: NodeRef<leptos::html::Textarea>,
+    composer_height: RwSignal<i32>,
+) {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let Some(area) = composer_ref.get() else {
+            return;
+        };
+        let html: &web_sys::HtmlElement = &area;
+        let _ = html.style().set_property("height", "auto");
+        let height = html.scroll_height().clamp(72, 240);
+        composer_height.set(height);
+        let _ = html.style().set_property("height", &format!("{height}px"));
+    }
+    let _ = (composer_ref, composer_height);
+}
+
+fn start_composer_resize(
+    ev: leptos::ev::PointerEvent,
+    composer_ref: NodeRef<leptos::html::Textarea>,
+    composer_height: RwSignal<i32>,
+    resize_origin: RwSignal<Option<(i32, i32)>>,
+) {
+    ev.prevent_default();
+    let start_h = composer_height.get_untracked();
+    resize_origin.set(Some((ev.client_y() as i32, start_h)));
+    #[cfg(target_arch = "wasm32")]
+    {
+        use wasm_bindgen::JsCast;
+        if let Some(target) = ev.current_target() {
+            if let Ok(el) = target.dyn_into::<web_sys::Element>() {
+                let _ = el.set_pointer_capture(ev.pointer_id());
+            }
+        }
+        apply_composer_height(composer_ref, start_h);
+    }
+    let _ = composer_ref;
+}
+
+fn continue_composer_resize(
+    ev: leptos::ev::PointerEvent,
+    composer_ref: NodeRef<leptos::html::Textarea>,
+    composer_height: RwSignal<i32>,
+    resize_origin: RwSignal<Option<(i32, i32)>>,
+) {
+    let Some((start_y, start_h)) = resize_origin.get() else {
+        return;
+    };
+    let next = (start_h + (start_y - ev.client_y() as i32)).clamp(72, 320);
+    composer_height.set(next);
+    apply_composer_height(composer_ref, next);
+}
+
+fn nudge_composer_height(
+    ev: leptos::ev::KeyboardEvent,
+    composer_ref: NodeRef<leptos::html::Textarea>,
+    composer_height: RwSignal<i32>,
+) {
+    let delta = match ev.key().as_str() {
+        "ArrowUp" => 16,
+        "ArrowDown" => -16,
+        _ => return,
+    };
+    ev.prevent_default();
+    let next = (composer_height.get_untracked() + delta).clamp(72, 320);
+    composer_height.set(next);
+    apply_composer_height(composer_ref, next);
+}
+
+fn on_transcript_scroll(
+    transcript_ref: NodeRef<leptos::html::Section>,
+    follow_bottom: RwSignal<bool>,
+) {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let Some(node) = transcript_ref.get() else {
+            return;
+        };
+        let el: &web_sys::HtmlElement = &node;
+        let remaining = el.scroll_height() - el.scroll_top() - el.client_height();
+        follow_bottom.set(remaining < 64);
+    }
+    let _ = (transcript_ref, follow_bottom);
+}
+
+fn scroll_transcript_to_bottom() {
+    #[cfg(target_arch = "wasm32")]
+    {
+        if let Some(document) = web_sys::window().and_then(|w| w.document()) {
+            if let Ok(Some(scroller)) = document.query_selector("[data-testid=\"chat-transcript\"]")
+            {
+                scroller.set_scroll_top(scroller.scroll_height());
+            }
+        }
+    }
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -957,18 +1501,37 @@ fn spawn_chat_stream(
                 });
             }
         }
-        spawn_refresh_sessions(model, token);
+        spawn_refresh_sessions(model, token, None);
     });
 }
 
-fn spawn_refresh_sessions(model: RwSignal<ChatCanvasModel>, token: Option<String>) {
+fn spawn_refresh_sessions(
+    model: RwSignal<ChatCanvasModel>,
+    token: Option<String>,
+    report: Option<(RwSignal<Option<String>>, RwSignal<bool>)>,
+) {
     let Some(token) = token.filter(|value| !value.is_empty()) else {
         return;
     };
+    if let Some((_, loading)) = report {
+        loading.set(true);
+    }
     leptos::task::spawn_local(async move {
         let client = BrowserRestClient::new(&poc_api_base(), Some(token));
-        if let Ok(list) = client.list_sessions().await {
-            model.update(|m| m.replace_session_list(list.sessions));
+        match client.list_sessions().await {
+            Ok(list) => {
+                model.update(|m| m.replace_session_list(list.sessions));
+                if let Some((error, loading)) = report {
+                    error.set(None);
+                    loading.set(false);
+                }
+            }
+            Err(err) => {
+                if let Some((error, loading)) = report {
+                    error.set(Some(format!("加载会话失败：{err}")));
+                    loading.set(false);
+                }
+            }
         }
     });
 }
