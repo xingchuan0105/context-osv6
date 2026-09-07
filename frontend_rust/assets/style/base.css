@@ -1,0 +1,154 @@
+/* Reset, document base, focus ring, motion, utilities. */
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+html {
+    color-scheme: light;
+}
+
+html[data-theme="dark"] {
+    color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+    html:not([data-theme="light"]) {
+        color-scheme: dark;
+    }
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--cos-bg);
+    color: var(--cos-text);
+    font-family: var(--font-body);
+    font-size: var(--font-size-body);
+    line-height: var(--line-height-body);
+    font-weight: var(--font-weight-regular);
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+    color: inherit;
+    text-decoration: none;
+}
+
+button,
+input,
+textarea,
+select {
+    font: inherit;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+    accent-color: var(--cos-accent);
+}
+
+:focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+}
+
+pre,
+code,
+kbd,
+samp {
+    font-family: var(--font-mono);
+}
+
+pre {
+    overflow-x: auto;
+}
+
+img {
+    max-width: 100%;
+    height: auto;
+}
+
+.is-hidden {
+    display: none;
+}
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+@keyframes cos-stream-caret {
+    0%,
+    40% {
+        opacity: 1;
+    }
+    60%,
+    100% {
+        opacity: 0;
+    }
+}
+
+@keyframes cos-fade-in {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes cos-pulse {
+    0%,
+    100% {
+        opacity: 0.45;
+    }
+    50% {
+        opacity: 1;
+    }
+}
+
+.chat-live-answer::after {
+    content: "";
+    display: inline-block;
+    width: 0.45rem;
+    height: 1em;
+    margin-left: 0.15rem;
+    background: var(--cos-accent);
+    animation: cos-stream-caret 1s step-end infinite;
+    vertical-align: text-bottom;
+}
+
+.chat-empty {
+    animation: cos-fade-in var(--duration-slow) var(--ease-standard);
+}
+
+.dashboard-loading,
+[data-testid="history-loading"] {
+    animation: cos-pulse 1.2s var(--ease-standard) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+
+    .chat-live-answer::after {
+        animation: none;
+        opacity: 1;
+    }
+}

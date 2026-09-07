@@ -1,0 +1,332 @@
+/* Button / input / link / card / table state matrix.
+   Domain sheets own layout; this file adds hover / focus / active / disabled. */
+
+.chat-new-chat {
+    transition: background-color var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard);
+}
+
+.chat-session-item {
+    transition: background-color var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard);
+}
+
+.chat-action-button {
+    transition: background-color var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard);
+}
+
+.chat-cite-chip {
+    transition: background-color var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard);
+}
+
+.chat-file-attach {
+    transition: background-color var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard), opacity var(--duration-fast) var(--ease-standard);
+}
+
+.chat-file-action {
+    transition: background-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard);
+}
+
+.chat-scope-chip {
+    transition: background-color var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard);
+}
+
+.chat-progress-toggle {
+    transition: background-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard);
+}
+
+.chat-workspace-back {
+    transition: color var(--duration-fast) var(--ease-standard);
+}
+
+.auth-submit-btn {
+    transition: background-color var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard);
+}
+
+.auth-link {
+    transition: color var(--duration-fast) var(--ease-standard);
+}
+
+.settings-nav-item {
+    transition: background-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard);
+}
+
+.settings-logout-btn {
+    transition: background-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard);
+}
+
+.settings-back-link {
+    transition: color var(--duration-fast) var(--ease-standard);
+}
+
+.settings-btn-save {
+    transition: background-color var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard);
+}
+
+.settings-btn-revoke {
+    transition: background-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard);
+}
+
+.dashboard-create-btn {
+    transition: background-color var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard);
+}
+
+.dashboard-workspace-card {
+    transition: border-color var(--duration-fast) var(--ease-standard), background-color var(--duration-fast) var(--ease-standard);
+}
+
+.dashboard-chat-link {
+    transition: color var(--duration-fast) var(--ease-standard);
+}
+
+.dashboard-header-btn {
+    transition: background-color var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard);
+}
+
+.dashboard-btn-confirm {
+    transition: background-color var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard);
+}
+
+.dashboard-btn-cancel {
+    transition: background-color var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard);
+}
+
+.workbench-back {
+    transition: color var(--duration-fast) var(--ease-standard);
+}
+
+.rail-tab {
+    transition: background-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard);
+}
+
+.admin-nav-item {
+    transition: background-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard);
+}
+
+.admin-panel-btn {
+    transition: background-color var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard);
+}
+
+.pub-btn {
+    transition: background-color var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard);
+}
+
+.topup-pack-btn {
+    transition: background-color var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard);
+}
+
+input,
+textarea,
+select {
+    transition: border-color var(--duration-fast) var(--ease-standard), box-shadow var(--duration-fast) var(--ease-standard), background-color var(--duration-fast) var(--ease-standard);
+}
+
+.chat-new-chat:hover:not(:disabled),
+.chat-session-item:hover,
+.chat-action-button:hover:not(:disabled),
+.chat-file-attach:hover:not(:disabled),
+.chat-scope-chip:hover:not(:disabled),
+.settings-nav-item:hover,
+.dashboard-header-btn:hover,
+.dashboard-btn-cancel:hover,
+.rail-tab:hover,
+.admin-nav-item:hover,
+.admin-panel-btn:hover:not(:disabled),
+.topup-pack-btn:hover,
+.topup-provider-btn:hover {
+    border-color: var(--cos-border-strong);
+    background: var(--cos-surface-hover);
+}
+
+.chat-new-chat:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus-ring);
+}
+
+.chat-session-item:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus-ring);
+}
+
+.chat-action-button:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus-ring);
+}
+
+.chat-cite-chip:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus-ring);
+}
+
+.chat-file-attach:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus-ring);
+}
+
+.chat-scope-chip:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus-ring);
+}
+
+.chat-progress-toggle:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus-ring);
+}
+
+.chat-workspace-back:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus-ring);
+}
+
+.auth-submit-btn:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus-ring);
+}
+
+.auth-link:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus-ring);
+}
+
+.settings-nav-item:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus-ring);
+}
+
+.settings-logout-btn:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus-ring);
+}
+
+.settings-back-link:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus-ring);
+}
+
+.settings-btn-save:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus-ring);
+}
+
+.dashboard-create-btn:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus-ring);
+}
+
+.dashboard-workspace-card:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus-ring);
+}
+
+.dashboard-chat-link:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus-ring);
+}
+
+.dashboard-header-btn:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus-ring);
+}
+
+.dashboard-btn-confirm:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus-ring);
+}
+
+.workbench-back:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus-ring);
+}
+
+.rail-tab:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus-ring);
+}
+
+.admin-nav-item:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus-ring);
+}
+
+.admin-panel-btn:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus-ring);
+}
+
+.pub-btn:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus-ring);
+}
+
+.topup-pack-btn:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus-ring);
+}
+
+input:focus,
+input:focus-visible,
+textarea:focus,
+textarea:focus-visible,
+select:focus,
+select:focus-visible {
+    outline: none;
+    border-color: var(--cos-accent);
+    box-shadow: var(--shadow-focus-ring);
+}
+
+.chat-new-chat:active:not(:disabled),
+.chat-action-button:active:not(:disabled),
+.auth-submit-btn:active:not(:disabled),
+.settings-logout-btn:active:not(:disabled),
+.settings-btn-save:active:not(:disabled),
+.dashboard-create-btn:active:not(:disabled),
+.dashboard-btn-confirm:active:not(:disabled),
+.admin-panel-btn:active:not(:disabled),
+.pub-btn:active:not(:disabled) {
+    transform: translateY(1px);
+}
+
+.chat-workspace-back:hover,
+.auth-link:hover,
+.settings-back-link:hover,
+.dashboard-chat-link:hover,
+.workbench-back:hover,
+.workbench-analyze-link:hover,
+.admin-back-link:hover,
+.admin-table-link:hover,
+.pub-card-link:hover,
+.legal-toc-item a:hover {
+    color: var(--cos-accent);
+    text-decoration: underline;
+}
+
+.pricing-plan-card:hover,
+.settings-usage-card:hover,
+.pub-card:hover,
+.help-card:hover,
+.admin-link-card:hover {
+    border-color: var(--cos-border-strong);
+}
+
+.admin-table tbody tr:hover,
+.pub-table tbody tr:hover {
+    background: var(--cos-surface-hover);
+}
+
+/* Last in the product cascade so it beats domain `display` rules. */
+.is-hidden,
+[hidden] {
+    display: none;
+}
+
+button:disabled,
+.chat-new-chat:disabled,
+.chat-cite-chip:disabled,
+.chat-file-attach:disabled,
+.chat-scope-chip:disabled,
+.auth-submit-btn:disabled,
+.dashboard-btn-confirm:disabled,
+.admin-panel-btn:disabled,
+.admin-pager-btn:disabled,
+.pub-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}

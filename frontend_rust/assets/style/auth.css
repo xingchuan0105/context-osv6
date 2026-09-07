@@ -1,0 +1,126 @@
+/* Auth pages */
+
+/* E3.1 Auth 样式 */
+.auth-page-container {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem 1rem;
+    background: var(--cos-bg);
+}
+
+.auth-card {
+    width: 100%;
+    max-width: 400px;
+    background: var(--cos-surface);
+    border: 1px solid var(--cos-border);
+    border-radius: var(--cos-radius-md);
+    padding: 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.auth-header {
+    text-align: center;
+}
+
+.auth-title {
+    font-size: 1.25rem;
+    font-weight: 400;
+    margin: 0 0 0.5rem;
+    color: var(--cos-text);
+}
+
+.auth-subtitle {
+    font-size: 0.875rem;
+    color: var(--cos-text-secondary);
+    margin: 0;
+}
+
+.auth-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.auth-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+}
+
+.auth-field label {
+    font-size: 0.8125rem;
+    color: var(--cos-text-secondary);
+}
+
+.auth-field input {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--cos-border);
+    border-radius: var(--cos-radius-sm);
+    background: var(--cos-surface);
+    color: var(--cos-text);
+    font: inherit;
+    font-size: 0.875rem;
+}
+
+.auth-field-checkbox label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.8125rem;
+    color: var(--cos-text-secondary);
+}
+
+.auth-submit-btn {
+    padding: 0.625rem 1rem;
+    border: 1px solid var(--cos-border);
+    border-radius: var(--cos-radius-sm);
+    background: var(--cos-cta-bg);
+    color: var(--cos-cta-fg);
+    font-size: 0.875rem;
+    cursor: pointer;
+    margin-top: 0.5rem;
+}
+
+.auth-submit-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.auth-error {
+    color: var(--cos-error);
+    font-size: 0.8125rem;
+    margin: 0;
+}
+
+.auth-success-message {
+    color: var(--cos-primary);
+    font-size: 0.875rem;
+    text-align: center;
+    padding: 1rem 0;
+}
+
+.auth-footer-links {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    font-size: 0.8125rem;
+}
+
+.auth-link {
+    color: var(--cos-primary);
+    text-decoration: none;
+}
+
+.auth-link:hover {
+    text-decoration: underline;
+}
+
+.auth-divider {
+    color: var(--cos-text-subtle);
+}
+

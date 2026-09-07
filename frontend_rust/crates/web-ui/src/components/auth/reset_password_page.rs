@@ -250,36 +250,34 @@ pub fn ResetPasswordConfirmPage() -> impl IntoView {
                     <p class="auth-subtitle">"请输入你的新登录密码"</p>
                 </header>
                 <form class="auth-form" on:submit=on_submit>
-                    <div
-                        class="auth-field"
-                        style=move || if success.get() { "display: none;" } else { "" }
-                    >
-                        <label for="new-password">"新密码 (至少 8 位)"</label>
-                        <input
-                            id="new-password"
-                            type="password"
-                            data-testid="new-password"
-                            placeholder="••••••••"
-                            prop:value=move || new_password.get()
-                            on:input=move |ev| new_password.set(event_target_value(&ev))
-                            required
-                        />
-                    </div>
-                    <div
-                        class="auth-field"
-                        style=move || if success.get() { "display: none;" } else { "" }
-                    >
-                        <label for="confirm-new-password">"确认新密码"</label>
-                        <input
-                            id="confirm-new-password"
-                            type="password"
-                            data-testid="confirm-new-password"
-                            placeholder="••••••••"
-                            prop:value=move || confirm_password.get()
-                            on:input=move |ev| confirm_password.set(event_target_value(&ev))
-                            required
-                        />
-                    </div>
+                    <Show when=move || !success.get()>
+                        <div class="auth-field">
+                            <label for="new-password">"新密码 (至少 8 位)"</label>
+                            <input
+                                id="new-password"
+                                type="password"
+                                data-testid="new-password"
+                                placeholder="••••••••"
+                                prop:value=move || new_password.get()
+                                on:input=move |ev| new_password.set(event_target_value(&ev))
+                                required
+                            />
+                        </div>
+                    </Show>
+                    <Show when=move || !success.get()>
+                        <div class="auth-field">
+                            <label for="confirm-new-password">"确认新密码"</label>
+                            <input
+                                id="confirm-new-password"
+                                type="password"
+                                data-testid="confirm-new-password"
+                                placeholder="••••••••"
+                                prop:value=move || confirm_password.get()
+                                on:input=move |ev| confirm_password.set(event_target_value(&ev))
+                                required
+                            />
+                        </div>
+                    </Show>
                     {move || {
                         error.get().map(|msg| {
                             view! {

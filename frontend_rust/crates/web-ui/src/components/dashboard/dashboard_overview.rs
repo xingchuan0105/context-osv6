@@ -106,7 +106,7 @@ pub fn DashboardOverviewPage() -> impl IntoView {
 
             <div
                 class="dashboard-modal-backdrop"
-                style=move || if show_create.get() { "" } else { "display: none;" }
+                hidden=move || !show_create.get()
             >
                 <div class="dashboard-modal" role="dialog" aria-label="新建工作区">
                     <header class="dashboard-modal-header">

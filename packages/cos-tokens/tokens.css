@@ -259,6 +259,17 @@
   --cos-cta-bg: hsl(var(--cta-background));
   --cos-cta-fg: hsl(var(--cta-foreground));
   --cos-cta-hover: hsl(var(--cta-background-hover));
+
+  /* Layout-CSS aliases (hsl-wrapped). Product sheets use --cos-* as complete colors. */
+  --cos-text-secondary: hsl(var(--muted-foreground));
+  --cos-primary: hsl(var(--primary));
+  --cos-primary-foreground: hsl(var(--primary-foreground));
+  --cos-primary-subtle: hsl(var(--accent-soft));
+  --cos-accent-soft: hsl(var(--accent-soft));
+  --cos-border-strong: hsl(var(--border-strong));
+  --cos-error: hsl(var(--destructive));
+  --cos-danger: hsl(var(--destructive));
+  --cos-success: hsl(var(--success));
 }
 
 @media (prefers-color-scheme: dark) {

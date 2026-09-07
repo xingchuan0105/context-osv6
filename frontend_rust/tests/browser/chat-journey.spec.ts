@@ -108,8 +108,8 @@ test.describe('静态资源交付与缓存头（W1）', () => {
     expect(jsRes.headers()['cache-control']).toContain('max-age=31536000');
     expect(['br', 'gzip']).toContain(jsRes.headers()['content-encoding']);
 
-    // 验证普通未 hash 样式 (/style/chat-poc.css) 不被误设永久 immutable
-    const unhashedCss = await request.get(`${WEB_BASE}/style/chat-poc.css`);
+    // 验证普通未 hash 样式 (/style/app.css) 不被误设永久 immutable
+    const unhashedCss = await request.get(`${WEB_BASE}/style/app.css`);
     expect(unhashedCss.status()).toBe(200);
     const unhashedCache = unhashedCss.headers()['cache-control'] || '';
     expect(unhashedCache).not.toContain('immutable');

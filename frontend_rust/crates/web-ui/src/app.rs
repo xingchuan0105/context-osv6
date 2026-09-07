@@ -143,7 +143,7 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                 <meta name="viewport" content="width=device-width, initial-scale=1"/>
                 <title>"Context-OS Chat"</title>
                 <HashedStylesheet id="leptos" options=options.clone()/>
-                <link rel="stylesheet" href="/style/chat-poc.css"/>
+                <link rel="stylesheet" href="/style/app.css"/>
                 <AutoReload options=options.clone()/>
                 <HydrationScripts options/>
                 <MetaTags/>
