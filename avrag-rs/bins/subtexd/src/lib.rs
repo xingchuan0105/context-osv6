@@ -569,8 +569,12 @@ mod tests {
         unsafe { std::env::set_var("ASR_TRANSCRIBE_SCRIPT", path) };
     }
 
+    /// `ASR_TRANSCRIBE_SCRIPT` is process-global; transcribe tests must not overlap.
+    static TRANSCRIBE_ENV: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
     #[tokio::test]
     async fn transcribe_job_executes_and_writes_back() {
+        let _env = TRANSCRIBE_ENV.lock().await;
         let fx = fixture();
         let script_dir = TempDir::new().unwrap();
         set_script_env(&fake_script(script_dir.path()));
@@ -602,6 +606,7 @@ mod tests {
 
     #[tokio::test]
     async fn big_transcription_batch_waits_for_confirmation() {
+        let _env = TRANSCRIBE_ENV.lock().await;
         let fx = fixture();
         let script_dir = TempDir::new().unwrap();
         set_script_env(&fake_script(script_dir.path()));

@@ -185,12 +185,30 @@ W0–W5 合计约 **5–8 个工作日**（不含 dogfood 周）。每波开工�
 - W4：单测（假脚本全链路 + >2h 批量停在 `needs_confirmation` + 同 hash 去重）；真语音 30s 冒烟：transcript.md 25 秒写回 `transcripts/`（说话人分离 + 绝对时间轴）→ 被 sweep 索引 → 混合检索命中；usage 台账记录 transcription 30 秒；`DASHSCOPE` 日志零命中。
 - W5：纠偏写回往返（无管理段落 → init 骨架为底 + 规则；有段落 → 旧规则保留、零覆盖、无双标题）；未 init 根读侧返回 `root_not_initialized` 且不建仓；`AGENTS.md` 手写内容零丢失。
 
+**F4 协议冒烟（2026-09-07）**：本地 `AVRAG_SUBTEX=1` `avrag-api` @ `127.0.0.1:18080` + `subtexd`；对真实目录 `/home/chuan/asr-filetrans` 走 HTTP MCP：`tools/list` 含 7 个 `subtex.*`；`init` 建仓并首轮索引（lexical/outline/vector 3/3）；Agent 把约定稿写入该目录 `AGENTS.md` 管理段落（原有正文零丢失）；`status` / `outline` / `search`（`说话人分离` 命中，`matched_via=lexical+vector`）/ `correction_draft` 往返。`../` 转写路径被拒；未 init 根返回 `root_not_initialized`。`context-os-mcp --check` health OK；本机无 `CONTEXT_OS_USER_TOKEN`，stdio 包装的鉴权就绪仍缺。Claude Code / Kimi 挂 MCP 仍待作者本机会话（配置见下）。
+
 **遗留（作者侧 / 后续）**：
 
-- F4 真实 Agent 会话冒烟（Claude Code / Kimi Code 挂 `context-os-mcp` 走 init→写约定→检索）——dogfood 周第一天完成即可。
-- dogfood 一周三项度量（自用天数、纠偏写回次数、检索纠正率）。
+- Claude Code / Kimi Code 挂 `context-os-mcp`（需本机 user JWT）走同一条 init→写约定→检索路径。
+- dogfood 一周三项度量（自用天数、纠偏写回次数、检索纠正率）。本仓 `context-osv6` 约 3500 可索引文件，首挂宜用小目录或接受 embedding 耗时。
 - 可选：整段真实会议录音经 subtexd 全链路（CLI 自身已 3h40m 验证过，本层只差一次实战）。
 - Windows 原生桌面打包与 asr-filetrans 的 Windows 调用 → M2 backlog。
+
+Claude Code MCP 片段（stdio，本机 user token）：
+
+```json
+{
+  "mcpServers": {
+    "context-os": {
+      "command": "/home/chuan/context-osv6/avrag-rs/target/debug/context-os-mcp",
+      "env": {
+        "CONTEXT_OS_API_BASE": "http://127.0.0.1:18080",
+        "CONTEXT_OS_USER_TOKEN": "<local user JWT>"
+      }
+    }
+  }
+}
+```
 
 **启动方式**（WSL 自用）：
 

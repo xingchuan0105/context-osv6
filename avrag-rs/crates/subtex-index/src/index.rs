@@ -70,6 +70,8 @@ impl Indexer {
             .with_context(|| format!("read {}", abs.display()))?;
 
         if parse::is_audio_file(&file.rel_path) {
+            // Persist the hash so the next sweep does not treat the file as new.
+            self.remember_unindexed(file)?;
             return Ok(FileIndexOutcome::AudioDeferred);
         }
 
@@ -78,7 +80,10 @@ impl Indexer {
             Some(ir) => ir,
             None => match parse::parse_heavy(document_id, &file.rel_path, &bytes).await {
                 Ok(ir) => ir,
-                Err(e) => return Ok(FileIndexOutcome::Unsupported { reason: format!("{e:#}") }),
+                Err(e) => {
+                    self.remember_unindexed(file)?;
+                    return Ok(FileIndexOutcome::Unsupported { reason: format!("{e:#}") });
+                }
             },
         };
 
@@ -150,6 +155,21 @@ impl Indexer {
 
     pub fn remove_file(&self, rel_path: &str) -> anyhow::Result<bool> {
         Ok(self.store.delete_file(rel_path)?)
+    }
+
+    /// Record a seen-but-not-text-indexed file (audio waiting on transcription,
+    /// or a format we cannot parse) so `scan_diff` does not report it as `added`
+    /// on every sweep.
+    fn remember_unindexed(&self, file: &ScannedFile) -> anyhow::Result<()> {
+        let file_id = self.store.upsert_file(
+            &file.rel_path,
+            &file.content_hash,
+            file.size,
+            file.mtime_ms,
+        )?;
+        self.store
+            .set_file_readiness(&file_id, false, false, false)?;
+        Ok(())
     }
 
     /// Reconcile one root: cached scan (size+mtime unchanged → hash reused)

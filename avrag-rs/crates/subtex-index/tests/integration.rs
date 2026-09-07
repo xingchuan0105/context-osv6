@@ -160,8 +160,17 @@ async fn audio_is_deferred_and_garbage_heavy_format_is_unsupported() {
         "garbage docx must degrade to Unsupported, got {:?}",
         by_path["broken.docx"]
     );
-    // Deferred / unsupported files never enter the store.
-    assert_eq!(store.readiness_summary().unwrap().files, 0);
+    // Remembered as seen (hash only) so the next sweep is a no-op; no text layers.
+    let summary = store.readiness_summary().unwrap();
+    assert_eq!(summary.files, 2);
+    assert_eq!(summary.lexical_ready, 0);
+    assert_eq!(summary.outline_ready, 0);
+    assert_eq!(summary.vector_ready, 0);
+    let second = indexer.reconcile(&root).await.unwrap();
+    assert!(
+        second.indexed.is_empty() && second.failed.is_empty(),
+        "deferred/unsupported files must not be reprocessed: {second:?}"
+    );
 }
 
 #[tokio::test]
