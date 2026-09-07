@@ -14,6 +14,6 @@ pub(crate) use share::{
     share_update_settings,
 };
 pub(crate) use subtex::{
-    subtex_convention_draft, subtex_correction_draft, subtex_init, subtex_outline, subtex_search,
-    subtex_status, subtex_transcribe,
+    subtex_convention_draft, subtex_correction_draft, subtex_inbox, subtex_inbox_decide,
+    subtex_init, subtex_outline, subtex_search, subtex_status, subtex_transcribe,
 };

@@ -34,7 +34,7 @@ AppState is a **composition root + face factory** (still holds fat infra context
 | T4 | **No C4**: Capability / Skill / Tool stay three layers (ADR-0006 §5a) |
 | T5 | Behavior-preserving slices; daily verify with **L1** (`bash scripts/test-l1.sh` or targeted `cargo test -p …`) |
 | T6 | Solo local trunk; do not expand CI theater for architecture work |
-| T7 | **Cloud workbench line: `workspace` is the sole reusable/manageable/shareable persistent-knowledge container** replacing `notebook`; a user-owned Conversation may have no workspace (see below). **Agent-plugin line (Subtex, PRD `docs/plans/2026-09-06-directory-plugin-prd.md`): the user's project directory is the sole master**; indexes are derived/disposable, no ingest copies |
+| T7 | **Cloud workbench line: `workspace` is the sole reusable/manageable/shareable persistent-knowledge container** replacing `notebook`; a user-owned Conversation may have no workspace (see below). **Agent-plugin line (Subtex, PRD `docs/plans/2026-09-06-directory-plugin-prd.md`): the user's project directory is the sole master**; indexes are derived/disposable, no ingest copies. Inbox (F6) moves files only after confirm, only into an attached root. |
 | T8 | **No product `org`**: tenant/ownership root is **`user_id` / `owner_user_id`**; Conversation resources may scope by **`conversation_id`**, and only Workspace-bound resources require **`workspace_id`**. Migration in progress — **do not add new org surface area** |
 
 ## Workspace supersedes notebook (sole persistent-knowledge container — cloud workbench line)

@@ -34,6 +34,10 @@ async fn main() -> anyhow::Result<()> {
     for root in subtexd.root_paths() {
         watcher.watch(&root, notify::RecursiveMode::Recursive)?;
     }
+    let mut drop_points = subtexd.drop_points();
+    for drop in &drop_points {
+        watcher.watch(drop, notify::RecursiveMode::NonRecursive)?;
+    }
 
     let mut ticker = tokio::time::interval(Duration::from_millis(200));
     loop {
@@ -47,6 +51,11 @@ async fn main() -> anyhow::Result<()> {
                 for root in &report.new_roots {
                     watcher.watch(root, notify::RecursiveMode::Recursive)?;
                 }
+                let current = subtexd.drop_points();
+                for drop in current.iter().filter(|p| !drop_points.contains(p)) {
+                    watcher.watch(drop, notify::RecursiveMode::NonRecursive)?;
+                }
+                drop_points = current;
                 if report.has_activity() {
                     tracing::info!(
                         reconciled = ?report.reconciled_roots,
@@ -54,6 +63,8 @@ async fn main() -> anyhow::Result<()> {
                         removed = report.removed_files,
                         failed = report.failed,
                         jobs = report.jobs_done,
+                        inbox_seen = report.inbox_seen,
+                        inbox_moved = report.inbox_moved,
                         "subtexd tick"
                     );
                 }

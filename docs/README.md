@@ -63,7 +63,8 @@
 
 ## 进行中的计划
 
-- `plans/2026-09-06-subtex-m1-dev-plan.md` — **Subtex M1 开发计划（A 线当前执行队列）**：目标/终态、关键约束、W0–W5 波次（地基 → 索引切片 → MCP 工具面 → subtexd → 音频转写 → 写回+dogfood 周）、每波验证门与 M1 总验收标准；上游 PRD `plans/2026-09-06-directory-plugin-prd.md`
+- `plans/2026-09-07-subtex-m2-m3-dev-plan.md` — **Subtex M2/M3 切片**：F6 收件箱确认制 + F7 耗材 millicredit 账本（不进 Agent 会话、不接 B 线钱包）
+- `plans/2026-09-06-subtex-m1-dev-plan.md` — **Subtex M1 开发计划**：W0–W5 已开发；上游 PRD `plans/2026-09-06-directory-plugin-prd.md`
 
 - `plans/2026-09-05-development-execution-plan.md` — **当前执行队列**：收尾未提交 W2.4/W2.5 → W1 验收 → 完整 Chat-first → 在线路由迁移 → GPUI 对等；细化下方 09-04 路线图，明确验证证据、工时估计，以及 Web 切流与最终删除 Next 的依赖。
 - `plans/2026-09-04-rust-web-first-gpui-parity-roadmap.md` — **在线 Rust 优先 + 桌面 GPUI 全量对等路线图**（Step 0 删 Tauri CSR 死路径 → W1/W2 在线 Chat-first → D0 `desktop-core` 抽库 → D1–D6 GPUI）；GPUI 第一刀交接 `plans/2026-09-04-rust-web-gpui-desktop-handoff.md` 转历史

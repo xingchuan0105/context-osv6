@@ -158,7 +158,7 @@ Legacy single-brain SaC union and the 2026-08-07 **three-loop verify path** are 
 
 - Root WSL: `/home/chuan/context-osv6` · Windows: `Z:\home\chuan\context-osv6`
 - Product backend: `avrag-rs` · Frontend: `frontend_next` (Next.js + React + TS, pnpm) · `frontend_rust` workspace only when explicitly asked.
-- A 线 Subtex（目录插件）：crates `subtex-core` / `subtex-index` / `subtex-store-sqlite` + bins `subtexd`；MCP 工具组 `subtex.*`（`AVRAG_SUBTEX=1` 注册，仅本机 user token）；索引仓 `SUBTEX_DATA_DIR`（默认 `~/.local/share/subtex`）。
+- A 线 Subtex（目录插件）：crates `subtex-core` / `subtex-index` / `subtex-store-sqlite` + bins `subtexd`；MCP 工具组 `subtex.*`（`AVRAG_SUBTEX=1` 注册，仅本机 user token）；索引仓 `SUBTEX_DATA_DIR`（默认 `~/.local/share/subtex`）；投放点配置 `inbox.json`，全局账本 `global.db`。
 
 ## More (links only)
 

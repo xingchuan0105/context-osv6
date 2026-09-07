@@ -10,10 +10,12 @@
 //! (consumer), and a `RetrievalReadPort` implementation whose search methods
 //! are filled in by the W1 indexing slice.
 
+mod global;
 mod port;
 mod schema;
 mod store;
 
+pub use global::{CreditRow, GlobalStore, InboxItem, MoveRecord};
 pub use store::{
     ChunkRecord, HybridHit, HybridSearchResult, JobRecord, ReadinessSummary, SearchHit, StoreError,
     SubtexStore, EMBEDDING_DIM, SCHEMA_VERSION,

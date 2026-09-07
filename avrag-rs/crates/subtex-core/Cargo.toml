@@ -9,6 +9,8 @@ description = "Subtex directory-plugin core: root identity, index-store layout, 
 [dependencies]
 hex.workspace = true
 ignore = "0.4"
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
 sha2.workspace = true
 thiserror.workspace = true
 

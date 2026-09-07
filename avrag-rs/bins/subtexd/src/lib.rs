@@ -11,9 +11,12 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::time::Instant;
 
 use anyhow::{Context, Result};
-use subtex_core::RootHandle;
+use subtex_core::{
+    accept_pattern, discover_roots, list_drop_point_files, move_into_root, suggest, Confidence,
+    InboxConfig, RootHandle,
+};
 use subtex_index::{CloudEmbedder, Indexer, TextEmbedder};
-use subtex_store_sqlite::{JobRecord, SubtexStore};
+use subtex_store_sqlite::{GlobalStore, JobRecord, SubtexStore};
 
 #[derive(Debug, Clone)]
 pub struct SubtexdConfig {
@@ -61,6 +64,8 @@ pub struct TickReport {
     /// Per-file/per-job failure details (path + error), capped by source.
     pub failed_details: Vec<(String, String)>,
     pub jobs_done: usize,
+    pub inbox_seen: usize,
+    pub inbox_moved: usize,
 }
 
 impl TickReport {
@@ -70,6 +75,8 @@ impl TickReport {
             || self.removed_files > 0
             || self.failed > 0
             || self.jobs_done > 0
+            || self.inbox_seen > 0
+            || self.inbox_moved > 0
     }
 }
 
@@ -78,19 +85,40 @@ pub struct Subtexd {
     runtimes: RwLock<Vec<RootRuntime>>,
     dirty: Mutex<HashSet<usize>>,
     last_full_reconcile: Mutex<Option<Instant>>,
+    inbox_dirty: Mutex<bool>,
+    global: Arc<GlobalStore>,
 }
 
 impl Subtexd {
     pub fn new(cfg: SubtexdConfig) -> Result<Self> {
+        let global = Arc::new(GlobalStore::open(&cfg.data_dir).context("open global store")?);
         let subtexd = Self {
             cfg,
             runtimes: RwLock::new(Vec::new()),
             dirty: Mutex::new(HashSet::new()),
             last_full_reconcile: Mutex::new(None),
+            inbox_dirty: Mutex::new(true),
+            global,
         };
         subtexd.refresh_roots()?;
         subtexd.requeue_all_running()?;
         Ok(subtexd)
+    }
+
+    pub fn drop_points(&self) -> Vec<PathBuf> {
+        InboxConfig::load(&self.cfg.data_dir)
+            .map(|cfg| {
+                cfg.drop_points
+                    .iter()
+                    .map(PathBuf::from)
+                    .filter(|p| p.is_dir())
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    pub fn mark_inbox_dirty(&self) {
+        *self.inbox_dirty.lock().expect("inbox dirty") = true;
     }
 
     fn requeue_all_running(&self) -> Result<()> {
@@ -143,8 +171,8 @@ impl Subtexd {
                 continue;
             }
             let store = Arc::new(SubtexStore::open(&handle).context("open subtex store")?);
-            let embedder =
-                CloudEmbedder::with_store_ledger(store.clone()).map(|e| Arc::new(e) as Arc<dyn TextEmbedder>);
+            let embedder = CloudEmbedder::with_ledgers(store.clone(), Some(self.global.clone()))
+                .map(|e| Arc::new(e) as Arc<dyn TextEmbedder>);
             let indexer = Indexer::new(store.clone(), embedder);
             tracing::info!("subtexd attached root {}", handle.root().display());
             new_paths.push(handle.root().to_path_buf());
@@ -157,7 +185,8 @@ impl Subtexd {
         Ok(new_paths)
     }
 
-    /// notify event entry: mark the runtime containing `path` dirty.
+    /// notify event entry: mark the runtime containing `path` dirty, or the
+    /// inbox when the path sits under a drop point.
     pub fn mark_path_dirty(&self, path: &Path) {
         let index = {
             let runtimes = self.runtimes.read().expect("subtexd runtimes");
@@ -167,6 +196,9 @@ impl Subtexd {
         };
         if let Some(index) = index {
             self.dirty.lock().expect("subtexd dirty").insert(index);
+        }
+        if self.drop_points().iter().any(|drop| path.starts_with(drop)) {
+            self.mark_inbox_dirty();
         }
     }
 
@@ -254,7 +286,70 @@ impl Subtexd {
 
         self.auto_confirm_transcriptions(&mut report).await?;
         self.consume_jobs(&mut report).await?;
+        let inbox_due = sweep_due || *self.inbox_dirty.lock().expect("inbox dirty");
+        if inbox_due {
+            *self.inbox_dirty.lock().expect("inbox dirty") = false;
+            self.scan_inbox(&mut report)?;
+        }
         Ok(report)
+    }
+
+    fn scan_inbox(&self, report: &mut TickReport) -> Result<()> {
+        let cfg = InboxConfig::load(&self.cfg.data_dir).context("load inbox config")?;
+        let attached = self.root_paths();
+        for drop in &cfg.drop_points {
+            let drop = PathBuf::from(drop);
+            let files = list_drop_point_files(&drop, &attached).context("list drop point")?;
+            for file in files {
+                let path_s = file.to_string_lossy().to_string();
+                if let Some(prev) = self.global.latest_by_path(&path_s).context("latest inbox")? {
+                    if prev.state != "pending" {
+                        continue;
+                    }
+                }
+                let rel = file
+                    .file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_default();
+                let hash = subtex_core::scanner::scan_file(&drop, &rel)
+                    .ok()
+                    .flatten()
+                    .map(|s| s.content_hash)
+                    .unwrap_or_default();
+                let suggestion = suggest(&file, &drop, &cfg.rules, &attached);
+                let id = self
+                    .global
+                    .upsert_suggestion(&suggestion, &hash)
+                    .context("upsert inbox")?;
+                report.inbox_seen += 1;
+                let Some(target) = suggestion.target_root.as_ref() else {
+                    continue;
+                };
+                if !(cfg.autofill && suggestion.confidence == Confidence::High) {
+                    continue;
+                }
+                match move_into_root(&file, target, &suggestion.dest_name) {
+                    Ok(dest) => {
+                        self.global.record_move(id, &file, &dest).ok();
+                        self.global.set_state(id, "auto_moved").ok();
+                        let ext = file
+                            .extension()
+                            .map(|e| e.to_string_lossy().to_string())
+                            .unwrap_or_default();
+                        self.global
+                            .bump_accept(&accept_pattern(&ext, target))
+                            .ok();
+                        self.mark_root_dirty(target);
+                        report.inbox_moved += 1;
+                    }
+                    Err(e) => {
+                        tracing::warn!("inbox autofill {}: {e}", file.display());
+                        report.failed += 1;
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Small transcription batches run automatically (PRD F2); a batch above
@@ -366,8 +461,9 @@ impl Subtexd {
                     known_duration,
                 )
                 .await?;
-                subtex_index::audio::record_transcription_usage(
+                subtex_index::audio::record_transcription_usage_with_credits(
                     &rt.store,
+                    Some(self.global.as_ref()),
                     outcome.duration_secs,
                     &subtex_index::audio::run_name(path, &hash),
                 )?;
@@ -381,37 +477,6 @@ impl Subtexd {
             other => anyhow::bail!("unknown job kind: {other}"),
         }
     }
-}
-
-fn discover_roots(data_dir: &Path) -> Result<Vec<RootHandle>> {
-    let roots_dir = data_dir.join(subtex_core::ROOTS_DIR_NAME);
-    if !roots_dir.is_dir() {
-        return Ok(Vec::new());
-    }
-    let mut handles = Vec::new();
-    for entry in std::fs::read_dir(&roots_dir)?.flatten() {
-        if !entry.path().is_dir() {
-            continue;
-        }
-        let Ok(pointer) = std::fs::read_to_string(entry.path().join(subtex_core::ROOT_POINTER_FILE))
-        else {
-            continue;
-        };
-        let root = PathBuf::from(pointer.trim());
-        if root.as_os_str().is_empty() {
-            continue;
-        }
-        // Root vanished or pointer corrupt: the store stays on disk untouched,
-        // the daemon just does not see a root here.
-        let Ok(handle) = RootHandle::with_data_dir(&root, data_dir.to_path_buf()) else {
-            continue;
-        };
-        if handle.hash() != entry.file_name().to_string_lossy() {
-            continue;
-        }
-        handles.push(handle);
-    }
-    Ok(handles)
 }
 
 #[cfg(test)]
@@ -634,5 +699,49 @@ mod tests {
         let report = fx.subtexd.tick().await.unwrap();
         assert_eq!(report.jobs_done, 1, "report: {report:?}");
         assert!(fx.root.join("transcripts/big.md").exists());
+    }
+
+    #[tokio::test]
+    async fn inbox_queues_until_accept_and_autofill_moves_high() {
+        let data_dir = TempDir::new().unwrap();
+        let root_dir = TempDir::new().unwrap();
+        let drop_dir = TempDir::new().unwrap();
+        let root = std::fs::canonicalize(root_dir.path()).unwrap();
+        let drop = std::fs::canonicalize(drop_dir.path()).unwrap();
+        attach_root(data_dir.path(), &root);
+
+        let mut cfg = InboxConfig::default();
+        cfg.drop_points.push(drop.display().to_string());
+        cfg.rules.push(subtex_core::InboxRule {
+            id: "md".into(),
+            exts: vec!["md".into()],
+            name_contains: None,
+            target_root: root.display().to_string(),
+        });
+        cfg.save(data_dir.path()).unwrap();
+
+        let subtexd = Subtexd::new(SubtexdConfig {
+            data_dir: data_dir.path().to_path_buf(),
+            reconcile_secs: 5,
+            max_jobs_per_tick: 8,
+        })
+        .unwrap();
+        write(&drop, "note.md", "# hello\n");
+        subtexd.mark_inbox_dirty();
+        let report = subtexd.tick().await.unwrap();
+        assert_eq!(report.inbox_seen, 1, "{report:?}");
+        assert_eq!(report.inbox_moved, 0, "default is confirm-only");
+        assert!(drop.join("note.md").is_file());
+
+        cfg.autofill = true;
+        cfg.save(data_dir.path()).unwrap();
+        write(&drop, "two.md", "# two\n");
+        subtexd.mark_inbox_dirty();
+        let report = subtexd.tick().await.unwrap();
+        assert_eq!(report.inbox_moved, 2, "pending high items move once autofill is on: {report:?}");
+        assert!(root.join("two.md").is_file());
+        assert!(root.join("note.md").is_file());
+        assert!(!drop.join("two.md").exists());
+        assert!(!drop.join("note.md").exists());
     }
 }

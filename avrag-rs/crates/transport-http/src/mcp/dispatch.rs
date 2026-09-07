@@ -44,7 +44,9 @@ pub(crate) async fn execute_mcp_tool(
         | "subtex.correction_draft"
         | "subtex.search"
         | "subtex.outline"
-        | "subtex.transcribe" => {
+        | "subtex.transcribe"
+        | "subtex.inbox"
+        | "subtex.inbox_decide" => {
             require_subtex_enabled(tool_name)?;
             match tool_name {
                 "subtex.init" => tools::subtex_init(state, arguments).await,
@@ -56,6 +58,8 @@ pub(crate) async fn execute_mcp_tool(
                 "subtex.search" => tools::subtex_search(state, arguments).await,
                 "subtex.outline" => tools::subtex_outline(state, arguments).await,
                 "subtex.transcribe" => tools::subtex_transcribe(state, arguments).await,
+                "subtex.inbox" => tools::subtex_inbox(state, arguments).await,
+                "subtex.inbox_decide" => tools::subtex_inbox_decide(state, arguments).await,
                 _ => unreachable!("subtex tool name already matched"),
             }
         }

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use subtex_store_sqlite::SubtexStore;
+use subtex_store_sqlite::{GlobalStore, SubtexStore};
 
 /// Embedding seam. The production impl calls the cloud client; tests plug in
 /// deterministic embedders so the vector layer is exercised without network.
@@ -70,11 +70,17 @@ impl CloudEmbedder {
     }
 
     /// Ready-to-use cloud embedder recording every call into the store's
-    /// usage ledger. `None` when no embedding credentials are configured
-    /// (the vector layer then simply stays unready).
+    /// usage ledger (and the global credits book when provided).
     pub fn with_store_ledger(store: Arc<SubtexStore>) -> Option<Self> {
+        Self::with_ledgers(store, None)
+    }
+
+    pub fn with_ledgers(store: Arc<SubtexStore>, global: Option<Arc<GlobalStore>>) -> Option<Self> {
         EmbeddingSettings::from_env().map(|settings| {
-            Self::from_settings(&settings, Some(Arc::new(StoreUsageObserver { store })))
+            Self::from_settings(
+                &settings,
+                Some(Arc::new(StoreUsageObserver { store, global })),
+            )
         })
     }
 }
@@ -87,10 +93,11 @@ impl TextEmbedder for CloudEmbedder {
     }
 }
 
-/// Usage-observer adapter: every embedding call lands in the store's usage
-/// ledger (M1 has no app-billing PG wiring; credits integration is M3).
+/// Usage-observer adapter: every embedding call lands in the per-root usage
+/// table and, when a global store is present, the F7 millicredit ledger.
 pub struct StoreUsageObserver {
     store: Arc<SubtexStore>,
+    global: Option<Arc<GlobalStore>>,
 }
 
 #[async_trait]
@@ -107,6 +114,17 @@ impl avrag_llm::UsageObserver for StoreUsageObserver {
             .actual_tokens
             .map(f64::from)
             .unwrap_or(f64::from(record.estimated_tokens));
-        let _ = self.store.record_usage("embedding", Some(&record.model), tokens, Some("tokens"), None);
+        let _ = self
+            .store
+            .record_usage("embedding", Some(&record.model), tokens, Some("tokens"), None);
+        if let Some(global) = &self.global {
+            let _ = global.record_credit(
+                "embedding",
+                Some(&record.model),
+                tokens,
+                Some("tokens"),
+                None,
+            );
+        }
     }
 }

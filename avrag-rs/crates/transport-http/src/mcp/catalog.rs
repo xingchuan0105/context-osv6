@@ -111,6 +111,46 @@ fn subtex_tools() -> Vec<Value> {
                 },
             },
         }),
+        json!({
+            "name": "subtex.inbox",
+            "description": include_str!("../../../../prompts/subtex/tools/inbox.md"),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "drop_point": {
+                        "type": "string",
+                        "description": "Absolute directory to add as a drop point (must already exist)",
+                    },
+                    "remove_drop_point": {
+                        "type": "string",
+                        "description": "Absolute directory to stop watching as a drop point",
+                    },
+                    "autofill": {
+                        "type": "boolean",
+                        "description": "When true, high-confidence rule matches move without a decide call",
+                    },
+                },
+            },
+        }),
+        json!({
+            "name": "subtex.inbox_decide",
+            "description": include_str!("../../../../prompts/subtex/tools/inbox-decide.md"),
+            "inputSchema": {
+                "type": "object",
+                "required": ["id", "action"],
+                "properties": {
+                    "id": { "type": "integer", "description": "Inbox item id from subtex.inbox" },
+                    "action": {
+                        "type": "string",
+                        "enum": ["accept", "reject", "ignore", "undo"],
+                    },
+                    "target_root": {
+                        "type": "string",
+                        "description": "Override destination: an already attached project root",
+                    },
+                },
+            },
+        }),
     ]
 }
 

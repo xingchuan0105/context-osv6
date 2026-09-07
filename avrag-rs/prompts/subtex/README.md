@@ -6,6 +6,6 @@ Subtex MCP 工具面与约定模板的 LLM-facing 文案。加载方（W2 起）
 |------|--------|------|
 | `convention-draft.md` | `subtex.init` / `subtex.convention_draft` | 约定建议稿骨架（Agent 审阅后合并进 `AGENTS.md` 的 Subtex 管理段落） |
 | `correction-draft.md` | `subtex.correction_draft` | 一次纠偏后管理段落的更新稿骨架 |
-| `tools/<tool>.md` | `transport-http` `mcp/catalog.rs`（`include_str!`） | 7 个 `subtex.*` 工具的描述文案：`init` / `status` / `convention-draft` / `correction-draft` / `search` / `outline` / `transcribe` |
+| `tools/<tool>.md` | `transport-http` `mcp/catalog.rs`（`include_str!`） | `subtex.*` 工具描述：`init` / `status` / `convention-draft` / `correction-draft` / `search` / `outline` / `transcribe` / `inbox` / `inbox-decide` |
 
 Authoring rules（root `AGENTS.md`）：第三人称环境陈述（返回什么 / 何事为真），不带指令腔；`{…}` 占位符由运行时以目录事实替换；不放入任何真实语料实体名。

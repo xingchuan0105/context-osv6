@@ -147,9 +147,19 @@ pub async fn transcribe_file(
     })
 }
 
-/// Record one transcription into the store's usage ledger.
+/// Record one transcription into the store's usage ledger and the global
+/// millicredit book when provided.
 pub fn record_transcription_usage(
     store: &SubtexStore,
+    duration_secs: f64,
+    run: &str,
+) -> Result<(), subtex_store_sqlite::StoreError> {
+    record_transcription_usage_with_credits(store, None, duration_secs, run)
+}
+
+pub fn record_transcription_usage_with_credits(
+    store: &SubtexStore,
+    global: Option<&subtex_store_sqlite::GlobalStore>,
     duration_secs: f64,
     run: &str,
 ) -> Result<(), subtex_store_sqlite::StoreError> {
@@ -159,7 +169,17 @@ pub fn record_transcription_usage(
         duration_secs,
         Some("seconds"),
         Some(&serde_json::json!({ "run": run })),
-    )
+    )?;
+    if let Some(global) = global {
+        global.record_credit(
+            "transcription",
+            Some(TRANSCRIBE_MODEL),
+            duration_secs,
+            Some("seconds"),
+            None,
+        )?;
+    }
+    Ok(())
 }
 
 /// Enqueue a transcription job for one audio file unless an equivalent job

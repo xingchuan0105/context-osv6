@@ -8,6 +8,7 @@ pub const STORE_DB_FILE: &str = "index.db";
 pub const ROOT_POINTER_FILE: &str = "root.txt";
 pub const SCRATCH_DIR_NAME: &str = "scratch";
 pub const ROOTS_DIR_NAME: &str = "roots";
+pub const GLOBAL_DB_FILE: &str = "global.db";
 
 /// Identity of one attached directory: its canonical path plus the derived,
 /// stable store directory under the Subtex data dir.
@@ -22,6 +23,7 @@ pub struct RootHandle {
     root: PathBuf,
     hash: String,
     store_dir: PathBuf,
+    data_dir: PathBuf,
 }
 
 impl RootHandle {
@@ -43,7 +45,12 @@ impl RootHandle {
             root: canonical,
             hash,
             store_dir,
+            data_dir,
         })
+    }
+
+    pub fn data_dir(&self) -> &Path {
+        &self.data_dir
     }
 
     pub fn root(&self) -> &Path {
@@ -69,6 +76,35 @@ impl RootHandle {
     pub fn scratch_dir(&self) -> PathBuf {
         self.store_dir.join(SCRATCH_DIR_NAME)
     }
+}
+
+/// Known attached roots = enumerate `<data>/roots/*/root.txt` (never scan the disk).
+pub fn discover_roots(data_dir: &Path) -> Result<Vec<RootHandle>, SubtexError> {
+    let roots_dir = data_dir.join(ROOTS_DIR_NAME);
+    if !roots_dir.is_dir() {
+        return Ok(Vec::new());
+    }
+    let mut handles = Vec::new();
+    for entry in fs::read_dir(&roots_dir)?.flatten() {
+        if !entry.path().is_dir() {
+            continue;
+        }
+        let Ok(pointer) = fs::read_to_string(entry.path().join(ROOT_POINTER_FILE)) else {
+            continue;
+        };
+        let root = PathBuf::from(pointer.trim());
+        if root.as_os_str().is_empty() {
+            continue;
+        }
+        let Ok(handle) = RootHandle::with_data_dir(&root, data_dir.to_path_buf()) else {
+            continue;
+        };
+        if handle.hash() != entry.file_name().to_string_lossy() {
+            continue;
+        }
+        handles.push(handle);
+    }
+    Ok(handles)
 }
 
 /// Resolve `rel` so the result is always a path inside `root`.
@@ -211,6 +247,7 @@ mod tests {
         let handle = RootHandle::with_data_dir(&canonical, data.clone()).unwrap();
 
         assert_eq!(handle.root(), canonical.as_path());
+        assert_eq!(handle.data_dir(), data.as_path());
         assert_eq!(handle.store_dir(), data.join(ROOTS_DIR_NAME).join(handle.hash()));
         assert_eq!(handle.db_path(), handle.store_dir().join(STORE_DB_FILE));
         assert_eq!(handle.root_pointer_path(), handle.store_dir().join(ROOT_POINTER_FILE));

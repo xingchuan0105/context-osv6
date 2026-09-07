@@ -1,9 +1,10 @@
-//! MCP subtex tools — local user session only; the project directory is the
-//! source of truth, the index store under the app-data dir is derived state.
-//! Nothing here ever writes into the project directory.
+//! MCP subtex tools — local user session only. Index stores are derived
+//! state under the app-data dir. Convention files are written by the Agent.
+//! Inbox accept/undo is the only plugin-initiated move, and only into an
+//! attached root after confirmation.
 
 use std::collections::{BTreeMap, HashMap};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use app_bootstrap::AppState;
@@ -11,10 +12,13 @@ use common::AppError;
 use serde_json::{json, Value};
 use subtex_core::managed_section::{find_managed_section, managed_section_body};
 use subtex_core::scanner::{file_kind, scan_dir, scan_diff};
-use subtex_core::RootHandle;
+use subtex_core::{
+    accept_pattern, default_data_dir, discover_roots, move_into_root, undo_move, InboxConfig,
+    PROPOSE_AFTER_ACCEPTS, RootHandle,
+};
 use subtex_index::outline::render_outline;
 use subtex_index::{CloudEmbedder, Indexer, TextEmbedder};
-use subtex_store_sqlite::SubtexStore;
+use subtex_store_sqlite::{GlobalStore, SubtexStore};
 
 use crate::auth_guard::require_user_session;
 use crate::mcp::catalog;
@@ -88,16 +92,19 @@ fn scan_root(root: &std::path::Path) -> Result<Vec<subtex_core::scanner::Scanned
 /// First indexing pass so search answers immediately after init (small local
 /// corpora); subtexd owns incremental updates afterwards.
 async fn initial_index(
-    root: &std::path::Path,
+    handle: &RootHandle,
     store: Arc<SubtexStore>,
     files: &[subtex_core::scanner::ScannedFile],
 ) -> Result<subtex_index::DiffOutcome, AppError> {
-    let embedder = CloudEmbedder::with_store_ledger(store.clone())
+    let global = GlobalStore::open(handle.data_dir())
+        .ok()
+        .map(Arc::new);
+    let embedder = CloudEmbedder::with_ledgers(store.clone(), global)
         .map(|embedder| Arc::new(embedder) as Arc<dyn TextEmbedder>);
     let indexer = Indexer::new(store, embedder);
     let diff = scan_diff(&HashMap::new(), files);
     indexer
-        .index_diff(root, &diff)
+        .index_diff(handle.root(), &diff)
         .await
         .map_err(|e| AppError::internal_code("subtex_initial_index", format!("{e:#}")))
 }
@@ -221,7 +228,7 @@ pub(crate) async fn subtex_init(state: &AppState, arguments: &Value) -> Result<V
         .and_then(find_managed_section)
         .is_some();
 
-    let outcome = initial_index(&root, store.clone(), &files).await?;
+    let outcome = initial_index(&handle, store.clone(), &files).await?;
     let unsupported: Vec<Value> = outcome
         .indexed
         .iter()
@@ -619,6 +626,237 @@ pub(crate) async fn subtex_transcribe(
             "needs_confirmation": unconfirmed_total > threshold && !confirm,
             "confirmed_now": confirmed_now,
             "write_back_dir": subtex_index::TRANSCRIPTS_DIR,
+        }),
+        vec![],
+    ))
+}
+
+fn open_global() -> Result<(PathBuf, InboxConfig, GlobalStore), AppError> {
+    let data_dir = default_data_dir()
+        .map_err(|e| AppError::internal_code("subtex_data_dir", format!("{e}")))?;
+    let config = InboxConfig::load(&data_dir)
+        .map_err(|e| AppError::internal_code("inbox_config", format!("{e}")))?;
+    let store = GlobalStore::open(&data_dir)
+        .map_err(|e| AppError::internal_code("inbox_store", format!("{e}")))?;
+    Ok((data_dir, config, store))
+}
+
+fn attached_roots(data_dir: &Path) -> Vec<PathBuf> {
+    discover_roots(data_dir)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|h| h.root().to_path_buf())
+        .collect()
+}
+
+/// F6: drop-point config + pending queue. Never moves files.
+pub(crate) async fn subtex_inbox(state: &AppState, arguments: &Value) -> Result<Value, AppError> {
+    require_subtex_user(state)?;
+    let (data_dir, mut config, store) = open_global()?;
+
+    if let Some(raw) = arguments.get("drop_point").and_then(Value::as_str) {
+        let path = PathBuf::from(raw.trim());
+        config
+            .add_drop_point(&path)
+            .map_err(|e| AppError::validation("drop_point_unavailable", format!("{e}")))?;
+        config
+            .save(&data_dir)
+            .map_err(|e| AppError::internal_code("inbox_config_save", format!("{e}")))?;
+    }
+    if let Some(raw) = arguments.get("remove_drop_point").and_then(Value::as_str) {
+        config.remove_drop_point(&PathBuf::from(raw.trim()));
+        config
+            .save(&data_dir)
+            .map_err(|e| AppError::internal_code("inbox_config_save", format!("{e}")))?;
+    }
+    if let Some(flag) = arguments.get("autofill").and_then(Value::as_bool) {
+        config.autofill = flag;
+        config
+            .save(&data_dir)
+            .map_err(|e| AppError::internal_code("inbox_config_save", format!("{e}")))?;
+    }
+
+    let pending = store
+        .pending()
+        .map_err(|e| AppError::internal_code("inbox_pending", format!("{e}")))?;
+    let items: Vec<Value> = pending
+        .iter()
+        .map(|item| {
+            json!({
+                "id": item.id,
+                "path": item.path,
+                "drop_point": item.drop_point,
+                "target_root": item.target_root,
+                "dest_name": item.dest_name,
+                "confidence": item.confidence,
+                "reason": item.reason,
+                "rule_id": item.rule_id,
+            })
+        })
+        .collect();
+
+    Ok(catalog::success_result(
+        "subtex.inbox",
+        None,
+        json!({
+            "drop_points": config.drop_points,
+            "autofill": config.autofill,
+            "rules": config.rules,
+            "pending": items,
+            "attached_roots": attached_roots(&data_dir)
+                .into_iter()
+                .map(|p| p.display().to_string())
+                .collect::<Vec<_>>(),
+        }),
+        vec![],
+    ))
+}
+
+/// F6: accept / reject / ignore / undo. Moves only on accept, always undoable.
+pub(crate) async fn subtex_inbox_decide(
+    state: &AppState,
+    arguments: &Value,
+) -> Result<Value, AppError> {
+    require_subtex_user(state)?;
+    let (data_dir, _config, store) = open_global()?;
+    let id = arguments
+        .get("id")
+        .and_then(Value::as_i64)
+        .ok_or_else(|| AppError::validation("id_required", "id is the inbox item id"))?;
+    let action = arguments
+        .get("action")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .trim()
+        .to_ascii_lowercase();
+    let item = store
+        .get(id)
+        .map_err(|e| AppError::internal_code("inbox_get", format!("{e}")))?
+        .ok_or_else(|| AppError::validation("inbox_item_missing", format!("no inbox item {id}")))?;
+
+    match action.as_str() {
+        "reject" | "ignore" => {
+            store
+                .set_state(id, &action)
+                .map_err(|e| AppError::internal_code("inbox_state", format!("{e}")))?;
+            return Ok(catalog::success_result(
+                "subtex.inbox_decide",
+                None,
+                json!({ "id": id, "action": action, "moved": false }),
+                vec![],
+            ));
+        }
+        "undo" => {
+            let mv = store
+                .latest_move(id)
+                .map_err(|e| AppError::internal_code("inbox_move", format!("{e}")))?
+                .ok_or_else(|| {
+                    AppError::validation("nothing_to_undo", "no recorded move for this item")
+                })?;
+            if mv.undone {
+                return Err(AppError::validation(
+                    "already_undone",
+                    "that move was already undone",
+                ));
+            }
+            undo_move(Path::new(&mv.src), Path::new(&mv.dest))
+                .map_err(|e| AppError::internal_code("inbox_undo", format!("{e}")))?;
+            store
+                .mark_undone(mv.id)
+                .map_err(|e| AppError::internal_code("inbox_undo", format!("{e}")))?;
+            store
+                .set_state(id, "undone")
+                .map_err(|e| AppError::internal_code("inbox_state", format!("{e}")))?;
+            return Ok(catalog::success_result(
+                "subtex.inbox_decide",
+                None,
+                json!({
+                    "id": id,
+                    "action": "undo",
+                    "src": mv.src,
+                    "dest": mv.dest,
+                }),
+                vec![],
+            ));
+        }
+        "accept" => {}
+        other => {
+            return Err(AppError::validation(
+                "action_unknown",
+                format!("action is accept, reject, ignore, or undo (got {other})"),
+            ));
+        }
+    }
+
+    let override_root = arguments
+        .get("target_root")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let target = match override_root {
+        Some(raw) => std::fs::canonicalize(raw).map_err(|e| {
+            AppError::validation("target_unavailable", format!("{e}"))
+        })?,
+        None => item
+            .target_root
+            .as_deref()
+            .map(PathBuf::from)
+            .ok_or_else(|| {
+                AppError::validation(
+                    "no_target",
+                    "this item has no mapped root; pass target_root of an attached directory",
+                )
+            })?,
+    };
+    let attached = attached_roots(&data_dir);
+    if !attached.iter().any(|r| r == &target) {
+        return Err(AppError::validation(
+            "target_not_attached",
+            "destination is not an attached Subtex root",
+        ));
+    }
+    let src = PathBuf::from(&item.path);
+    if !src.is_file() {
+        return Err(AppError::validation(
+            "source_missing",
+            format!("{} is no longer in the drop point", src.display()),
+        ));
+    }
+    let dest = move_into_root(&src, &target, &item.dest_name)
+        .map_err(|e| AppError::internal_code("inbox_move", format!("{e}")))?;
+    store
+        .record_move(id, &src, &dest)
+        .map_err(|e| AppError::internal_code("inbox_move", format!("{e}")))?;
+    store
+        .set_state(id, "accepted")
+        .map_err(|e| AppError::internal_code("inbox_state", format!("{e}")))?;
+    let ext = src
+        .extension()
+        .map(|e| e.to_string_lossy().to_string())
+        .unwrap_or_default();
+    let accepts = store
+        .bump_accept(&accept_pattern(&ext, &target))
+        .map_err(|e| AppError::internal_code("inbox_stats", format!("{e}")))?;
+    let propose_convention = (accepts >= PROPOSE_AFTER_ACCEPTS).then(|| {
+        json!({
+            "accepts": accepts,
+            "target_root": target.display().to_string(),
+            "correction": format!(
+                "Files with extension .{ext} arriving in a drop point belong in {}.",
+                target.display()
+            ),
+        })
+    });
+
+    Ok(catalog::success_result(
+        "subtex.inbox_decide",
+        None,
+        json!({
+            "id": id,
+            "action": "accept",
+            "src": src.display().to_string(),
+            "dest": dest.display().to_string(),
+            "propose_convention": propose_convention,
         }),
         vec![],
     ))
