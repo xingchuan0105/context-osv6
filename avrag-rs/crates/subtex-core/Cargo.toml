@@ -1,0 +1,16 @@
+[package]
+name = "subtex-core"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+description = "Subtex directory-plugin core: root identity, index-store layout, managed-section helpers, content-hash scanner"
+
+[dependencies]
+hex.workspace = true
+ignore = "0.4"
+sha2.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

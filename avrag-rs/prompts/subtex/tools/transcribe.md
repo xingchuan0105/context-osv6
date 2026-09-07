@@ -1,0 +1,1 @@
+Submits or queries cloud transcription for audio files in a directory. Batches above the duration threshold return `needs_confirmation` with the estimated scale before anything runs. Finished transcripts are written back to the directory's convention location and enter the index like any document; intermediates stay in the index store.

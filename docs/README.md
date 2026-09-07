@@ -8,7 +8,7 @@
 - **Agent-lane 现行：Lead + RAG/Web Workers**（显式 `capabilities[]`；Workers 只回 EvidencePack；Lead 合成与覆盖度裁决；无独立 verify 环；host 结构 re-brief≤1；每通道 1 Brief）。设计：`plans/2026-08-11-lead-rag-web-workers-design.md`（W0–W4 + 审查收尾已进 `agent-loop`）
 - **SaC SDK** 下沉为 **RAG Worker** 短程执行引擎（dense/lexical/grep 等仍走沙箱）；2026-07-30 单 agent A2「无 worker」在 agent-lane **被本设计取代**
 - **Product Apps + AppState 组合根**：T1–T8 法则生效。见根 `../AGENTS.md` + `agent/product-apps.md`
-- **Workspace 是唯一可复用、可管理、可分享的持久知识容器**；Conversation 可直接归用户且 `workspace_id` 为空；无 org（T7/T8）
+- **Workspace 是云端工作台线唯一可复用、可管理、可分享的持久知识容器**；Conversation 可直接归用户且 `workspace_id` 为空；无 org（T7/T8）。**Agent 插件线（Subtex）以项目目录为唯一主本**、索引派生无副本——见 `plans/2026-09-06-directory-plugin-prd.md`
 - **计费**：B2C 用户级；渠道 **Creem + Alipay**（Stripe 已移除）；**现行商业模式见 ADR-0010**（可分享 Workspace 名额 + 代购储值）；旧 token 滚动套餐 / 桌面买断见已取代 ADR-0004
 - **检索桥**：沙箱↔宿主 fd 管道 RPC（`adr/0009-retrieval-bridge.md`）
 - **代码情报工具**：code-review-graph（graphify 已退役，`agent/code-review-graph.md`）
@@ -18,6 +18,7 @@
 
 | 文档 | 内容 |
 |---|---|
+| `plans/2026-09-06-directory-plugin-prd.md` | **产品方向 PRD：Subtex（桌面 Agent 目录插件层）**（A 线：桌面 Agent 定向强化 API 服务；与 B 线工作台并行发展，ADR-0010 保留；T7 已修订容纳「目录主本」；无注册表——绑定隐含于约定文件+索引仓；M1 闭环 F1–F5） |
 | `../AGENTS.md` | 仓库法则（优先级、prompt 规则、T1–T8、验证默认） |
 | `agent/product-apps.md` | T1–T8 / workspace / org 完整条文 |
 | `agent/code-review-graph.md` | code-review-graph 查询与更新规则 |
@@ -61,6 +62,8 @@
 - `engineering/2026-08-10-harness-llm-user-channel-philosophy-diagnosis.md` — **Harness / LLM / 用户三角信道** vs 现网出站；主审复核通过；**§17 方案补丁**（verify 面 / ceiling 分叉 / 次数阈值）闭合后可开 P0
 
 ## 进行中的计划
+
+- `plans/2026-09-06-subtex-m1-dev-plan.md` — **Subtex M1 开发计划（A 线当前执行队列）**：目标/终态、关键约束、W0–W5 波次（地基 → 索引切片 → MCP 工具面 → subtexd → 音频转写 → 写回+dogfood 周）、每波验证门与 M1 总验收标准；上游 PRD `plans/2026-09-06-directory-plugin-prd.md`
 
 - `plans/2026-09-05-development-execution-plan.md` — **当前执行队列**：收尾未提交 W2.4/W2.5 → W1 验收 → 完整 Chat-first → 在线路由迁移 → GPUI 对等；细化下方 09-04 路线图，明确验证证据、工时估计，以及 Web 切流与最终删除 Next 的依赖。
 - `plans/2026-09-04-rust-web-first-gpui-parity-roadmap.md` — **在线 Rust 优先 + 桌面 GPUI 全量对等路线图**（Step 0 删 Tauri CSR 死路径 → W1/W2 在线 Chat-first → D0 `desktop-core` 抽库 → D1–D6 GPUI）；GPUI 第一刀交接 `plans/2026-09-04-rust-web-gpui-desktop-handoff.md` 转历史

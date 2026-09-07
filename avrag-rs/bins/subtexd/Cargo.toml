@@ -1,0 +1,22 @@
+[package]
+name = "subtexd"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+description = "Subtex resident daemon: watches attached roots, reconciles the index, consumes store jobs"
+
+[dependencies]
+anyhow.workspace = true
+dotenvy = "0.15"
+notify = "8"
+serde_json.workspace = true
+subtex-core = { path = "../../crates/subtex-core" }
+subtex-index = { path = "../../crates/subtex-index" }
+subtex-store-sqlite = { path = "../../crates/subtex-store-sqlite" }
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

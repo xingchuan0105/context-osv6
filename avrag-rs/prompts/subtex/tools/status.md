@@ -1,0 +1,1 @@
+Returns index readiness for a directory per layer (lexical / outline / vector, N of M files), in-flight jobs, transcription progress, and cumulative usage. Layers that are not ready yet are reported as such in the same response.

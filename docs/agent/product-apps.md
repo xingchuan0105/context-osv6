@@ -34,12 +34,14 @@ AppState is a **composition root + face factory** (still holds fat infra context
 | T4 | **No C4**: Capability / Skill / Tool stay three layers (ADR-0006 §5a) |
 | T5 | Behavior-preserving slices; daily verify with **L1** (`bash scripts/test-l1.sh` or targeted `cargo test -p …`) |
 | T6 | Solo local trunk; do not expand CI theater for architecture work |
-| T7 | **`workspace` is the sole reusable/manageable/shareable persistent-knowledge container** replacing `notebook`; a user-owned Conversation may have no workspace (see below) |
+| T7 | **Cloud workbench line: `workspace` is the sole reusable/manageable/shareable persistent-knowledge container** replacing `notebook`; a user-owned Conversation may have no workspace (see below). **Agent-plugin line (Subtex, PRD `docs/plans/2026-09-06-directory-plugin-prd.md`): the user's project directory is the sole master**; indexes are derived/disposable, no ingest copies |
 | T8 | **No product `org`**: tenant/ownership root is **`user_id` / `owner_user_id`**; Conversation resources may scope by **`conversation_id`**, and only Workspace-bound resources require **`workspace_id`**. Migration in progress — **do not add new org surface area** |
 
-## Workspace supersedes notebook (sole persistent-knowledge container)
+## Workspace supersedes notebook (sole persistent-knowledge container — cloud workbench line)
 
 **Canonical product term: `workspace`.** `notebook` is a **legacy alias only** (pre-rename residual). Do **not** reintroduce `notebook` as the primary name.
+
+**Product-line scope (2026-09-06):** this container rule governs the **cloud workbench line**. The desktop-agent plugin line (Subtex, PRD `docs/plans/2026-09-06-directory-plugin-prd.md`) treats the **user's project directory as the sole master**; its indexes are derived and disposable (no ingest copies), and it must not create workspace/notebook/global-KB surfaces.
 
 **Scope boundary:** Conversation is a user-owned interaction object and `workspace_id` may be null. Session-bound files remain visible only to that Conversation and do not form another knowledge base. A file becomes reusable across conversations, manageable as shared material, or shareable only after an explicit Workspace binding is created. Do not add a hidden personal Workspace or a global content library to simulate this boundary.
 

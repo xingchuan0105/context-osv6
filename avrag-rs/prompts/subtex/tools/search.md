@@ -1,0 +1,1 @@
+Hybrid retrieval over the directory index (lexical BM25 + vectors, RRF fusion). Returns hits with `matched_via` tags, source path with line ranges, an `index_readiness` block, and next-step guidance when results are truncated. Layers not yet indexed are declared in the response, so lexical-only stages still answer.

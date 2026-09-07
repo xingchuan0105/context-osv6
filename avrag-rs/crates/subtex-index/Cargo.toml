@@ -1,0 +1,24 @@
+[package]
+name = "subtex-index"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+description = "Subtex indexing pipeline: light parsing, structure-aware chunking, cloud embeddings, store writes; outline rendering"
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+avrag-llm = { path = "../llm" }
+ingestion = { path = "../ingestion" }
+serde_json.workspace = true
+subtex-core = { path = "../subtex-core" }
+subtex-store-sqlite = { path = "../subtex-store-sqlite" }
+tokio = { workspace = true, features = ["fs", "process"] }
+tracing.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+sha2.workspace = true
+tempfile = "3"
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

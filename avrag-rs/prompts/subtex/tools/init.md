@@ -1,0 +1,1 @@
+Initializes the Subtex index store for a project directory. Returns directory facts (file type distribution, existing structure, existing convention content), a draft of the Subtex-managed convention section for `AGENTS.md`, and the result of the first indexing pass. The directory itself is not modified by this call.

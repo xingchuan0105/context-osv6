@@ -1,0 +1,1 @@
+Input is one correction (where a file should live, where a kind of material should be searched). Returns an updated draft of the Subtex-managed convention section with the correction appended as a rule; existing rules are preserved. The agent reviews and writes it back.

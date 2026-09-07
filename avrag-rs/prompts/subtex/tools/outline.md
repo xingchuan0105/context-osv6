@@ -1,0 +1,1 @@
+Returns a token-budgeted outline of the directory: file names, heading trees, and one-line summaries (about 1-2k tokens by default). Available once the outline layer is ready; readiness is stated in the response.

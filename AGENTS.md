@@ -125,7 +125,7 @@ Legacy single-brain SaC union and the 2026-08-07 **three-loop verify path** are 
 | T4 | No C4: Capability / Skill / Tool stay three layers |
 | T5 | Behavior-preserving slices for the **current** contract; verify with targeted `cargo test -p …` / L1 — not a license for dual APIs or compat shims (see Design principles) |
 | T6 | Solo local trunk; no CI theater |
-| T7 | `workspace` is the sole reusable/manageable/shareable persistent-knowledge container; user-owned conversations may have no workspace; never add notebook/global-KB primary APIs |
+| T7 | **云端工作台线**：`workspace` is the sole reusable/manageable/shareable persistent-knowledge container; user-owned conversations may have no workspace; never add notebook/global-KB primary APIs。**Agent 插件线**（Subtex，PRD `docs/plans/2026-09-06-directory-plugin-prd.md`）：用户的**项目目录是唯一主本**，索引为派生层、可弃可重建，禁止入库副本 |
 | T8 | No product `org`: ownership root is `user_id`/`owner_user_id`; conversation resources may scope by `conversation_id`, and only workspace-bound resources require `workspace_id` |
 
 - Execute only via `state.conversation().execute` / `execute_stream`. Sessions/search/citations via `state.agent()`. Documents/workspaces via `state.workspace()`.
@@ -158,11 +158,15 @@ Legacy single-brain SaC union and the 2026-08-07 **three-loop verify path** are 
 
 - Root WSL: `/home/chuan/context-osv6` · Windows: `Z:\home\chuan\context-osv6`
 - Product backend: `avrag-rs` · Frontend: `frontend_next` (Next.js + React + TS, pnpm) · `frontend_rust` workspace only when explicitly asked.
+- A 线 Subtex（目录插件）：crates `subtex-core` / `subtex-index` / `subtex-store-sqlite` + bins `subtexd`；MCP 工具组 `subtex.*`（`AVRAG_SUBTEX=1` 注册，仅本机 user token）；索引仓 `SUBTEX_DATA_DIR`（默认 `~/.local/share/subtex`）。
 
 ## More (links only)
 
 - `docs/README.md` — 文档索引：哪些是现行权威、哪些已被取代、ADR 编号已知问题
 - `docs/agent/product-apps.md` — full T1–T8 / workspace / org text
+- `docs/plans/2026-09-06-directory-plugin-prd.md` — Subtex PRD（A 线产品边界、F1–F7）
+- `docs/plans/2026-09-06-subtex-m1-dev-plan.md` — Subtex M1 开发计划（W0–W5 波次、验证门、总验收）
+- `avrag-rs/prompts/subtex/README.md` — Subtex prompt 资产（约定稿/纠偏稿/工具描述）
 - `avrag-rs/prompts/README.md` · `avrag-rs/prompts/loop/README.md` — prompt CDS + loop nudge load path
 - `docs/agent/code-review-graph.md` — code-review-graph query & update rules
 - `docs/agent/wsl-services.md` — services, ports, VPS

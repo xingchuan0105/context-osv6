@@ -6,7 +6,112 @@ pub(crate) fn mcp_all_tools() -> Vec<Value> {
     tools.extend(ingest_tools());
     tools.extend(query_tools());
     tools.extend(share_tools());
+    if subtex_tools_enabled() {
+        tools.extend(subtex_tools());
+    }
     tools
+}
+
+/// Subtex (A-line directory plugin) registers only on local stacks that opt
+/// in via env; cloud deployments stay without the group.
+pub(crate) fn subtex_tools_enabled() -> bool {
+    std::env::var("AVRAG_SUBTEX").as_deref() == Ok("1")
+}
+
+fn subtex_root_property() -> Value {
+    json!({
+        "type": "string",
+        "description": "Absolute path of the project directory (the agent's cwd / project root)"
+    })
+}
+
+fn subtex_tools() -> Vec<Value> {
+    vec![
+        json!({
+            "name": "subtex.init",
+            "description": include_str!("../../../../prompts/subtex/tools/init.md"),
+            "inputSchema": {
+                "type": "object",
+                "required": ["root"],
+                "properties": { "root": subtex_root_property() },
+            },
+        }),
+        json!({
+            "name": "subtex.status",
+            "description": include_str!("../../../../prompts/subtex/tools/status.md"),
+            "inputSchema": {
+                "type": "object",
+                "required": ["root"],
+                "properties": { "root": subtex_root_property() },
+            },
+        }),
+        json!({
+            "name": "subtex.convention_draft",
+            "description": include_str!("../../../../prompts/subtex/tools/convention-draft.md"),
+            "inputSchema": {
+                "type": "object",
+                "required": ["root"],
+                "properties": { "root": subtex_root_property() },
+            },
+        }),
+        json!({
+            "name": "subtex.correction_draft",
+            "description": include_str!("../../../../prompts/subtex/tools/correction-draft.md"),
+            "inputSchema": {
+                "type": "object",
+                "required": ["root", "correction"],
+                "properties": {
+                    "root": subtex_root_property(),
+                    "correction": {
+                        "type": "string",
+                        "description": "The correction in one or two sentences: where a file should live, or where a kind of material should be searched",
+                    },
+                },
+            },
+        }),
+        json!({
+            "name": "subtex.search",
+            "description": include_str!("../../../../prompts/subtex/tools/search.md"),
+            "inputSchema": {
+                "type": "object",
+                "required": ["root", "query"],
+                "properties": {
+                    "root": subtex_root_property(),
+                    "query": { "type": "string" },
+                    "limit": { "type": "integer", "minimum": 1, "maximum": 25, "description": "Default 8" },
+                },
+            },
+        }),
+        json!({
+            "name": "subtex.outline",
+            "description": include_str!("../../../../prompts/subtex/tools/outline.md"),
+            "inputSchema": {
+                "type": "object",
+                "required": ["root"],
+                "properties": {
+                    "root": subtex_root_property(),
+                    "token_budget": { "type": "integer", "minimum": 64, "maximum": 8192, "description": "Default 1500" },
+                },
+            },
+        }),
+        json!({
+            "name": "subtex.transcribe",
+            "description": include_str!("../../../../prompts/subtex/tools/transcribe.md"),
+            "inputSchema": {
+                "type": "object",
+                "required": ["root"],
+                "properties": {
+                    "root": subtex_root_property(),
+                    "paths": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "Audio files relative to root; empty means all pending audio",
+                    },
+                    "confirm": { "type": "boolean", "description": "Set true to run a batch above the duration threshold" },
+                },
+            },
+        }),
+    ]
 }
 
 pub(crate) fn mcp_workspace_query_tools() -> Vec<Value> {

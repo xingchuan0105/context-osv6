@@ -1,0 +1,1 @@
+Returns a fresh draft of the Subtex-managed convention section, derived from the current directory facts. The draft touches only the content between the `<!-- subtex:begin -->` and `<!-- subtex:end -->` markers; the agent reviews and writes it back.

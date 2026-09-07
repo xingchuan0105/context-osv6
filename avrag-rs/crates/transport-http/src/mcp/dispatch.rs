@@ -2,7 +2,19 @@ use app_bootstrap::AppState;
 use common::AppError;
 use serde_json::Value;
 
+use super::catalog;
 use super::tools;
+
+fn require_subtex_enabled(tool_name: &str) -> Result<(), AppError> {
+    if catalog::subtex_tools_enabled() {
+        Ok(())
+    } else {
+        Err(AppError::validation(
+            "unsupported_tool",
+            format!("unsupported MCP tool: {tool_name}"),
+        ))
+    }
+}
 
 pub(crate) async fn execute_mcp_tool(
     state: &AppState,
@@ -26,6 +38,27 @@ pub(crate) async fn execute_mcp_tool(
         "workspace.share_revoke_link" => tools::share_revoke_link(state, arguments).await,
         "workspace.share_invite_member" => tools::share_invite_member(state, arguments).await,
         "account.share_quota" => tools::share_quota(state, arguments).await,
+        "subtex.init"
+        | "subtex.status"
+        | "subtex.convention_draft"
+        | "subtex.correction_draft"
+        | "subtex.search"
+        | "subtex.outline"
+        | "subtex.transcribe" => {
+            require_subtex_enabled(tool_name)?;
+            match tool_name {
+                "subtex.init" => tools::subtex_init(state, arguments).await,
+                "subtex.status" => tools::subtex_status(state, arguments).await,
+                "subtex.convention_draft" => tools::subtex_convention_draft(state, arguments).await,
+                "subtex.correction_draft" => {
+                    tools::subtex_correction_draft(state, arguments).await
+                }
+                "subtex.search" => tools::subtex_search(state, arguments).await,
+                "subtex.outline" => tools::subtex_outline(state, arguments).await,
+                "subtex.transcribe" => tools::subtex_transcribe(state, arguments).await,
+                _ => unreachable!("subtex tool name already matched"),
+            }
+        }
         other => Err(AppError::validation(
             "unsupported_tool",
             format!("unsupported MCP tool: {other}"),
