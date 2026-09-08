@@ -1,8 +1,8 @@
 use crate::api_base::poc_api_base;
 use crate::components::chat::{
-    ChatCanvasModel, ChatComposer, MessageActions, ModelRoleBadge, PreparedUserTurn,
+    ChatCanvasModel, ChatComposer, MessageActions, PreparedUserTurn,
 };
-use crate::components::shell::AppTopBar;
+use crate::components::shell::{ContextTopBar, NavigationRail, NavigationState};
 use crate::i18n::use_i18n;
 use crate::routes::dest;
 use crate::reducer::{ActivityEntry, TurnStatus};
@@ -53,7 +53,7 @@ pub fn ChatPage(
     let composer = RwSignal::new(String::new());
     let transcript_ref = NodeRef::<leptos::html::Section>::new();
     let elapsed_secs = RwSignal::new(0_u32);
-    let rail_open = RwSignal::new(false);
+    let navigation = NavigationState::new();
     let web_sources_open = RwSignal::new(false);
     let follow_bottom = RwSignal::new(true);
     let active_cite = RwSignal::new(None::<String>);
@@ -388,6 +388,7 @@ pub fn ChatPage(
     let start_new = {
         let navigate = navigate.clone();
         move |_| {
+            navigation.open.set(false);
             model.update(|m| {
                 if let Some(ws_id) = route_workspace_id.get_untracked() {
                     m.switch_to_workspace(&ws_id, None);
@@ -427,6 +428,7 @@ pub fn ChatPage(
             if model.with(|m| m.is_streaming()) {
                 return;
             }
+            navigation.open.set(false);
             if session.scope_kind == contracts::workspaces::ConversationScopeKind::Workspace {
                 if let Some(ws_id) = &session.workspace_id {
                     navigate(
@@ -473,48 +475,12 @@ pub fn ChatPage(
     let show_app_bar = Signal::derive(move || route_workspace_id.get().is_none());
 
     view! {
-        <div class=move || if show_app_bar.get() { "app-frame" } else { "chat-embed" }>
-            <Show when=move || show_app_bar.get()>
-                <AppTopBar/>
-            </Show>
-        <div class=move || {
-            if rail_open.get() {
-                "chat-shell is-rail-open"
-            } else {
-                "chat-shell"
-            }
-        }>
+        <div class=move || if show_app_bar.get() { "app-layout" } else { "chat-embed" }
+            data-navigation-open=move || navigation.open.get().to_string()
+            data-navigation-collapsed=move || navigation.collapsed.get().to_string()>
+        <div class="chat-shell">
             {(!knowledge_chat).then(|| view! {
-            <button
-                type="button"
-                class="chat-rail-toggle"
-                data-testid="chat-rail-toggle"
-                aria-expanded=move || rail_open.get()
-                aria-controls="chat-session-drawer"
-                on:click=move |_| rail_open.update(|open| *open = !*open)
-            >
-                {move || {
-                    if rail_open.get() {
-                        i18n.t("chat.sessionsToggleClose")
-                    } else {
-                        i18n.t("chat.sessionsToggle")
-                    }
-                }}
-            </button>
-            <button
-                type="button"
-                class="chat-rail-dismiss"
-                data-testid="chat-rail-dismiss"
-                aria-label=move || i18n.t("chat.sessionsDismiss")
-                hidden=move || !rail_open.get()
-                on:click=move |_| rail_open.set(false)
-            ></button>
-            <aside
-                class="chat-sessions"
-                id="chat-session-drawer"
-                aria-label=move || i18n.t("chat.sessionsListLabel")
-                data-testid="session-list"
-            >
+            <NavigationRail state=navigation>
                 {move || {
                     route_workspace_id.get().map(|ws_id| {
                         view! {
@@ -534,6 +500,7 @@ pub fn ChatPage(
                     data-testid="new-chat-button"
                     on:click=start_new
                 >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
                     {move || i18n.t("chat.newConversation")}
                 </button>
                 <div class="chat-workspaces" data-testid="chat-workspaces">
@@ -657,8 +624,12 @@ pub fn ChatPage(
                         }
                     })
                 }}
-            </aside>
+            </NavigationRail>
             })}
+            <div class="app-layout-main" inert=move || navigation.open.get()>
+            <Show when=move || show_app_bar.get()>
+                <ContextTopBar state=navigation title=Signal::derive(move || i18n.t("chat.pageTitle"))/>
+            </Show>
             <main
                 class=move || {
                     if model.with(|m| m.manager().active.messages.is_empty()) && !history_loading.get()
@@ -671,14 +642,6 @@ pub fn ChatPage(
                 aria-label=move || i18n.t("chat.canvasLabel")
                 data-testid="chat-canvas"
             >
-                <header class="chat-header">
-                    <h1 class="chat-title">{move || i18n.t("chat.pageTitle")}</h1>
-                    <ModelRoleBadge
-                        model_role=current_model_role
-                        has_byok=Signal::derive(move || has_byok.get())
-                    />
-                </header>
-
                 <section
                     class="chat-transcript"
                     aria-label=move || i18n.t("chat.transcriptLabel")
@@ -916,6 +879,8 @@ pub fn ChatPage(
                 </section>
 
                 <ChatComposer
+                    model_role=current_model_role
+                    has_byok=Signal::derive(move || has_byok.get())
                     value=composer
                     streaming=Signal::derive(is_streaming)
                     locked=Signal::derive(composer_locked)
@@ -970,6 +935,7 @@ pub fn ChatPage(
                     }}
                 </Show>
             </main>
+            </div>
         </div>
         </div>
     }

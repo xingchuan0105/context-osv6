@@ -122,6 +122,7 @@ pub fn TurnAttachmentTray(
                 on:change=on_change/>
             <div class="chat-file-tray-row">
             <button type="button" class="chat-file-attach" data-testid="turn-attachment-add"
+                aria-label=move || i18n.t("chat.attachFile")
                 aria-describedby="turn-attachment-hint"
                 title=move || i18n.t("chat.attachmentHint")
                 disabled=move || disabled.get() || busy.get()
@@ -129,9 +130,8 @@ pub fn TurnAttachmentTray(
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <path d="m21 11-8 8a6 6 0 0 1-8.5-8.5l9-9a4 4 0 0 1 5.7 5.7l-9 9a2 2 0 0 1-2.8-2.8l8-8"/>
                 </svg>
-                {move || i18n.t("chat.attachFile")}
             </button>
-            <span class="chat-composer-hint">{move || i18n.t("chat.attachmentScope")}</span>
+            <span class="chat-attachment-scope">{move || i18n.t("chat.attachmentScope")}</span>
             </div>
             <p id="turn-attachment-hint" class="sr-only">{move || i18n.t("chat.attachmentHint")}</p>
             <Show when=move || busy.get()><p role="status">{move || i18n.t("chat.attachmentParsing")}</p></Show>

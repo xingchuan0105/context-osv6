@@ -1232,8 +1232,8 @@
     "zh": "正在生成回答，可随时停止。"
   },
   "chat.composerPlaceholder": {
-    "en": "Write a message. Enter to send (Shift+Enter for a new line)",
-    "zh": "输入消息，Enter 发送（Shift+Enter 换行）"
+    "en": "Ask anything…",
+    "zh": "输入问题…"
   },
   "chat.composerSendLabel": {
     "en": "Send message",
@@ -1321,7 +1321,7 @@
   },
   "chat.heroSubtitle": {
     "en": "Ask directly, or turn on web search when you need current information.",
-    "zh": "直接提问；需要最新信息时可开启网络搜索。"
+    "zh": "有什么可以帮你？"
   },
   "chat.historyLoading": {
     "en": "Loading this chat…",

@@ -94,24 +94,16 @@ test.describe('Rust/UI composer', () => {
     await expect(input).toHaveValue('Keep this question');
   });
 
-  test('输入区自动增高、键盘调高和拖动保持边界', async ({ page }) => {
+  test('输入区自动增高、长文本上限与清空恢复', async ({ page }) => {
     await gotoChat(page, FIXTURE_BASE);
     const input = page.getByTestId('composer-input');
-    const resize = page.getByTestId('composer-resize');
     await input.fill('短消息');
     await expect(page.getByTestId('send-button')).toBeEnabled();
     const shortHeight = (await input.boundingBox())!.height;
     await input.fill(Array(20).fill('多行消息').join('\n'));
     await expect.poll(async () => (await input.boundingBox())!.height).toBeGreaterThan(shortHeight);
-    await resize.focus();
-    for (let index = 0; index < 8; index++) await resize.press('ArrowUp');
-    await expect(resize).toHaveAttribute('aria-valuenow', '320');
-    const bounds = (await resize.boundingBox())!;
-    await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
-    await page.mouse.down();
-    await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + 600);
-    await page.mouse.up();
-    await expect(resize).toHaveAttribute('aria-valuenow', '72');
+    expect((await input.boundingBox())!.height).toBeLessThanOrEqual(240);
+    await input.fill('');
     await expect.poll(async () => (await input.boundingBox())!.height).toBe(72);
   });
 
@@ -693,17 +685,13 @@ test.describe('浏览器聊天旅程（Gate C/D）', () => {
 });
 
 test.describe('Chat 呈现（E5.3 / G5.3）', () => {
-  test('空态 hero、composer 手柄与移动会话抽屉', async ({ page }) => {
+  test('空态 hero、紧凑输入区与移动会话抽屉', async ({ page }) => {
     const errors = collectPageErrors(page);
     await gotoChat(page, FIXTURE_BASE);
     await expect(page.getByTestId('chat-hero')).toBeVisible();
-    await expect(page.getByTestId('chat-empty')).toHaveText('直接提问；需要最新信息时可开启网络搜索。');
-    const handle = page.getByTestId('composer-resize');
-    await expect(handle).toBeVisible();
-    await expect(handle).toHaveAttribute('role', 'slider');
-    await handle.focus();
-    await page.keyboard.press('ArrowUp');
-    await expect(handle).toHaveAttribute('aria-valuenow', '112');
+    await expect(page.getByTestId('chat-empty')).toHaveText('有什么可以帮你？');
+    await expect(page.getByTestId('turn-attachment-add')).toBeVisible();
+    await expect(page.getByTestId('composer-resize')).toHaveCount(0);
 
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(page.getByTestId('chat-rail-toggle')).toBeVisible();

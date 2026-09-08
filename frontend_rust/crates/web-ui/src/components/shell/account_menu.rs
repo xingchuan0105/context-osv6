@@ -69,6 +69,10 @@ pub fn AccountMenu() -> impl IntoView {
                     on:click=move |_| {
                         open.set(false);
                         flyout.set(None);
+                        request_animation_frame(move || {
+                            #[cfg(target_arch = "wasm32")]
+                            if let Some(button) = trigger.get_untracked() { let _ = button.focus(); }
+                        });
                     }
                 />
                 <div class="app-menu-panel"  data-testid="dashboard-account-menu">

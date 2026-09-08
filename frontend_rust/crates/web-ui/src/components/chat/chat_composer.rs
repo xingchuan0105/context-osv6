@@ -1,5 +1,5 @@
 // Adapted from Rust/UI Input Prompt; see frontend_rust/THIRD_PARTY.md.
-use crate::components::chat::{ScopeBar, TurnAttachmentTray};
+use crate::components::chat::{ModelRoleBadge, ScopeBar, TurnAttachmentTray};
 use crate::components::ui::{Button, ButtonVariant};
 use crate::i18n::use_i18n;
 use leptos::prelude::*;
@@ -8,6 +8,8 @@ use web_sdk::Capability;
 /// Input presentation and DOM behavior. Conversation and upload policy stay with their owners.
 #[component]
 pub fn ChatComposer(
+    model_role: Signal<String>,
+    has_byok: Signal<bool>,
     value: RwSignal<String>,
     streaming: Signal<bool>,
     locked: Signal<bool>,
@@ -27,8 +29,7 @@ pub fn ChatComposer(
 ) -> impl IntoView {
     let i18n = use_i18n();
     let composer_ref = NodeRef::<leptos::html::Textarea>::new();
-    let composer_height = RwSignal::new(96_i32);
-    let resize_origin = RwSignal::new(None::<(i32, i32)>);
+    let composer_height = RwSignal::new(72_i32);
     let composing = RwSignal::new(false);
     let input_initialized = RwSignal::new(false);
     let send_disabled = Signal::derive(move || locked.get() || value.get().trim().is_empty());
@@ -71,20 +72,21 @@ pub fn ChatComposer(
             class="chat-composer"
             aria-label=move || i18n.t("chat.composerSendLabel")
             data-testid="chat-composer"
+            data-knowledge=knowledge_chat
             data-ready=move || input_initialized.get().to_string()
             on:submit=move |ev| {
                 ev.prevent_default();
                 submit();
             }
         >
-            <label class="chat-composer-label" for="chat-composer-input">
+            <label class="sr-only" for="chat-composer-input">
                 {move || i18n.t("chat.composerInputLabel")}
             </label>
             <textarea
                 id="chat-composer-input"
                 data-testid="composer-input"
                 node_ref=composer_ref
-                rows=3
+                rows=2
                 aria-describedby="chat-composer-hint"
                 placeholder=move || i18n.t("chat.composerPlaceholder")
                 on:input=move |ev| value.set(event_target_value(&ev))
@@ -99,23 +101,6 @@ pub fn ChatComposer(
                     }
                 }
             ></textarea>
-            <div
-                class="chat-composer-resize"
-                role="slider"
-                tabindex="0"
-                aria-label=move || i18n.t("workspaceChatComposerResize")
-                aria-orientation="vertical"
-                aria-controls="chat-composer-input"
-                aria-valuemin="72"
-                aria-valuemax="320"
-                aria-valuenow=move || composer_height.get().to_string()
-                data-testid="composer-resize"
-                on:pointerdown=move |ev| start_composer_resize(ev, composer_ref, composer_height, resize_origin)
-                on:pointermove=move |ev| continue_composer_resize(ev, composer_ref, composer_height, resize_origin)
-                on:pointerup=move |_| resize_origin.set(None)
-                on:pointercancel=move |_| resize_origin.set(None)
-                on:keydown=move |ev| nudge_composer_height(ev, composer_ref, composer_height)
-            ></div>
             <Show when=move || !knowledge_chat>
                 <TurnAttachmentTray files=attachments files_blocked=files_blocked disabled=attach_disabled epoch=epoch/>
             </Show>
@@ -126,25 +111,31 @@ pub fn ChatComposer(
                     knowledge_chat=knowledge_chat
                 />
                 <div class="chat-composer-actions">
+                    <a class="chat-model-settings" href="/settings?tab=providers" title=move || i18n.t("settings.tabs.providers")>
+                        <ModelRoleBadge model_role=model_role has_byok=has_byok/>
+                    </a>
                     <Show when=move || can_retry.get()>
                         <Button variant=ButtonVariant::Secondary test_id="retry-button"
                             on_click=Callback::new(move |_| { on_retry.run(()); focus(); })>
-                            {move || i18n.t("chat.retry")}
+                            <span class="sr-only">{move || i18n.t("chat.retry")}</span>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M20 7v5h-5M20 12a8 8 0 1 0-2 6"/></svg>
                         </Button>
                     </Show>
                     <Show when=move || streaming.get() fallback=move || view! {
                         <Button button_type="submit" disabled=send_disabled test_id="send-button">
-                            {move || i18n.t("workspaceSend")}
+                            <span class="sr-only">{move || i18n.t("workspaceSend")}</span>
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg>
                         </Button>
                     }>
                         <Button test_id="stop-button"
                             on_click=Callback::new(move |_| { on_stop.run(()); focus(); })>
-                            {move || i18n.t("workspaceChatStop")}
+                            <span class="sr-only">{move || i18n.t("workspaceChatStop")}</span>
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
                         </Button>
                     </Show>
                 </div>
             </div>
-            <p id="chat-composer-hint" class="chat-composer-hint" role="status">
+            <p id="chat-composer-hint" class=move || if history_loading.get() || files_blocked.get() || streaming.get() { "chat-composer-hint" } else { "sr-only" } role="status">
                 {move || i18n.t(if history_loading.get() {
                     "chat.historyLoading"
                 } else if files_blocked.get() {
@@ -159,17 +150,6 @@ pub fn ChatComposer(
     }
 }
 
-fn apply_composer_height(composer_ref: NodeRef<leptos::html::Textarea>, px: i32) {
-    #[cfg(target_arch = "wasm32")]
-    {
-        if let Some(area) = composer_ref.get() {
-            let html: &web_sys::HtmlElement = &area;
-            let _ = html.style().set_property("height", &format!("{px}px"));
-        }
-    }
-    let _ = (composer_ref, px);
-}
-
 fn autosize_composer(
     composer_ref: NodeRef<leptos::html::Textarea>,
     composer_height: RwSignal<i32>,
@@ -182,7 +162,7 @@ fn autosize_composer(
         let html: &web_sys::HtmlElement = &area;
         let _ = html.style().set_property("height", "auto");
         let height = if area.value().is_empty() {
-            96
+            72
         } else {
             html.scroll_height().clamp(72, 240)
         };
@@ -190,56 +170,4 @@ fn autosize_composer(
         let _ = html.style().set_property("height", &format!("{height}px"));
     }
     let _ = (composer_ref, composer_height);
-}
-
-fn start_composer_resize(
-    ev: leptos::ev::PointerEvent,
-    composer_ref: NodeRef<leptos::html::Textarea>,
-    composer_height: RwSignal<i32>,
-    resize_origin: RwSignal<Option<(i32, i32)>>,
-) {
-    ev.prevent_default();
-    let start_h = composer_height.get_untracked();
-    resize_origin.set(Some((ev.client_y() as i32, start_h)));
-    #[cfg(target_arch = "wasm32")]
-    {
-        use wasm_bindgen::JsCast;
-        if let Some(target) = ev.current_target() {
-            if let Ok(el) = target.dyn_into::<web_sys::Element>() {
-                let _ = el.set_pointer_capture(ev.pointer_id());
-            }
-        }
-        apply_composer_height(composer_ref, start_h);
-    }
-    let _ = composer_ref;
-}
-
-fn continue_composer_resize(
-    ev: leptos::ev::PointerEvent,
-    composer_ref: NodeRef<leptos::html::Textarea>,
-    composer_height: RwSignal<i32>,
-    resize_origin: RwSignal<Option<(i32, i32)>>,
-) {
-    let Some((start_y, start_h)) = resize_origin.get() else {
-        return;
-    };
-    let next = (start_h + (start_y - ev.client_y() as i32)).clamp(72, 320);
-    composer_height.set(next);
-    apply_composer_height(composer_ref, next);
-}
-
-fn nudge_composer_height(
-    ev: leptos::ev::KeyboardEvent,
-    composer_ref: NodeRef<leptos::html::Textarea>,
-    composer_height: RwSignal<i32>,
-) {
-    let delta = match ev.key().as_str() {
-        "ArrowUp" => 16,
-        "ArrowDown" => -16,
-        _ => return,
-    };
-    ev.prevent_default();
-    let next = (composer_height.get_untracked() + delta).clamp(72, 320);
-    composer_height.set(next);
-    apply_composer_height(composer_ref, next);
 }

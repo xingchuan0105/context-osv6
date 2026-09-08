@@ -4,6 +4,9 @@ pub mod marketing_chrome;
 pub mod notification_bell;
 pub mod product_chrome_footer;
 pub mod share_menu;
+pub mod navigation;
+
+pub use navigation::{ContextTopBar, NavigationRail, NavigationState};
 
 pub use account_menu::AccountMenu;
 pub use app_top_bar::AppTopBar;

@@ -1,5 +1,7 @@
 # Context-OS 样式基准（Style Baseline）
 
+**2026-09-08 Rust 布局验收补充**：Rust W0 样稿已确认。应用导航、阅读宽度、输入区与分区布局以 `PRODUCT_IA.md` §5 的 Rust 决策为准；颜色与字重保持本基线。聊天 composer 允许专用 `--radius-composer: 1rem`，导航行使用 8px，图标操作使用圆形触达区域；不再以“所有可点击元素一律胶囊”约束导航行。Next 与其他站点本轮不变。
+
 **体系名**: Cream × Void（暖米白纸 × 深空近黑）
 **状态**: Canonical（样式源规范；实现以本文件为准）
 **实现源**: `packages/cos-tokens/`（`sync.sh` 同步到 App / Landing / Why / Ghost / Canju）

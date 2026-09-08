@@ -40,6 +40,7 @@ for (const theme of ['light', 'dark']) {
       await expect(page.getByTestId('scope-cap-search')).toHaveCSS('background-color', selectedBackground);
       await page.screenshot({ path: `${output}/${theme}-${width}-composer-active.png`, fullPage: true, animations: 'disabled' });
       const account = page.getByTestId('dashboard-account-menu-trigger');
+      if (width === 390 && !(await account.isVisible())) await page.getByTestId('chat-rail-toggle').click();
       await account.click();
       const menu = page.getByTestId('dashboard-account-menu');
       await expect(menu).toBeVisible();
@@ -53,7 +54,9 @@ for (const theme of ['light', 'dark']) {
       await account.click();
       await page.mouse.click(width - 2, 842);
       await expect(menu).toBeHidden();
+      await expect(account).toBeFocused();
       if (width === 390) {
+        await page.keyboard.press('Escape');
         await page.getByTestId('chat-rail-toggle').click();
         const dismiss = page.getByTestId('chat-rail-dismiss');
         await expect(dismiss).toBeVisible();
@@ -93,7 +96,7 @@ for (const theme of ['light', 'dark']) {
           return {
             overflow: document.documentElement.scrollWidth - innerWidth,
             heavy: [...document.querySelectorAll('h1,h2,h3,h4,strong,b,th,button')].filter(visible).filter(el => Number(getComputedStyle(el).fontWeight) > 400).map(describe),
-            squareButtons: [...document.querySelectorAll('button')].filter(visible).filter(el => !el.matches('.app-menu-dismiss,.chat-rail-dismiss')).filter(el => parseFloat(getComputedStyle(el).borderRadius) < el.getBoundingClientRect().height / 2).map(describe),
+            squareButtons: [...document.querySelectorAll('button')].filter(visible).filter(el => !el.matches('.app-menu-dismiss,.app-navigation-dismiss,.app-navigation .chat-new-chat,.app-navigation .chat-session-item')).filter(el => parseFloat(getComputedStyle(el).borderRadius) < el.getBoundingClientRect().height / 2).map(describe),
             wide: [...document.querySelectorAll('main *,section *,form *')].filter(visible).filter(el => el.getBoundingClientRect().right > innerWidth + 1 && !el.closest('pre,.admin-table-scroll,.pub-table-wrap')).slice(0, 8).map(describe),
           };
         });

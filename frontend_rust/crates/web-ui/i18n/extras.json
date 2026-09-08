@@ -25,7 +25,7 @@
   "chat.citationsLabel": { "zh": "引用", "en": "Citations" },
   "chat.composerSendLabel": { "zh": "发送消息", "en": "Send message" },
   "chat.composerInputLabel": { "zh": "输入消息", "en": "Message" },
-  "chat.composerPlaceholder": { "zh": "输入消息，Enter 发送（Shift+Enter 换行）", "en": "Write a message. Enter to send (Shift+Enter for a new line)" },
+  "chat.composerPlaceholder": { "zh": "输入问题…", "en": "Ask anything…" },
   "chat.roleUser": { "zh": "我", "en": "You" },
   "chat.roleAssistant": { "zh": "助手", "en": "Assistant" },
   "chat.statusStreaming": { "zh": "正在生成回答…", "en": "Generating…" },

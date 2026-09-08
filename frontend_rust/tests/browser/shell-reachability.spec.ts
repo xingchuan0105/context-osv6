@@ -37,14 +37,16 @@ async function collectChromeHrefs(page: Page): Promise<Set<string>> {
     await expect(page.getByTestId('app-topbar-share-menu-panel')).toBeVisible();
     for (const href of await collectHrefs(page)) hrefs.add(href);
     await page.keyboard.press('Escape');
-    await page.locator('.app-menu-dismiss').first().click({ force: true }).catch(() => undefined);
+    const dismiss = page.locator('.app-menu-dismiss').first();
+    if (await dismiss.isVisible()) await dismiss.click();
   }
   const account = page.getByTestId('dashboard-account-menu-trigger');
   if (await account.count()) {
     await account.click();
     await expect(page.getByTestId('dashboard-account-menu')).toBeVisible();
     for (const href of await collectHrefs(page)) hrefs.add(href);
-    await page.locator('.app-menu-dismiss').first().click({ force: true }).catch(() => undefined);
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('dashboard-account-menu')).toBeHidden();
   }
   return hrefs;
 }
@@ -55,14 +57,7 @@ test.describe('E5.2 全局壳可达性', () => {
     await page.goto(`${WEB_BASE}/chat`, { waitUntil: 'domcontentloaded' });
     await expect(page.getByTestId('app-top-bar')).toBeVisible();
     await expect(page.getByTestId('all-workspaces-link')).toHaveAttribute('href', '/dashboard');
-    await page.getByTestId('app-topbar-share-menu').click();
-    await expect(page.getByTestId('app-topbar-share-traffic')).toHaveAttribute(
-      'href',
-      '/dashboard/analytics',
-    );
-    await expect(page.getByTestId('app-topbar-share-api')).toHaveAttribute('href', '/help/api-access');
-    await expect(page.getByTestId('app-topbar-share-upgrade')).toHaveAttribute('href', '/pricing');
-    await page.locator('.app-menu-dismiss').first().click();
+    await expect(page.getByTestId('app-topbar-share-menu')).toHaveCount(0);
     await page.getByTestId('dashboard-account-menu-trigger').click();
     await expect(page.getByTestId('account-settings-link')).toHaveAttribute('href', '/settings');
     await expect(page.getByTestId('account-help-link')).toHaveAttribute('href', '/help');
