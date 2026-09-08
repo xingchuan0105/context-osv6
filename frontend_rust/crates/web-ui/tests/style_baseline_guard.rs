@@ -229,6 +229,11 @@ fn test_visual_foundation_floors() {
     let focus = css.matches(":focus").count();
     let transition = css.matches("transition").count();
     let keyframes = css.matches("@keyframes").count();
+    let kf_re = regex_lite::Regex::new(r"@keyframes\s+([A-Za-z0-9_-]+)").unwrap();
+    let unique_keyframes: std::collections::BTreeSet<_> = kf_re
+        .captures_iter(css)
+        .map(|cap| cap[1].to_string())
+        .collect();
     assert!(
         focus >= 20,
         ":focus* count {focus} is below floor 20"
@@ -240,5 +245,10 @@ fn test_visual_foundation_floors() {
     assert!(
         keyframes >= 3,
         "@keyframes count {keyframes} is below floor 3"
+    );
+    assert!(
+        unique_keyframes.len() >= 10,
+        "unique @keyframes names {} is below floor 10: {unique_keyframes:?}",
+        unique_keyframes.len()
     );
 }

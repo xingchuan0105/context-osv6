@@ -362,6 +362,22 @@
     color: var(--cos-text-subtle);
 }
 
+.rail-doc-item[data-status="pending"] .rail-doc-status::before,
+.rail-doc-item[data-status="enqueueing"] .rail-doc-status::before,
+.rail-doc-item[data-status="queued"] .rail-doc-status::before,
+.rail-doc-item[data-status="processing"] .rail-doc-status::before {
+    content: "";
+    display: inline-block;
+    width: 0.55rem;
+    height: 0.55rem;
+    margin-right: 0.3rem;
+    border: 2px solid var(--cos-border);
+    border-top-color: var(--cos-accent);
+    border-radius: 50%;
+    animation: cos-spin 0.72s linear infinite;
+    vertical-align: middle;
+}
+
 .rail-note-preview {
     font-size: 0.6875rem;
     color: var(--cos-text-secondary);
@@ -390,6 +406,26 @@
     font-size: 0.75rem;
     padding: 0.25rem 0.5rem;
     cursor: pointer;
+}
+
+.note-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    min-height: 12rem;
+}
+
+.note-editor-host {
+    min-height: 10rem;
+    border: 1px solid var(--cos-border);
+    border-radius: var(--cos-radius-sm);
+    background: var(--cos-surface);
+    padding: 0.5rem 0.75rem;
+}
+
+.note-editor-fallback {
+    width: 100%;
+    box-sizing: border-box;
 }
 
 .rail-note-form {

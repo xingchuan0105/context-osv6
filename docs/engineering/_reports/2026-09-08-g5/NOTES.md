@@ -30,7 +30,9 @@ Next 基线快照（`5f9dedda`）：`next/{login,dashboard}.png`
 
 - C1：`style_baseline_guard` 全绿（字重 / 裸 hex / 阴影白名单 / 无内联 style / 悬空 var=0）
 - 占位清零：`"98.5"` / `"42"` / `"128"` 在 `frontend_rust` 源码 grep=0（条件 3）
-- 条件 2：未达（`CSS_COUNTS.md`）
+- 条件 2：§0 **出现次数** 80% 仍未达；**唯一语义** `@keyframes` 14/13、`:focus` / `:active` 已超 Next 源码唯一基。口径说明见 `CSS_COUNTS.md`。未改 W5 前置。
+- 视觉深度补丁（本波）：把 Next 13 个唯一动效接到真实表面（thinking / chase / status spin / shimmer / step-in / panel-in）；控件 hover/active/focus 矩阵补齐 CTA、composer、资料 processing、菜单面板。接受细微偏差（progress 为条带而非 3×3 点阵）。
+- Leptos 官方默认就是全局 CSS；不上 Tailwind/Stylance 灌选择器。
 - E5.1–E5.5 证据目录仍在
 
 ## 4. 回归

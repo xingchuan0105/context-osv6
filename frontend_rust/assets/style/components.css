@@ -29,8 +29,29 @@
     transition: background-color var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard);
 }
 
-.chat-progress-toggle {
-    transition: background-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard);
+.chat-progress-toggle,
+.chat-code-copy,
+.chat-file-action,
+.chat-composer-actions button,
+.rail-btn-new-note,
+.admin-pager-btn,
+.app-notify-item-btn,
+.app-top-bar-capsule,
+.app-menu-item,
+.mkt-nav-enter,
+.pub-btn {
+    transition: background-color var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard), transform var(--duration-fast) var(--ease-standard);
+}
+
+.chat-rail-toggle,
+.chat-scroll-bottom {
+    transition: background-color var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard);
+}
+
+.mkt-nav-link,
+.mkt-lang-btn,
+summary {
+    transition: color var(--duration-fast) var(--ease-standard), background-color var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard);
 }
 
 .chat-workspace-back {
@@ -71,6 +92,30 @@
 
 .dashboard-workspace-card {
     transition: border-color var(--duration-fast) var(--ease-standard), background-color var(--duration-fast) var(--ease-standard);
+    animation: cos-card-enter var(--duration-slow) var(--ease-standard) both;
+}
+
+.dashboard-workspace-card:nth-child(1) { animation-delay: 0ms; }
+.dashboard-workspace-card:nth-child(2) { animation-delay: 50ms; }
+.dashboard-workspace-card:nth-child(3) { animation-delay: 100ms; }
+.dashboard-workspace-card:nth-child(4) { animation-delay: 150ms; }
+.dashboard-workspace-card:nth-child(5) { animation-delay: 200ms; }
+.dashboard-workspace-card:nth-child(6) { animation-delay: 250ms; }
+.dashboard-workspace-card:nth-child(7) { animation-delay: 300ms; }
+.dashboard-workspace-card:nth-child(8) { animation-delay: 350ms; }
+
+.pricing-plan-card,
+.settings-usage-card,
+.pub-card,
+.help-card,
+.admin-link-card {
+    animation: cos-card-enter var(--duration-slow) var(--ease-standard) both;
+}
+
+.app-menu-panel,
+.app-notify-panel,
+.note-editor-host {
+    animation: cos-panel-in var(--duration-slow) var(--ease-standard);
 }
 
 .dashboard-chat-link {
@@ -105,10 +150,6 @@
     transition: background-color var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard);
 }
 
-.pub-btn {
-    transition: background-color var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard);
-}
-
 .topup-pack-btn {
     transition: background-color var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard);
 }
@@ -124,15 +165,51 @@ select {
 .chat-action-button:hover:not(:disabled),
 .chat-file-attach:hover:not(:disabled),
 .chat-scope-chip:hover:not(:disabled),
+.chat-rail-toggle:hover,
+.chat-scroll-bottom:hover,
+.chat-progress-toggle:hover,
+.chat-cite-chip:hover:not(:disabled),
+.chat-code-copy:hover,
+.chat-file-action:hover,
+.chat-composer-actions button[type="button"]:hover:not(:disabled),
 .settings-nav-item:hover,
 .dashboard-header-btn:hover,
 .dashboard-btn-cancel:hover,
 .rail-tab:hover,
+.rail-btn-new-note:hover,
+.rail-doc-item:hover,
+.rail-note-item:hover,
 .admin-nav-item:hover,
 .admin-panel-btn:hover:not(:disabled),
+.admin-pager-btn:hover:not(:disabled),
 .topup-pack-btn:hover,
-.topup-provider-btn:hover {
+.topup-provider-btn:hover,
+.mkt-nav-link:hover,
+.mkt-lang-btn:hover,
+.pub-btn:hover,
+.app-notify-item-btn:hover,
+.dashboard-modal-close:hover,
+.admin-table-danger:hover,
+.chat-cite-card:hover,
+.chat-file-item:hover,
+.chat-tool-card:hover,
+summary:hover {
     border-color: var(--cos-border-strong);
+    background: var(--cos-surface-hover);
+}
+
+.auth-submit-btn:hover:not(:disabled),
+.settings-btn-save:hover:not(:disabled),
+.dashboard-create-btn:hover:not(:disabled),
+.dashboard-btn-confirm:hover:not(:disabled),
+.chat-composer-actions button:not([type="button"]):hover:not(:disabled),
+.mkt-nav-enter:hover {
+    background: var(--cos-cta-hover);
+}
+
+.settings-btn-revoke:hover:not(:disabled),
+.rail-doc-delete:hover,
+.rail-note-delete:hover {
     background: var(--cos-surface-hover);
 }
 
@@ -251,12 +328,29 @@ select {
     box-shadow: var(--shadow-focus-ring);
 }
 
-.pub-btn:focus-visible {
+.topup-pack-btn:focus-visible {
     outline: none;
     box-shadow: var(--shadow-focus-ring);
 }
 
-.topup-pack-btn:focus-visible {
+.chat-code-copy:focus-visible,
+.chat-file-action:focus-visible,
+.chat-composer-actions button:focus-visible,
+.chat-scroll-bottom:focus-visible,
+.rail-btn-new-note:focus-visible,
+.admin-pager-btn:focus-visible,
+.settings-btn-revoke:focus-visible,
+.pub-btn:focus-visible,
+.mkt-nav-enter:focus-visible,
+.mkt-nav-link:focus-visible,
+.mkt-lang-btn:focus-visible,
+.dashboard-btn-cancel:focus-visible,
+.topup-provider-btn:focus-visible,
+.app-notify-item-btn:focus-visible,
+.rail-doc-delete:focus-visible,
+.rail-note-delete:focus-visible,
+.dashboard-modal-close:focus-visible,
+.admin-table-danger:focus-visible {
     outline: none;
     box-shadow: var(--shadow-focus-ring);
 }
@@ -273,14 +367,38 @@ select:focus-visible {
 }
 
 .chat-new-chat:active:not(:disabled),
+.chat-session-item:active:not(:disabled),
 .chat-action-button:active:not(:disabled),
+.chat-file-attach:active:not(:disabled),
+.chat-scope-chip:active:not(:disabled),
+.chat-rail-toggle:active:not(:disabled),
+.chat-progress-toggle:active,
+.chat-cite-chip:active:not(:disabled),
+.chat-code-copy:active,
+.chat-composer-actions button:active:not(:disabled),
 .auth-submit-btn:active:not(:disabled),
 .settings-logout-btn:active:not(:disabled),
 .settings-btn-save:active:not(:disabled),
+.settings-btn-revoke:active:not(:disabled),
+.settings-nav-item:active,
 .dashboard-create-btn:active:not(:disabled),
 .dashboard-btn-confirm:active:not(:disabled),
+.dashboard-btn-cancel:active,
+.dashboard-header-btn:active,
+.topup-pack-btn:active,
+.topup-provider-btn:active,
+.rail-tab:active,
+.rail-btn-new-note:active,
+.app-top-bar-capsule:active,
+.app-menu-item:active,
+.app-notify-item-btn:active,
+.admin-nav-item:active,
 .admin-panel-btn:active:not(:disabled),
-.pub-btn:active:not(:disabled) {
+.admin-pager-btn:active:not(:disabled),
+.pub-btn:active:not(:disabled),
+.mkt-nav-enter:active,
+.dashboard-modal-close:active,
+.admin-table-danger:active {
     transform: translateY(1px);
 }
 
@@ -293,7 +411,9 @@ select:focus-visible {
 .admin-back-link:hover,
 .admin-table-link:hover,
 .pub-card-link:hover,
-.legal-toc-item a:hover {
+.legal-toc-item a:hover,
+.chat-cite-card-link:hover,
+.chat-web-source a:hover {
     color: var(--cos-accent);
     text-decoration: underline;
 }
@@ -329,6 +449,7 @@ select:focus-visible {
     border: 1px solid var(--cos-border);
     border-radius: var(--cos-radius-md);
     padding: 1rem;
+    animation: cos-modal-enter var(--duration-slow) var(--ease-standard);
 }
 
 .app-dialog-header {
@@ -350,6 +471,17 @@ select:focus-visible {
     color: var(--cos-text);
     border-radius: var(--cos-radius-sm);
     cursor: pointer;
+    transition: background-color var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard);
+}
+
+.app-dialog-close:hover,
+.app-dialog-close:focus-visible {
+    background: var(--cos-surface-hover);
+    border-color: var(--cos-border-strong);
+}
+
+.app-dialog-close:active {
+    transform: translateY(1px);
 }
 
 .app-toast {
@@ -362,6 +494,7 @@ select:focus-visible {
     border-radius: var(--cos-radius-sm);
     background: var(--cos-surface);
     color: var(--cos-text);
+    animation: cos-toast-in var(--duration-slow) var(--ease-standard);
 }
 
 .page-status-loading,

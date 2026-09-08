@@ -27,7 +27,7 @@
 **终态定义**：同一账号、同一数据下，用户从 `frontend_next` 切换到 `frontend_rust`，完成 §5 的 8 条核心旅程，**不因 UI 缺失而中断，不产生「这不是同一个产品」的感知**。可检验的终态条件：
 
 1. **壳合规**：PRODUCT_IA §5 全部 Shell 规则在 Rust 端逐条落实（App top bar / Chat shell / Dashboard main / Workspace chrome / Settings rail / 深层工具页统一顶栏）；任一页出发 ≤2 次点击到达 §4 全部 canonical 目的地；深层页无「裸返回链作唯一出口」。
-2. **视觉深度对齐**：CSS 深度信号（hover / focus / transition / keyframes / 断点）达到 Next 基线的 **≥80%**（按同口径 grep 计数）；0 悬空 token 变量；存在完整 base 层（body 字体栈、背景、box-sizing、全局 `:focus-visible`）。
+2. **视觉深度对齐**：CSS 深度信号（hover / focus / transition / keyframes / 断点）达到 Next 基线的 **≥80%**（按同口径 grep 计数）；0 悬空 token 变量；存在完整 base 层（body 字体栈、背景、box-sizing、全局 `:focus-visible`）。**口径注（2026-09-08）：** §0 出现次数把 Next CSS Modules 重复声明算成深度；Leptos 官方默认是全局 CSS，灌 Tailwind/Stylance 只会复制计数。诚实对照是唯一 `@keyframes` 名字 + 控件状态矩阵（见 `docs/engineering/_reports/2026-09-08-g5/CSS_COUNTS.md`）。未改本条数字门槛、未盖 G5 章。
 3. **零硬编码占位**：usage / workspace_analytics / pricing 视图 / settings 面板全部绑定真实 API 数据；占位文案与写死数字清零。
 4. **Chat 呈现对齐**：§4 E5.3 gap 表中的「缺失」项清零或逐项记录豁免；十二条 Chat-first 不变量保持全绿。
 5. **交互件齐备**：通用 dialog / toast / 空-加载-错误三态成为共享组件并被各页使用；workbench 具备资料上传与会话管理。

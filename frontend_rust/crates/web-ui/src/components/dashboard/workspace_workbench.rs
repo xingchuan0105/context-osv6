@@ -255,7 +255,7 @@ pub fn WorkspaceWorkbenchPage() -> impl IntoView {
                                             let select_id = doc.id.clone();
                                             let checked_id = doc.id.clone();
                                             view! {
-                                                <li class="rail-doc-item" data-testid="workspace-doc-item">
+                                                <li class="rail-doc-item" data-testid="workspace-doc-item" data-status=doc.status.clone()>
                                                     <label class="rail-doc-select">
                                                         <input
                                                             type="checkbox"
