@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Context-OS · W0 布局评审</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#e8e7e1;color:#26251e;font:14px system-ui,sans-serif}header{padding:18px 24px;background:#fff;border-bottom:1px solid #d8d7cf}h1{font-size:18px;font-weight:400;margin:0 0 6px}p{margin:5px 0;color:#69675d;line-height:1.6}.controls{display:flex;gap:14px;flex-wrap:wrap;align-items:end;margin-top:15px}label{display:grid;gap:5px;font-size:12px}select,button,a{font:inherit}select,button{padding:8px 12px;background:#fff;border:1px solid #cbc9bf;border-radius:8px;color:inherit}button,a{cursor:pointer}a{color:inherit}.stage{padding:24px;overflow:auto}iframe{display:block;margin:auto;border:1px solid #cccac0;background:#f7f7f3;box-shadow:0 12px 40px #26251e12;max-width:none}footer{padding:0 24px 24px;font-size:13px}.badge{font-size:11px;background:#f1ebe4;padding:4px 8px;border-radius:20px;margin-left:10px}#status{margin-top:12px;font-size:12px}
+</style>
+<header><h1>Context-OS / 布局样稿 <span class="badge">W0 · 待确认</span></h1>
+<p>这是布局评审台，下面的画框才是产品界面。内容均为演示数据，不连接账户、模型、上传或支付接口。</p>
+<div class="controls">
+<label>场景<select id="scene"><option value="empty">聊天 · 空态</option><option value="conversation">聊天 · 对话中</option><option value="attachment">聊天 · 本轮附件</option><option value="workspace">工作区 · 资料收起</option><option value="workspace-open">工作区 · 资料展开</option><option value="settings">设置 · 分类与内容</option></select></label>
+<label>视口<select id="size"><option value="1280,800">桌面 1280 × 800</option><option value="1440,900">宽屏 1440 × 900</option><option value="1280,720">短屏 1280 × 720</option><option value="768,900">平板 768 × 900</option><option value="390,844">手机 390 × 844</option></select></label>
+<label>主题<select id="theme"><option value="light">浅色 · Cream</option><option value="dark">深色 · Void</option></select></label>
+<label>附件状态<select id="file"><option value="ready">解析完成</option><option value="loading">解析中</option><option value="error">解析失败</option><option value="limit">超出上下文</option></select></label>
+<button id="reload">重置当前样稿</button><a id="full" target="_blank" rel="noopener">独立打开</a><a href="notes.md" target="_blank">尺寸与评审说明</a>
+</div><p id="status" aria-live="polite"></p><p>若内置浏览器未显示画框，请使用「独立打开」。也可直接查看：<a href="screen.html?scene=empty" target="_blank">聊天</a> · <a href="screen.html?scene=workspace-open" target="_blank">工作区</a> · <a href="screen.html?scene=settings" target="_blank">设置</a>。</p></header>
+<main class="stage"><iframe id="preview" title="Context-OS 可交互布局样稿"></iframe></main>
+<footer><p>可点击：导航折叠、手机菜单、工作区资料、设置分类、账户/模型菜单、附件移除与发送演示。Esc 关闭浮层并返回触发按钮。</p><p>评审重点：①整体空间与导航　②输入框和附件密度　③工作区资料占位　④设置手机分层。未新增语音、图片生成或知识库占位按钮。</p></footer>
+<script>
+const ids=['scene','size','theme','file'];const els=Object.fromEntries(ids.map(id=>[id,document.getElementById(id)]));const params=new URLSearchParams(location.search);ids.forEach(id=>{if(params.has(id)&&Array.from(els[id].options).some(o=>o.value===params.get(id)))els[id].value=params.get(id)});
+function render(){const [w,h]=els.size.value.split(',');const q=new URLSearchParams({scene:els.scene.value,theme:els.theme.value,file:els.file.value});const url='screen.html?'+q;const frame=document.getElementById('preview');frame.width=w;frame.height=h;frame.src=url;document.getElementById('full').href=url;document.getElementById('status').textContent=`当前画框 ${w} × ${h}px · ${els.theme.selectedOptions[0].text} · 左栏 248/60px · 顶栏 52px · 正文上限 760px · 资料 336px`;history.replaceState(null,'','?'+new URLSearchParams(Object.fromEntries(ids.map(id=>[id,els[id].value]))))}ids.forEach(id=>els[id].addEventListener('change',render));document.getElementById('reload').onclick=render;render();
+</script></html>
