@@ -3,6 +3,7 @@ use crate::components::chat::{
     ChatCanvasModel, MessageActions, ModelRoleBadge, PreparedUserTurn, ScopeBar, SessionFileTray,
 };
 use crate::components::shell::AppTopBar;
+use crate::i18n::use_i18n;
 use crate::routes::dest;
 use crate::reducer::{ActivityEntry, TurnStatus};
 use crate::session::{ConversationMessage, MessageRole, messages_from_wire};
@@ -30,6 +31,7 @@ struct ChatParams {
 pub fn ChatPage() -> impl IntoView {
     let model = expect_context::<RwSignal<ChatCanvasModel>>();
     let token = expect_context::<RwSignal<String>>();
+    let i18n = use_i18n();
     let params = use_params::<ChatParams>();
     let navigate = use_navigate();
     let history_error = RwSignal::new(None::<String>);
@@ -437,30 +439,36 @@ pub fn ChatPage() -> impl IntoView {
                 aria-controls="chat-session-drawer"
                 on:click=move |_| rail_open.update(|open| *open = !*open)
             >
-                {move || if rail_open.get() { "关闭会话" } else { "会话" }}
+                {move || {
+                    if rail_open.get() {
+                        i18n.t("chat.sessionsToggleClose")
+                    } else {
+                        i18n.t("chat.sessionsToggle")
+                    }
+                }}
             </button>
             <button
                 type="button"
                 class="chat-rail-dismiss"
                 data-testid="chat-rail-dismiss"
-                aria-label="关闭会话列表"
+                aria-label=move || i18n.t("chat.sessionsDismiss")
                 hidden=move || !rail_open.get()
                 on:click=move |_| rail_open.set(false)
             ></button>
             <aside
                 class="chat-sessions"
                 id="chat-session-drawer"
-                aria-label="会话列表"
+                aria-label=move || i18n.t("chat.sessionsListLabel")
                 data-testid="session-list"
             >
                 {move || {
                     route_workspace_id.get().map(|ws_id| {
                         view! {
                             <div class="chat-workspace-banner" data-testid="workspace-banner">
-                                <span class="chat-workspace-label">"工作区"</span>
+                                <span class="chat-workspace-label">{i18n.t("chat.workspaces")}</span>
                                 <span class="chat-workspace-id">{ws_id}</span>
                                 <a href="/chat" class="chat-workspace-back" data-testid="back-to-personal">
-                                    "返回个人对话"
+                                    {i18n.t("chat.backToPersonal")}
                                 </a>
                             </div>
                         }
@@ -472,12 +480,12 @@ pub fn ChatPage() -> impl IntoView {
                     data-testid="new-chat-button"
                     on:click=start_new
                 >
-                    "新对话"
+                    {move || i18n.t("chat.newConversation")}
                 </button>
                 <div class="chat-workspaces" data-testid="chat-workspaces">
-                    <span class="chat-workspaces-label">"工作区"</span>
+                    <span class="chat-workspaces-label">{move || i18n.t("chat.workspaces")}</span>
                     <a href=dest::DASHBOARD class="chat-workspaces-all" data-testid="all-workspaces-link">
-                        "全部工作区"
+                        {move || i18n.t("chat.allWorkspaces")}
                     </a>
                     {move || {
                         let mut seen = std::collections::BTreeSet::new();
@@ -515,10 +523,10 @@ pub fn ChatPage() -> impl IntoView {
                     }}
                 </div>
                 <Show when=move || token.with(|value| value.is_empty())>
-                    <p class="chat-sessions-hint" data-testid="session-auth-hint">"登录后即可加载会话"</p>
+                    <p class="chat-sessions-hint" data-testid="session-auth-hint">{move || i18n.t("chat.signInToLoadSessions")}</p>
                 </Show>
                 <Show when=move || sessions_loading.get()>
-                    <p class="chat-sessions-hint" data-testid="session-loading">"正在加载会话列表…"</p>
+                    <p class="chat-sessions-hint" data-testid="session-loading">{move || i18n.t("chat.sessionsLoading")}</p>
                 </Show>
                 <Show when=move || {
                     !token.with(|value| value.is_empty())
@@ -526,7 +534,7 @@ pub fn ChatPage() -> impl IntoView {
                         && sessions_error.get().is_none()
                         && model.with(|m| m.manager().session_list.is_empty())
                 }>
-                    <p class="chat-sessions-hint" data-testid="session-empty">"还没有会话。"</p>
+                    <p class="chat-sessions-hint" data-testid="session-empty">{move || i18n.t("chat.noSessions")}</p>
                 </Show>
                 {move || {
                     sessions_error.get().map(|message| {
@@ -545,7 +553,7 @@ pub fn ChatPage() -> impl IntoView {
                                         );
                                     }
                                 >
-                                    "重试"
+                                    {move || i18n.t("chat.retry")}
                                 </button>
                             </div>
                         }
@@ -605,11 +613,11 @@ pub fn ChatPage() -> impl IntoView {
                         "chat-canvas"
                     }
                 }
-                aria-label="对话画布"
+                aria-label=move || i18n.t("chat.canvasLabel")
                 data-testid="chat-canvas"
             >
                 <header class="chat-header">
-                    <h1 class="chat-title">"Context-OS 对话"</h1>
+                    <h1 class="chat-title">{move || i18n.t("chat.pageTitle")}</h1>
                     <ModelRoleBadge
                         model_role=current_model_role
                         has_byok=Signal::derive(move || has_byok.get())
@@ -618,7 +626,7 @@ pub fn ChatPage() -> impl IntoView {
 
                 <section
                     class="chat-transcript"
-                    aria-label="消息列表"
+                    aria-label=move || i18n.t("chat.transcriptLabel")
                     data-testid="chat-transcript"
                     node_ref=transcript_ref
                     on:scroll=move |_| on_transcript_scroll(transcript_ref, follow_bottom)
@@ -629,12 +637,12 @@ pub fn ChatPage() -> impl IntoView {
                         <div class="chat-hero" data-testid="chat-hero">
                             <p class="chat-hero-title">"Context-OS"</p>
                             <p class="chat-hero-hint" data-testid="chat-empty">
-                                "开始一轮新的对话。可在下方选择知识库或网络搜索。"
+                                {move || i18n.t("chat.heroEmpty")}
                             </p>
                         </div>
                     </Show>
                     <Show when=move || history_loading.get()>
-                        <p class="chat-empty" data-testid="history-loading">"正在加载会话…"</p>
+                        <p class="chat-empty" data-testid="history-loading">{move || i18n.t("chat.historyLoading")}</p>
                     </Show>
                     <For
                         each=move || model.with(|m| m.manager().active.messages.clone())
@@ -686,7 +694,10 @@ pub fn ChatPage() -> impl IntoView {
                             TurnStatus::Error { code, message } => {
                                 Some(view! {
                                     <p class="chat-error" role="alert" data-testid="chat-error">
-                                        {format!("请求失败（{code}）：{message}")}
+                                        {crate::i18n::tf_now(
+                                            "chat.requestFailed",
+                                            &[("code", &code), ("message", &message)],
+                                        )}
                                     </p>
                                 })
                             }
@@ -697,7 +708,7 @@ pub fn ChatPage() -> impl IntoView {
                     <Show when=move || model.with(|m| !m.live_turn().activities.is_empty())>
                         <section
                             class="chat-activity"
-                            aria-label="进度"
+                            aria-label=move || i18n.t("chat.progressLabel")
                             aria-live=move || {
                                 if model.with(|m| progress_folded(&m.live_turn().status)) {
                                     "off"
@@ -731,8 +742,14 @@ pub fn ChatPage() -> impl IntoView {
                                     <span class="chat-progress-summary">
                                         {move || {
                                             model.with(|m| {
-                                                progress_summary_label(&m.live_turn().status)
-                                                    .to_string()
+                                                {
+                                                    let key = progress_summary_label(&m.live_turn().status);
+                                                    if key.is_empty() {
+                                                        String::new()
+                                                    } else {
+                                                        i18n.t(key)
+                                                    }
+                                                }
                                             })
                                         }}
                                     </span>
@@ -746,7 +763,7 @@ pub fn ChatPage() -> impl IntoView {
                             <Show when=move || {
                                 !model.with(|m| progress_folded(&m.live_turn().status))
                             }>
-                                <h2>"进度"</h2>
+                                <h2>{move || i18n.t("chat.progressLabel")}</h2>
                             </Show>
                             <Show when=move || {
                                 !model.with(|m| progress_folded(&m.live_turn().status))
@@ -786,10 +803,10 @@ pub fn ChatPage() -> impl IntoView {
                                 view! {
                                     <details
                                         class="chat-reasoning"
-                                        aria-label="推理摘要"
+                                        aria-label=move || i18n.t("chat.reasoningSummary")
                                         data-testid="reasoning-region"
                                     >
-                                        <summary>"推理摘要"</summary>
+                                        <summary>{move || i18n.t("chat.reasoningSummary")}</summary>
                                         <p>{text}</p>
                                     </details>
                                 }
@@ -798,10 +815,10 @@ pub fn ChatPage() -> impl IntoView {
                                 view! {
                                     <section
                                         class="chat-reasoning"
-                                        aria-label="推理摘要"
+                                        aria-label=move || i18n.t("chat.reasoningSummary")
                                         data-testid="reasoning-region"
                                     >
-                                        <h2>"推理摘要"</h2>
+                                        <h2>{move || i18n.t("chat.reasoningSummary")}</h2>
                                         <p>{text}</p>
                                     </section>
                                 }
@@ -813,10 +830,10 @@ pub fn ChatPage() -> impl IntoView {
                     <Show when=move || !live_rendered(&model).cards.is_empty()>
                         <section
                             class="chat-citations"
-                            aria-label="引用"
+                            aria-label=move || i18n.t("chat.citationsLabel")
                             data-testid="citations-region"
                         >
-                            <h2>"引用"</h2>
+                            <h2>{move || i18n.t("chat.citationsLabel")}</h2>
                             <ul class="chat-cite-cards">
                                 <For
                                     each=move || live_rendered(&model).cards
@@ -848,14 +865,14 @@ pub fn ChatPage() -> impl IntoView {
                     ready_count=ready_count
                     disabled=attach_disabled
                 />
-                <form class="chat-composer" aria-label="发送消息" on:submit=send>
+                <form class="chat-composer" aria-label=move || i18n.t("chat.composerSendLabel") on:submit=send>
                     <ScopeBar
                         capabilities=capabilities
                         capabilities_manual=capabilities_manual
                         ready_count=Signal::derive(move || ready_count.get())
                         disabled=Signal::derive(move || composer_locked())
                     />
-                    <label for="chat-composer-input">"输入消息"</label>
+                    <label for="chat-composer-input">{move || i18n.t("chat.composerInputLabel")}</label>
                     <textarea
                         id="chat-composer-input"
                         data-testid="composer-input"
@@ -867,13 +884,13 @@ pub fn ChatPage() -> impl IntoView {
                             autosize_composer(composer_ref, composer_height);
                         }
                         on:keydown=send_keydown
-                        placeholder="输入消息，Enter 发送（Shift+Enter 换行）"
+                        placeholder=move || i18n.t("chat.composerPlaceholder")
                     ></textarea>
                     <div
                         class="chat-composer-resize"
                         role="slider"
                         tabindex="0"
-                        aria-label="调整输入框高度"
+                        aria-label=move || i18n.t("workspaceChatComposerResize")
                         aria-orientation="vertical"
                         aria-valuemin="72"
                         aria-valuemax="320"
@@ -897,7 +914,7 @@ pub fn ChatPage() -> impl IntoView {
                             data-testid="send-button"
                             disabled=move || composer_locked()
                         >
-                            "发送"
+                            {move || i18n.t("workspaceSend")}
                         </button>
                         <button
                             type="button"
@@ -905,7 +922,7 @@ pub fn ChatPage() -> impl IntoView {
                             disabled=move || !is_streaming()
                             on:click=stop
                         >
-                            "停止"
+                            {move || i18n.t("workspaceChatStop")}
                         </button>
                         <button
                             type="button"
@@ -913,7 +930,7 @@ pub fn ChatPage() -> impl IntoView {
                             disabled=move || !can_retry()
                             on:click=retry
                         >
-                            "重试"
+                            {move || i18n.t("chat.retry")}
                         </button>
                     </div>
                 </form>
@@ -927,7 +944,7 @@ pub fn ChatPage() -> impl IntoView {
                         scroll_transcript_to_bottom();
                     }
                 >
-                    "回到底部"
+                    {move || i18n.t("workspaceChatBackToBottom")}
                 </button>
                 <Show when=move || web_sources_open.get()>
                     {move || {
@@ -957,18 +974,20 @@ pub fn ChatPage() -> impl IntoView {
 }
 
 fn session_label(session: &ChatSession) -> String {
+    let i18n = use_i18n();
     let base = session
         .title
         .as_deref()
         .map(str::trim)
         .filter(|title| !title.is_empty())
         .map(|title| title.to_string())
-        .unwrap_or_else(|| "未命名对话".to_string());
+        .unwrap_or_else(|| i18n.t("chat.untitled"));
     if session.scope_kind == contracts::workspaces::ConversationScopeKind::Workspace {
+        let fallback = i18n.t("chat.workspaces");
         let ws_name = session
             .workspace_name
             .as_deref()
-            .unwrap_or("工作区");
+            .unwrap_or(fallback.as_str());
         format!("[{ws_name}] {base}")
     } else {
         base
@@ -985,9 +1004,10 @@ fn message_view(
         MessageRole::User => "user",
         MessageRole::Assistant => "assistant",
     };
+    let i18n = use_i18n();
     let role_label = match message.role {
-        MessageRole::User => "我",
-        MessageRole::Assistant => "助手",
+        MessageRole::User => i18n.t("chat.roleUser"),
+        MessageRole::Assistant => i18n.t("chat.roleAssistant"),
     };
     let reasoning = message.reasoning.clone();
     let rendered = if message.role == MessageRole::Assistant {
@@ -1025,7 +1045,7 @@ fn message_view(
                         data-testid="edit-user-message"
                         on:click=move |_| composer.set(edit_text.clone())
                     >
-                        "编辑"
+                        {move || i18n.t("workspaceChatActionEdit")}
                     </button>
                 }
             })}
@@ -1034,7 +1054,7 @@ fn message_view(
             {web_sources_button(message.citations.clone(), web_sources_open)}
             {reasoning.map(|text| view! {
                 <details class="chat-message-reasoning">
-                    <summary>"推理摘要"</summary>
+                    <summary>{i18n.t("chat.reasoningSummary")}</summary>
                     <p>{text}</p>
                 </details>
             })}
@@ -1059,13 +1079,14 @@ fn message_view(
     }
 }
 
-fn status_line(model: &ChatCanvasModel) -> &'static str {
+fn status_line(model: &ChatCanvasModel) -> String {
+    let i18n = use_i18n();
     match model.live_turn().status {
-        TurnStatus::Idle => "",
-        TurnStatus::Streaming => "正在生成回答…",
-        TurnStatus::Done => "已完成",
-        TurnStatus::Cancelled => "已停止",
-        TurnStatus::Error { .. } => "",
+        TurnStatus::Idle => String::new(),
+        TurnStatus::Streaming => i18n.t("chat.statusStreaming"),
+        TurnStatus::Done => i18n.t("chat.statusDone"),
+        TurnStatus::Cancelled => i18n.t("chat.statusCancelled"),
+        TurnStatus::Error { .. } => String::new(),
     }
 }
 
@@ -1106,11 +1127,11 @@ fn source_card_view(card: SourceCard, active_cite: RwSignal<Option<String>>) -> 
                 })}
                 {href.map(|href| view! {
                     <a class="chat-cite-card-link" href=href rel="noopener noreferrer" target="_blank">
-                        "打开来源"
+                        {use_i18n().t("chat.openSource")}
                     </a>
                 })}
                 {tombstone.then(|| view! {
-                    <p class="chat-cite-card-tombstone">"来源已删除"</p>
+                    <p class="chat-cite-card-tombstone">{use_i18n().t("chat.sourceDeleted")}</p>
                 })}
             </div>
         </li>
@@ -1133,15 +1154,14 @@ fn on_citation_chip_click(ev: leptos::ev::MouseEvent, active_cite: RwSignal<Opti
 }
 
 fn notice_view(reasons: Vec<String>, guarded: bool) -> impl IntoView {
+    let i18n = use_i18n();
+    let joined = reasons.join(" · ");
     let body = if guarded && !reasons.is_empty() {
-        format!(
-            "本轮输出经过内容护栏处理。检索观察：{}",
-            reasons.join(" · ")
-        )
+        i18n.tf("chat.guardedWithReasons", &[("reasons", joined.as_str())])
     } else if guarded {
-        "本轮输出经过内容护栏处理。".to_string()
+        i18n.t("chat.guarded")
     } else if !reasons.is_empty() {
-        format!("检索观察：{}", reasons.join(" · "))
+        i18n.tf("chat.degradeReasons", &[("reasons", joined.as_str())])
     } else {
         String::new()
     };
@@ -1227,6 +1247,8 @@ fn web_sources_button(
 ) -> impl IntoView {
     let count = collect_web_sources(&citations).len();
     (count > 0).then(|| {
+        let count_s = count.to_string();
+        let label = use_i18n().tf("chat.webSources", &[("count", count_s.as_str())]);
         view! {
             <button
                 type="button"
@@ -1234,7 +1256,7 @@ fn web_sources_button(
                 data-testid="web-sources-button"
                 on:click=move |_| open.set(true)
             >
-                {format!("网页来源 {count}")}
+                {label}
             </button>
         }
     })
@@ -1244,23 +1266,26 @@ fn web_sources_dialog(
     sources: Vec<(String, String, String)>,
     open: RwSignal<bool>,
 ) -> impl IntoView {
+    let i18n = use_i18n();
+    let count_s = sources.len().to_string();
+    let heading = i18n.tf("chat.webSources", &[("count", count_s.as_str())]);
     view! {
         <div class="chat-web-sources-backdrop">
             <div
                 class="chat-web-sources-dialog"
                 role="dialog"
-                aria-label="网页来源"
+                aria-label=move || i18n.t("chat.webSourcesLabel")
                 data-testid="workspace-web-sources-modal"
             >
                 <header>
-                    <h2>{format!("网页来源 {}", sources.len())}</h2>
+                    <h2>{heading}</h2>
                     <button
                         type="button"
                         class="chat-action-button"
                         data-testid="web-sources-close"
                         on:click=move |_| open.set(false)
                     >
-                        "关闭"
+                        {move || use_i18n().t("appModal.close")}
                     </button>
                 </header>
                 <ul data-testid="workspace-web-sources-list">
@@ -1528,7 +1553,10 @@ fn spawn_refresh_sessions(
             }
             Err(err) => {
                 if let Some((error, loading)) = report {
-                    error.set(Some(format!("加载会话失败：{err}")));
+                    error.set(Some(crate::i18n::tf_now(
+                        "chat.loadSessionFailed",
+                        &[("error", &err.to_string())],
+                    )));
                     loading.set(false);
                 }
             }
@@ -1570,7 +1598,10 @@ fn spawn_load_history(
                 }
             }
             Err(error) => {
-                history_error.set(Some(format!("加载会话失败：{error}")));
+                history_error.set(Some(crate::i18n::tf_now(
+                    "chat.loadSessionFailed",
+                    &[("error", &error.to_string())],
+                )));
             }
         }
     });

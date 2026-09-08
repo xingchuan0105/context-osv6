@@ -67,6 +67,8 @@ test.describe('英文公共站（E4.4）', () => {
     await page.goto('/en/pricing', { waitUntil: 'domcontentloaded' });
 
     await expect(page.getByTestId('pricing-page')).toBeVisible();
+    await expect(page.getByTestId('pricing-page')).toContainText('Choose your plan');
+    await expect(page.getByTestId('pricing-page')).not.toContainText('套餐定价');
     const canonical = page.locator('link[rel="canonical"]');
     await expect(canonical).toHaveAttribute('href', '/en/pricing');
     await expect(page.locator('link[rel="alternate"][hreflang="zh-CN"]')).toHaveAttribute(

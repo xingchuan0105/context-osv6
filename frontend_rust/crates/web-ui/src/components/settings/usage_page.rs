@@ -1,6 +1,7 @@
 use crate::api_base::poc_api_base;
 use crate::components::shell::ProductChrome;
 use crate::components::ui::PageStatus;
+use crate::i18n::{tf_now, t_now, use_i18n};
 use leptos::prelude::*;
 use web_sdk::{
     BrowserRestClient, DailyUsage, UsageForecastResponse, UsageWindowResponse,
@@ -9,6 +10,7 @@ use web_sdk::{
 #[component]
 pub fn UsagePage() -> impl IntoView {
     let token = expect_context::<RwSignal<String>>();
+    let i18n = use_i18n();
     let window = RwSignal::new(None::<UsageWindowResponse>);
     let history = RwSignal::new(Vec::<DailyUsage>::new());
     let forecast = RwSignal::new(None::<UsageForecastResponse>);
@@ -23,7 +25,7 @@ pub fn UsagePage() -> impl IntoView {
         };
         if tok.is_empty() {
             loading.set(false);
-            error.set(Some("请先登录后查看用量。".to_string()));
+            error.set(Some(t_now("usage.loginRequired")));
             return;
         }
         loading.set(true);
@@ -41,7 +43,7 @@ pub fn UsagePage() -> impl IntoView {
                     loading.set(false);
                 }
                 (Err(err), _, _) | (_, Err(err), _) | (_, _, Err(err)) => {
-                    error.set(Some(format!("加载用量失败：{err}")));
+                    error.set(Some(tf_now("usage.loadFailed", &[("error", &err.to_string())])));
                     loading.set(false);
                 }
             }
@@ -53,30 +55,33 @@ pub fn UsagePage() -> impl IntoView {
         <div class="settings-shell" data-testid="usage-page">
             <header class="settings-header">
                 <div class="settings-header-left">
-                    <a href="/settings" class="settings-back-link">"← 返回设置"</a>
-                    <h1 class="settings-title">"用量总览"</h1>
+                    <a href="/settings" class="settings-back-link">{move || i18n.t("usage.back")}</a>
+                    <h1 class="settings-title">{move || i18n.t("usage.overviewTitle")}</h1>
                 </div>
             </header>
             <PageStatus
                 loading=Signal::derive(move || loading.get())
                 error=Signal::derive(move || error.get())
                 empty=Signal::derive(move || window.get().is_none())
-                empty_text="暂无用量数据。"
+                empty_key="usage.empty"
             >
                 <main class="settings-content">
                     <section class="settings-panel">
-                        <h2>"当前套餐"</h2>
+                        <h2>{move || i18n.t("currentPlan")}</h2>
                         <p class="settings-panel-desc" data-testid="usage-plan">
                             {move || {
                                 forecast
                                     .get()
-                                    .map(|f| format!("当前套餐：{}", f.current_plan.to_uppercase()))
+                                    .map(|f| {
+                                        let plan = f.current_plan.to_uppercase();
+                                        i18n.tf("usage.planLine", &[("plan", plan.as_str())])
+                                    })
                                     .unwrap_or_default()
                             }}
                         </p>
                         <div class="settings-usage-cards">
                             <div class="settings-usage-card">
-                                <span class="settings-usage-label">"近 5 小时 Token"</span>
+                                <span class="settings-usage-label">{move || i18n.t("usage.tokens5h")}</span>
                                 <span class="settings-usage-value" data-testid="usage-5h">
                                     {move || {
                                         window
@@ -92,7 +97,7 @@ pub fn UsagePage() -> impl IntoView {
                                 </span>
                             </div>
                             <div class="settings-usage-card">
-                                <span class="settings-usage-label">"近 7 天 Token"</span>
+                                <span class="settings-usage-label">{move || i18n.t("usage.tokens7d")}</span>
                                 <span class="settings-usage-value" data-testid="usage-7d">
                                     {move || {
                                         window
@@ -110,7 +115,7 @@ pub fn UsagePage() -> impl IntoView {
                         </div>
                     </section>
                     <section class="settings-panel">
-                        <h2>"用量趋势"</h2>
+                        <h2>{move || i18n.t("usageTrendTitle")}</h2>
                         {move || view! { <UsageTrendChart daily=history.get()/> }}
                     </section>
                 </main>
@@ -124,7 +129,7 @@ pub fn UsagePage() -> impl IntoView {
 fn UsageTrendChart(daily: Vec<DailyUsage>) -> impl IntoView {
     if daily.is_empty() {
         return view! {
-            <p class="page-status-empty" data-testid="usage-trend-chart">"暂无趋势数据。"</p>
+            <p class="page-status-empty" data-testid="usage-trend-chart">{use_i18n().t("usage.trendEmpty")}</p>
         }
         .into_any();
     }
@@ -155,7 +160,7 @@ fn UsageTrendChart(daily: Vec<DailyUsage>) -> impl IntoView {
             class="usage-trend-chart"
             viewBox="0 0 600 180"
             role="img"
-            aria-label="用量趋势"
+            aria-label=move || use_i18n().t("usage.trendAria")
             data-testid="usage-trend-chart"
         >
             <polyline points=points class="usage-trend-line" fill="none"/>

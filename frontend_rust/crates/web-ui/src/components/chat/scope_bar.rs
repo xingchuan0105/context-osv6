@@ -1,3 +1,4 @@
+use crate::i18n::use_i18n;
 use leptos::prelude::*;
 use web_sdk::{Capability, mode_line, toggle_capability};
 
@@ -8,6 +9,7 @@ pub fn ScopeBar(
     ready_count: Signal<usize>,
     disabled: Signal<bool>,
 ) -> impl IntoView {
+    let i18n = use_i18n();
     let rag_available = Signal::derive(move || ready_count.get() > 0);
     let toggle = move |cap: Capability| {
         if disabled.get() {
@@ -25,7 +27,7 @@ pub fn ScopeBar(
             class="chat-scope-bar"
             data-testid="scope-bar"
             role="group"
-            aria-label="能力标签"
+            aria-label=move || i18n.t("workspaceChatCapabilityLabel")
         >
             <div class="chat-scope-chips">
                 <button
@@ -42,7 +44,7 @@ pub fn ScopeBar(
                     disabled=move || disabled.get()
                     on:click=move |_| toggle(Capability::Rag)
                 >
-                    "知识库"
+                    {move || i18n.t("workspaceChatCapRag")}
                     <Show when=move || {
                         capabilities.get().contains(&Capability::Rag) && ready_count.get() > 0
                     }>
@@ -65,11 +67,11 @@ pub fn ScopeBar(
                     disabled=move || disabled.get()
                     on:click=move |_| toggle(Capability::Search)
                 >
-                    "网络搜索"
+                    {move || i18n.t("workspaceChatCapSearch")}
                 </button>
             </div>
             <p class="chat-scope-mode" data-testid="scope-mode-line">
-                {move || mode_line(&capabilities.get(), rag_available.get())}
+                {move || i18n.t(mode_line(&capabilities.get(), rag_available.get()))}
             </p>
         </div>
     }

@@ -1,3 +1,4 @@
+use crate::i18n::{UiLocale, lookup};
 use crate::routes::dest;
 use leptos::prelude::*;
 use leptos_router::hooks::use_location;
@@ -9,6 +10,8 @@ pub fn MarketingChrome(
 ) -> impl IntoView {
     let location = use_location();
     let en = locale == "en";
+    let loc = if en { UiLocale::En } else { UiLocale::ZhCn };
+    let t = move |key: &'static str| lookup(loc, key);
     let lang_zh = Signal::derive(move || {
         let path = location.pathname.get();
         if path == "/en" {
@@ -43,27 +46,27 @@ pub fn MarketingChrome(
                     />
                     <span class="app-top-bar-wordmark">"Context-OS"</span>
                 </a>
-                <nav class="mkt-chrome-nav" aria-label="营销导航">
+                <nav class="mkt-chrome-nav" aria-label=t("marketingChrome.navAria")>
                     <a
                         href=if en { "/en/pricing" } else { dest::PRICING }
                         class=if active == "pricing" { "mkt-nav-link is-active" } else { "mkt-nav-link" }
                         data-testid="mkt-nav-pricing"
                     >
-                        {if en { "Pricing" } else { "定价" }}
+                        {t("productChrome.pricing")}
                     </a>
                     <a
                         href=if en { "/en/desktop" } else { dest::DESKTOP }
                         class=if active == "desktop" { "mkt-nav-link is-active" } else { "mkt-nav-link" }
                         data-testid="mkt-nav-desktop"
                     >
-                        {if en { "Client" } else { "客户端" }}
+                        {t("productChrome.client")}
                     </a>
                     <a
                         href=if en { "/en/legal" } else { dest::LEGAL }
                         class=if active == "legal" { "mkt-nav-link is-active" } else { "mkt-nav-link" }
                         data-testid="mkt-nav-legal"
                     >
-                        {if en { "Legal" } else { "法律" }}
+                        {t("marketingChrome.legal")}
                     </a>
                     <span class="mkt-lang" role="group" aria-label="Language">
                         <a
@@ -71,7 +74,7 @@ pub fn MarketingChrome(
                             class=if !en { "mkt-lang-btn is-active" } else { "mkt-lang-btn" }
                             data-testid="mkt-lang-zh-CN"
                         >
-                            "中文"
+                            {t("workspaceLanguageChinese")}
                         </a>
                         <a
                             href=move || lang_en.get()
@@ -86,7 +89,7 @@ pub fn MarketingChrome(
                         href=dest::CHAT
                         data-testid="mkt-nav-enter-app"
                     >
-                        {if en { "Open app" } else { "进入应用" }}
+                        {t("marketingChrome.enterApp")}
                     </a>
                 </nav>
             </div>

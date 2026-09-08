@@ -1,10 +1,12 @@
 use crate::api_base::poc_api_base;
+use crate::i18n::use_i18n;
 use leptos::prelude::*;
 use web_sdk::{read_browser_auth, BrowserRestClient, NotificationRow};
 
 #[component]
 pub fn NotificationBell() -> impl IntoView {
     let token = expect_context::<RwSignal<String>>();
+    let i18n = use_i18n();
     let open = RwSignal::new(false);
     let items = RwSignal::new(Vec::<NotificationRow>::new());
     let loading = RwSignal::new(false);
@@ -54,11 +56,11 @@ pub fn NotificationBell() -> impl IntoView {
                 class="app-top-bar-capsule"
                 aria-haspopup="dialog"
                 aria-expanded=move || open.get()
-                aria-label="通知"
+                aria-label=move || i18n.t("notifications.trigger")
                 data-testid="notification-bell"
                 on:click=on_open
             >
-                "通知"
+                {move || i18n.t("notifications.trigger")}
                 {move || {
                     let unread = items
                         .get()
@@ -78,23 +80,23 @@ pub fn NotificationBell() -> impl IntoView {
                 <button
                     type="button"
                     class="app-menu-dismiss"
-                    aria-label="关闭通知"
+                    aria-label=move || i18n.t("notifications.close")
                     on:click=move |_| open.set(false)
                 />
                 <div
                     class="app-menu-panel app-notify-panel"
                     role="dialog"
-                    aria-label="通知列表"
+                    aria-label=move || i18n.t("notifications.listLabel")
                     data-testid="notification-bell-panel"
                 >
                     {move || {
                         if loading.get() {
-                            view! { <p class="app-notify-empty">"正在加载通知…"</p> }.into_any()
+                            view! { <p class="app-notify-empty">{i18n.t("notifications.loading")}</p> }.into_any()
                         } else if items.get().is_empty() {
                             view! {
                                 <div class="app-notify-empty" data-testid="notification-empty">
-                                    <strong>"暂无通知"</strong>
-                                    <p>"账户通知会显示在这里。"</p>
+                                    <strong>{i18n.t("notifications.emptyTitle")}</strong>
+                                    <p>{i18n.t("notifications.emptyBody")}</p>
                                 </div>
                             }
                             .into_any()

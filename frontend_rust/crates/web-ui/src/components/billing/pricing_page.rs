@@ -1,13 +1,17 @@
 use crate::api_base::poc_api_base;
 use crate::components::shell::{MarketingChrome, ProductChromeFooter};
+use crate::i18n::{UiLocale, interpolate, lookup, use_i18n};
 use leptos::prelude::*;
 use web_sdk::{
     BillingPlan, BrowserRestClient, CheckoutRequest, TopupPack, WalletBalanceResponse,
 };
 
 #[component]
-pub fn PricingPage() -> impl IntoView {
+pub fn PricingPage(#[prop(optional)] locale_override: Option<UiLocale>) -> impl IntoView {
     let token = expect_context::<RwSignal<String>>();
+    let i18n = use_i18n();
+    let loc = move || locale_override.unwrap_or_else(|| i18n.locale.get());
+    let t = move |key: &'static str| lookup(loc(), key);
     let plans = RwSignal::new(Vec::<BillingPlan>::new());
     let wallet = RwSignal::new(None::<WalletBalanceResponse>);
     let topup_packs = RwSignal::new(Vec::<TopupPack>::new());
@@ -55,11 +59,11 @@ pub fn PricingPage() -> impl IntoView {
             token.get_untracked()
         };
         if tok.is_empty() {
-            error.set(Some("请先登录后进行充值".to_string()));
+            error.set(Some(t("pricing.loginRequired")));
             return;
         }
         if !agreed.get_untracked() {
-            error.set(Some("请先同意服务条款后再充值。".to_string()));
+            error.set(Some(t("pricing.agreeRequired")));
             return;
         }
 
@@ -67,6 +71,7 @@ pub fn PricingPage() -> impl IntoView {
         error.set(None);
         let pack_id = selected_pack.get();
         let provider = selected_provider.get();
+        let checkout_locale = loc();
 
         leptos::task::spawn_local(async move {
             let client = BrowserRestClient::new(&poc_api_base(), Some(tok));
@@ -82,7 +87,11 @@ pub fn PricingPage() -> impl IntoView {
                     show_pay.set(true);
                 }
                 Err(err) => {
-                    error.set(Some(format!("创建结账会话失败：{err}")));
+                    let msg = err.to_string();
+                    error.set(Some(interpolate(
+                        &lookup(checkout_locale, "pricing.checkoutFailed"),
+                        &[("error", msg.as_str())],
+                    )));
                 }
             }
             loading.set(false);
@@ -93,8 +102,8 @@ pub fn PricingPage() -> impl IntoView {
         <div class="pricing-shell" data-testid="pricing-page">
             <header class="pricing-header">
                 <div class="pricing-header-left">
-                    <h1 class="pricing-title">"套餐定价与会员权益"</h1>
-                    <p class="pricing-subtitle">"选择适合您的生产力方案，支持随时充值或升降级"</p>
+                    <h1 class="pricing-title">{move || t("pricingTitle")}</h1>
+                    <p class="pricing-subtitle">{move || t("pricingSubtitle")}</p>
                 </div>
             </header>
 
@@ -106,7 +115,7 @@ pub fn PricingPage() -> impl IntoView {
                         data-testid="interval-month"
                         on:click=move |_| interval.set("month".to_string())
                     >
-                        "按月"
+                        {move || t("pricingMonthly")}
                     </button>
                     <button
                         type="button"
@@ -114,11 +123,11 @@ pub fn PricingPage() -> impl IntoView {
                         data-testid="interval-year"
                         on:click=move |_| interval.set("year".to_string())
                     >
-                        "按年"
+                        {move || t("pricingYearly")}
                     </button>
                 </div>
                 <p class="settings-error" role="status" hidden=move || !plans_failed.get() data-testid="plans-fallback">
-                    "套餐接口暂时不可用，以下为营销说明。"
+                    {move || t("pricing.plansFallback")}
                 </p>
                 <section class="pricing-plans-section">
                     <div class="pricing-plans-grid" data-testid="plans-grid">
@@ -127,8 +136,8 @@ pub fn PricingPage() -> impl IntoView {
                             let selected = interval.get();
                             let cards = if live.is_empty() {
                                 vec![
-                                    ("free".into(), "免费体验版".into(), "¥0".into(), "适合个人基础问答与轻量体验".into(), false),
-                                    ("pro".into(), "Pro 专业版".into(), if selected == "year" { "¥999/年".into() } else { "¥99/月".into() }, "深度知识库构建、无限持久资料与高速 Agent".into(), true),
+                                    ("free".into(), t("pricing.fallbackFreeName"), "¥0".into(), t("pricing.fallbackFreeDesc"), false),
+                                    ("pro".into(), t("pricing.fallbackProName"), if selected == "year" { t("pricing.fallbackPriceYear") } else { t("pricing.fallbackPriceMonth") }, t("pricing.fallbackProDesc"), true),
                                 ]
                             } else {
                                 live.into_iter()
@@ -149,7 +158,7 @@ pub fn PricingPage() -> impl IntoView {
                                             data-testid=test_id
                                         >
                                             <Show when=move || popular>
-                                                <span class="pricing-popular-badge">"推荐"</span>
+                                                <span class="pricing-popular-badge">{t("pricingTierPlusBadge")}</span>
                                             </Show>
                                             <h2 class="pricing-plan-name">{name}</h2>
                                             <div class="pricing-plan-price">{price}</div>
@@ -164,15 +173,15 @@ pub fn PricingPage() -> impl IntoView {
 
                 <section id="topup" class="settings-panel pricing-topup-section" data-testid="topup-panel">
                     <header class="settings-panel-header">
-                        <h2 class="settings-panel-title">"钱包余额与按需充值"</h2>
+                        <h2 class="settings-panel-title">{move || t("pricingTopupTitle")}</h2>
                         <p class="settings-panel-desc">
-                            "账户余额用于平台模型推理、OCR 解析与网络搜索按量扣费。支持随时充值。"
+                            {move || t("pricingTopupBody")}
                         </p>
                     </header>
 
                     <div class="settings-usage-cards">
                         <div class="settings-usage-card">
-                            <span class="settings-usage-label">"当前可用余额"</span>
+                            <span class="settings-usage-label">{move || t("pricingWalletBalance").replace("{balance}", "")}</span>
                             <span class="settings-usage-value" data-testid="wallet-balance">
                                 {move || {
                                     wallet
@@ -185,7 +194,7 @@ pub fn PricingPage() -> impl IntoView {
                     </div>
 
                     <div class="topup-pack-selector">
-                        <label class="topup-label">"选择充值金额："</label>
+                        <label class="topup-label">{move || t("pricingTopupPacksLabel")}</label>
                         <div class="topup-packs-row">
                             {move || {
                                 let packs = topup_packs.get();
@@ -229,7 +238,7 @@ pub fn PricingPage() -> impl IntoView {
                     </div>
 
                     <div class="topup-provider-selector">
-                        <label class="topup-label">"支付方式："</label>
+                        <label class="topup-label">{move || t("pricingPayMethodLabel")}</label>
                         <div class="topup-providers-row">
                             <button
                                 type="button"
@@ -237,7 +246,7 @@ pub fn PricingPage() -> impl IntoView {
                                 data-testid="provider-alipay"
                                 on:click=move |_| selected_provider.set("alipay".to_string())
                             >
-                                "支付宝 (Alipay 沙箱/测试)"
+                                {move || t("pricing.alipayButton")}
                             </button>
                             <button
                                 type="button"
@@ -245,7 +254,7 @@ pub fn PricingPage() -> impl IntoView {
                                 data-testid="provider-creem"
                                 on:click=move |_| selected_provider.set("creem".to_string())
                             >
-                                "Creem (国际卡/测试)"
+                                {move || t("pricing.creemButton")}
                             </button>
                         </div>
                     </div>
@@ -270,7 +279,7 @@ pub fn PricingPage() -> impl IntoView {
                                 agreed.set(checked);
                             }
                         />
-                        " 我已阅读并同意用户服务协议与充值说明"
+                        {move || t("pricing.agreeLabel")}
                     </label>
 
                     <div class="topup-action-row">
@@ -281,35 +290,35 @@ pub fn PricingPage() -> impl IntoView {
                             disabled=move || loading.get()
                             on:click=on_topup_checkout
                         >
-                            {move || if loading.get() { "创建中…" } else { "立即充值" }}
+                            {move || if loading.get() { t("pricingTopupLoading") } else { t("pricing.topupNow") }}
                         </button>
                     </div>
 
                     <section class="pricing-faq" data-testid="pricing-faq">
-                        <h2>"常见问题"</h2>
+                        <h2>{move || t("pricingFaqTitle")}</h2>
                         <details>
-                            <summary>"余额用在哪里？"</summary>
-                            <p>"平台模型推理、文档解析与网络搜索按量扣费。"</p>
+                            <summary>{move || t("pricing.faqBalance")}</summary>
+                            <p>{move || t("pricing.faqBalanceAnswer")}</p>
                         </details>
                         <details>
-                            <summary>"可以随时充值吗？"</summary>
-                            <p>"可以。充值完成后余额立即到账。"</p>
+                            <summary>{move || t("pricing.faqAnytime")}</summary>
+                            <p>{move || t("pricing.faqAnytimeAnswer")}</p>
                         </details>
                     </section>
 
                     <div class="app-dialog-backdrop" hidden=move || !show_pay.get()>
-                        <div class="app-dialog" role="dialog" aria-label="扫码支付" data-testid="pay-qr-dialog">
+                        <div class="app-dialog" role="dialog" aria-label=move || t("pricing.payDialog") data-testid="pay-qr-dialog">
                             <header class="app-dialog-header">
-                                <h2>"扫码支付"</h2>
-                                <button type="button" class="app-dialog-close" on:click=move |_| show_pay.set(false)>"关闭"</button>
+                                <h2>{move || t("pricing.payDialog")}</h2>
+                                <button type="button" class="app-dialog-close" on:click=move |_| show_pay.set(false)>{move || t("appModal.close")}</button>
                             </header>
                             {move || {
                                 checkout_url.get().map(|url| {
                                     view! {
                                         <div class="topup-success-redirect" data-testid="checkout-redirect-box">
-                                            <p data-testid="pay-qr">"请使用所选支付方式完成付款。"</p>
+                                            <p data-testid="pay-qr">{t("pricing.payHint")}</p>
                                             <a href=url.clone() class="dashboard-chat-link" target="_blank" rel="noreferrer" data-testid="pay-link">
-                                                "点击前往支付网关（测试模式）→"
+                                                {t("pricing.payLink")}
                                             </a>
                                         </div>
                                     }

@@ -1,4 +1,5 @@
 use crate::api_base::poc_api_base;
+use crate::i18n::{tf_now, t_now, use_i18n};
 use leptos::prelude::*;
 use leptos_router::hooks::{use_navigate, use_query_map};
 use leptos_router::NavigateOptions;
@@ -7,6 +8,7 @@ use web_sdk::{auth_login, write_browser_auth, AuthUser, PersistedAuth};
 #[component]
 pub fn LoginPage() -> impl IntoView {
     let token = expect_context::<RwSignal<String>>();
+    let i18n = use_i18n();
     let navigate = use_navigate();
     let query_map = use_query_map();
 
@@ -35,7 +37,7 @@ pub fn LoginPage() -> impl IntoView {
             let email_val = email.get().trim().to_string();
             let pass_val = password.get();
             if email_val.is_empty() || pass_val.is_empty() {
-                error.set(Some("请输入邮箱和密码".to_string()));
+                error.set(Some(t_now("auth.needEmailPassword")));
                 return;
             }
             if loading.get() {
@@ -69,7 +71,7 @@ pub fn LoginPage() -> impl IntoView {
                         navigate(&target, NavigateOptions::default());
                     }
                     Err(err) => {
-                        error.set(Some(format!("登录失败：{err}")));
+                        error.set(Some(tf_now("auth.loginFailedDetail", &[("error", &err.to_string())])));
                     }
                 }
                 loading.set(false);
@@ -79,14 +81,14 @@ pub fn LoginPage() -> impl IntoView {
 
     view! {
         <div class="auth-page-container">
-            <main class="auth-card" aria-label="登录">
+            <main class="auth-card" aria-label=move || i18n.t("auth.loginAria")>
                 <header class="auth-header">
-                    <h1 class="auth-title">"登录 Context-OS"</h1>
-                    <p class="auth-subtitle">"输入凭据以继续使用"</p>
+                    <h1 class="auth-title">{move || i18n.t("auth.loginHeading")}</h1>
+                    <p class="auth-subtitle">{move || i18n.t("auth.loginLead")}</p>
                 </header>
                 <form class="auth-form" on:submit=on_submit>
                     <div class="auth-field">
-                        <label for="login-email">"邮箱"</label>
+                        <label for="login-email">{move || i18n.t("authEmailLabel")}</label>
                         <input
                             id="login-email"
                             type="email"
@@ -98,7 +100,7 @@ pub fn LoginPage() -> impl IntoView {
                         />
                     </div>
                     <div class="auth-field">
-                        <label for="login-password">"密码"</label>
+                        <label for="login-password">{move || i18n.t("authPasswordLabel")}</label>
                         <input
                             id="login-password"
                             type="password"
@@ -124,13 +126,13 @@ pub fn LoginPage() -> impl IntoView {
                         data-testid="login-submit"
                         disabled=move || loading.get()
                     >
-                        {move || if loading.get() { "登录中…" } else { "登录" }}
+                        {move || if loading.get() { i18n.t("authLoginSubmitting") } else { i18n.t("auth.loginAria") }}
                     </button>
                 </form>
                 <footer class="auth-footer-links">
-                    <a href="/register" class="auth-link" data-testid="goto-register">"没有账号？立即注册"</a>
+                    <a href="/register" class="auth-link" data-testid="goto-register">{move || i18n.t("auth.noAccountCta")}</a>
                     <span class="auth-divider">"·"</span>
-                    <a href="/reset-password" class="auth-link" data-testid="goto-reset">"忘记密码？"</a>
+                    <a href="/reset-password" class="auth-link" data-testid="goto-reset">{move || i18n.t("authForgotPassword")}</a>
                 </footer>
             </main>
         </div>

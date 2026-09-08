@@ -24,14 +24,17 @@ fn live_is_not_folded_terminal_is() {
 
 #[test]
 fn summary_labels_match_terminal_state() {
-    assert_eq!(progress_summary_label(&TurnStatus::Done), "思考完成");
-    assert_eq!(progress_summary_label(&TurnStatus::Cancelled), "已停止");
+    assert_eq!(progress_summary_label(&TurnStatus::Done), "chat.progressDone");
+    assert_eq!(
+        progress_summary_label(&TurnStatus::Cancelled),
+        "chat.progressCancelled"
+    );
     assert_eq!(
         progress_summary_label(&TurnStatus::Error {
             code: "x".into(),
             message: "y".into(),
         }),
-        "未完成"
+        "chat.progressError"
     );
 }
 

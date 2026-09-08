@@ -92,10 +92,10 @@ pub fn ready_file_count(files: &[SessionFileRow]) -> usize {
 
 pub fn tray_status_label(status: TrayFileStatus) -> &'static str {
     match status {
-        TrayFileStatus::Uploading => "上传中",
-        TrayFileStatus::Parsing => "解析中",
-        TrayFileStatus::Ready => "就绪",
-        TrayFileStatus::Failed => "解析失败",
+        TrayFileStatus::Uploading => "chat.fileStatus.uploading",
+        TrayFileStatus::Parsing => "chat.fileStatus.parsing",
+        TrayFileStatus::Ready => "chat.fileStatus.ready",
+        TrayFileStatus::Failed => "chat.fileStatus.failed",
     }
 }
 

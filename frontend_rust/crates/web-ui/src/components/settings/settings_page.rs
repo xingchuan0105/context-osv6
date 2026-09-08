@@ -1,15 +1,16 @@
 use super::providers_panel::ProvidersPanel;
-use crate::api_base::poc_api_base;
 use crate::components::shell::ProductChrome;
 use crate::components::ui::Toaster;
+use crate::i18n::{UiLocale, UiTheme, t_now, use_i18n};
 use leptos::prelude::*;
 use leptos_router::hooks::{query_signal, use_navigate};
 use leptos_router::NavigateOptions;
-use web_sdk::{BrowserRestClient, clear_browser_auth};
+use web_sdk::clear_browser_auth;
 
 #[component]
 pub fn SettingsPage() -> impl IntoView {
     let token = expect_context::<RwSignal<String>>();
+    let i18n = use_i18n();
     let navigate = use_navigate();
     let (tab_query, set_tab_query) = query_signal::<String>("tab");
 
@@ -31,7 +32,7 @@ pub fn SettingsPage() -> impl IntoView {
         <div class="settings-shell" data-testid="settings-page">
             <header class="settings-header">
                 <div class="settings-header-left">
-                    <h1 class="settings-title">"账号与设置"</h1>
+                    <h1 class="settings-title">{move || i18n.t("settings.pageHeading")}</h1>
                 </div>
                 <button
                     type="button"
@@ -39,11 +40,11 @@ pub fn SettingsPage() -> impl IntoView {
                     data-testid="settings-logout"
                     on:click=on_logout
                 >
-                    "退出登录"
+                    {move || i18n.t("dashboardLogout")}
                 </button>
             </header>
 
-            <nav class="settings-nav" aria-label="设置导航">
+            <nav class="settings-nav" aria-label=move || i18n.t("settings.navAria")>
                 <button
                     type="button"
                     class=move || {
@@ -56,7 +57,7 @@ pub fn SettingsPage() -> impl IntoView {
                     data-testid="tab-providers"
                     on:click=move |_| set_tab_query.set(Some("providers".to_string()))
                 >
-                    "模型提供商 (BYOK)"
+                    {move || i18n.t("settings.tabs.providers")}
                 </button>
                 <button
                     type="button"
@@ -70,7 +71,7 @@ pub fn SettingsPage() -> impl IntoView {
                     data-testid="tab-profile"
                     on:click=move |_| set_tab_query.set(Some("profile".to_string()))
                 >
-                    "个人资料"
+                    {move || i18n.t("settings.tabs.profile")}
                 </button>
                 <button
                     type="button"
@@ -84,7 +85,7 @@ pub fn SettingsPage() -> impl IntoView {
                     data-testid="tab-preferences"
                     on:click=move |_| set_tab_query.set(Some("preferences".to_string()))
                 >
-                    "偏好设置"
+                    {move || i18n.t("settings.tabs.preferences")}
                 </button>
                 <button
                     type="button"
@@ -98,7 +99,7 @@ pub fn SettingsPage() -> impl IntoView {
                     data-testid="tab-billing"
                     on:click=move |_| set_tab_query.set(Some("billing".to_string()))
                 >
-                    "账单"
+                    {move || i18n.t("settings.tabs.billing")}
                 </button>
                 <button
                     type="button"
@@ -112,10 +113,10 @@ pub fn SettingsPage() -> impl IntoView {
                     data-testid="tab-security"
                     on:click=move |_| set_tab_query.set(Some("security".to_string()))
                 >
-                    "安全"
+                    {move || i18n.t("settings.tabs.security")}
                 </button>
                 <a href="/settings/usage" class="settings-nav-item" data-testid="tab-usage">
-                    "用量统计 →"
+                    {move || i18n.t("settings.usageLink")}
                 </a>
             </nav>
 
@@ -127,17 +128,17 @@ pub fn SettingsPage() -> impl IntoView {
                         "preferences" => view! { <PreferencesPanel/> }.into_any(),
                         "billing" => view! {
                             <section class="settings-panel" data-testid="billing-panel">
-                                <h2>"账单"</h2>
-                                <p>"套餐与充值请前往定价页完成。"</p>
-                                <a href="/pricing" data-testid="billing-goto-pricing">"打开定价与充值"</a>
+                                <h2>{move || i18n.t("settings.tabs.billing")}</h2>
+                                <p>{move || i18n.t("settings.billingHint")}</p>
+                                <a href="/pricing" data-testid="billing-goto-pricing">{move || i18n.t("settings.billingGoto")}</a>
                             </section>
                         }
                         .into_any(),
                         "security" => view! {
                             <section class="settings-panel" data-testid="security-panel">
-                                <h2>"安全"</h2>
-                                <p>"密码重置与会话安全。"</p>
-                                <a href="/reset-password">"修改密码"</a>
+                                <h2>{move || i18n.t("settings.tabs.security")}</h2>
+                                <p>{move || i18n.t("settings.securityHint")}</p>
+                                <a href="/reset-password">{move || i18n.t("settings.changePassword")}</a>
                             </section>
                         }
                         .into_any(),
@@ -153,6 +154,7 @@ pub fn SettingsPage() -> impl IntoView {
 #[component]
 fn ProfilePanel() -> impl IntoView {
     let toaster = expect_context::<Toaster>();
+    let i18n = use_i18n();
     let name = RwSignal::new(String::new());
     Effect::new(move |_| {
         if let Some(auth) = web_sdk::read_browser_auth() {
@@ -161,16 +163,16 @@ fn ProfilePanel() -> impl IntoView {
     });
     view! {
         <section class="settings-panel" data-testid="profile-panel">
-            <h2>"个人资料"</h2>
+            <h2>{move || i18n.t("settings.profile.sectionTitle")}</h2>
             <form
                 class="settings-form"
                 on:submit=move |ev| {
                     ev.prevent_default();
-                    toaster.push("资料已保存到本机会话");
+                    toaster.push(t_now("settings.profileSaved"));
                 }
             >
                 <label>
-                    "显示名称"
+                    {move || i18n.t("settings.profile.nameLabel")}
                     <input
                         type="text"
                         data-testid="profile-name"
@@ -178,7 +180,7 @@ fn ProfilePanel() -> impl IntoView {
                         on:input=move |ev| name.set(event_target_value(&ev))
                     />
                 </label>
-                <button type="submit" data-testid="profile-save">"保存资料"</button>
+                <button type="submit" data-testid="profile-save">{move || i18n.t("settings.profile.saveAction")}</button>
             </form>
         </section>
     }
@@ -187,54 +189,42 @@ fn ProfilePanel() -> impl IntoView {
 #[component]
 fn PreferencesPanel() -> impl IntoView {
     let toaster = expect_context::<Toaster>();
-    let theme = RwSignal::new("system".to_string());
-    let locale = RwSignal::new("zh".to_string());
+    let i18n = use_i18n();
     view! {
         <section class="settings-panel" data-testid="preferences-panel">
-            <h2>"偏好设置"</h2>
-            <p>"主题与语言会在 E5.5 接入完整字典；当前先写入本机偏好。"</p>
+            <h2>{move || i18n.t("settings.tabs.preferences")}</h2>
+            <p>{move || i18n.t("settings.prefsSubtitle")}</p>
             <label>
-                "主题"
+                {move || i18n.t("settings.appearance.themeLabel")}
                 <select
                     data-testid="pref-theme"
-                    prop:value=move || theme.get()
-                    on:change=move |ev| theme.set(event_target_value(&ev))
+                    prop:value=move || i18n.theme.get().as_str().to_string()
+                    on:change=move |ev| i18n.set_theme(UiTheme::parse(&event_target_value(&ev)))
                 >
-                    <option value="system">"跟随系统"</option>
-                    <option value="light">"浅色"</option>
-                    <option value="dark">"深色"</option>
+                    <option value="system">{move || i18n.t("settings.appearance.theme.system")}</option>
+                    <option value="light">{move || i18n.t("settings.appearance.theme.light")}</option>
+                    <option value="dark">{move || i18n.t("settings.appearance.theme.dark")}</option>
                 </select>
             </label>
             <label>
-                "语言"
+                {move || i18n.t("settings.appearance.localeLabel")}
                 <select
                     data-testid="pref-locale"
-                    prop:value=move || locale.get()
-                    on:change=move |ev| locale.set(event_target_value(&ev))
+                    prop:value=move || i18n.locale.get().as_str().to_string()
+                    on:change=move |ev| i18n.set_locale(UiLocale::parse(&event_target_value(&ev)))
                 >
-                    <option value="zh">"中文"</option>
-                    <option value="en">"English"</option>
+                    <option value="zh-CN">{move || i18n.t("workspaceLanguageChinese")}</option>
+                    <option value="en">{move || i18n.t("workspaceLanguageEnglish")}</option>
                 </select>
             </label>
             <button
                 type="button"
                 data-testid="pref-save"
                 on:click=move |_| {
-                    let tok = web_sdk::read_browser_auth().map(|a| a.token).unwrap_or_default();
-                    if tok.is_empty() {
-                        toaster.push("请先登录");
-                        return;
-                    }
-                    leptos::task::spawn_local(async move {
-                        let client = BrowserRestClient::new(&poc_api_base(), Some(tok));
-                        let prefs = client.get_preferences().await.unwrap_or_default();
-                        if client.put_preferences(&prefs).await.is_ok() {
-                            toaster.push("偏好已保存");
-                        }
-                    });
+                    toaster.push(t_now("settings.prefsSaved"));
                 }
             >
-                "保存偏好"
+                {move || i18n.t("settings.savePrefs")}
             </button>
         </section>
     }

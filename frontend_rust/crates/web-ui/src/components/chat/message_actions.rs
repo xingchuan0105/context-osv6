@@ -1,4 +1,5 @@
 use crate::api_base::poc_api_base;
+use crate::i18n::{t_now, use_i18n};
 use leptos::prelude::*;
 use web_sdk::BrowserRestClient;
 
@@ -14,6 +15,7 @@ pub fn MessageActions(
     let feedback_error = RwSignal::new(None::<String>);
     let busy = RwSignal::new(false);
 
+    let i18n = use_i18n();
     let copy_content = content.clone();
     let on_copy = move |_| {
         copy_to_clipboard(copy_content.clone());
@@ -33,10 +35,16 @@ pub fn MessageActions(
                 type="button"
                 class="chat-action-button"
                 data-testid="copy-answer-button"
-                aria-label="复制回答"
+                aria-label=move || i18n.t("chat.copyAnswer")
                 on:click=on_copy
             >
-                {move || if copied.get() { "已复制" } else { "复制" }}
+                {move || {
+                    if copied.get() {
+                        i18n.t("workspaceChatCodeCopied")
+                    } else {
+                        i18n.t("workspaceChatActionCopy")
+                    }
+                }}
             </button>
             {has_ids.then(move || {
                 let sid_up = sid_for_actions.clone();
@@ -52,7 +60,7 @@ pub fn MessageActions(
                             }
                         }
                         data-testid="feedback-up"
-                        aria-label="赞同回答"
+                        aria-label=move || i18n.t("chat.feedbackUp")
                         disabled=move || busy.get()
                         on:click=move |_| {
                             trigger_feedback(
@@ -66,7 +74,7 @@ pub fn MessageActions(
                             )
                         }
                     >
-                        "赞"
+                        {move || i18n.t("chat.feedbackUpShort")}
                     </button>
                     <button
                         type="button"
@@ -78,7 +86,7 @@ pub fn MessageActions(
                             }
                         }
                         data-testid="feedback-down"
-                        aria-label="踩回答"
+                        aria-label=move || i18n.t("chat.feedbackDown")
                         disabled=move || busy.get()
                         on:click=move |_| {
                             trigger_feedback(
@@ -92,7 +100,7 @@ pub fn MessageActions(
                             )
                         }
                     >
-                        "踩"
+                        {move || i18n.t("chat.feedbackDownShort")}
                     </button>
                 }
             })}
@@ -142,7 +150,7 @@ fn trigger_feedback(
                 feedback_error.set(None);
             }
             Err(_) => {
-                feedback_error.set(Some("反馈提交失败，请稍后重试".to_string()));
+                feedback_error.set(Some(t_now("chat.feedbackFailed")));
             }
         }
         busy.set(false);

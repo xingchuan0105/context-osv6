@@ -1,6 +1,7 @@
 use crate::api_base::poc_api_base;
 use crate::components::shell::ProductChrome;
 use crate::components::ui::PageStatus;
+use crate::i18n::{tf_now, t_now, use_i18n};
 use contracts::share::ShareAnalyticsResponse;
 use contracts::workspaces::Workspace;
 use leptos::prelude::*;
@@ -42,7 +43,7 @@ pub fn WorkspaceAnalyzePage() -> impl IntoView {
     view! {
         <ProductChrome>
             <p class="dashboard-loading" data-testid="workspace-analyze-redirect">
-                "正在前往分享中心…"
+                {move || use_i18n().t("analytics.redirecting")}
             </p>
         </ProductChrome>
     }
@@ -51,6 +52,7 @@ pub fn WorkspaceAnalyzePage() -> impl IntoView {
 #[component]
 pub fn GlobalAnalyticsPage() -> impl IntoView {
     let token = expect_context::<RwSignal<String>>();
+    let i18n = use_i18n();
     let rows = RwSignal::new(Vec::<(Workspace, Option<ShareAnalyticsResponse>)>::new());
     let loading = RwSignal::new(true);
     let error = RwSignal::new(None::<String>);
@@ -63,7 +65,7 @@ pub fn GlobalAnalyticsPage() -> impl IntoView {
         };
         if tok.is_empty() {
             loading.set(false);
-            error.set(Some("请先登录后查看分享统计。".to_string()));
+            error.set(Some(t_now("analytics.loginRequired")));
             return;
         }
         loading.set(true);
@@ -81,7 +83,7 @@ pub fn GlobalAnalyticsPage() -> impl IntoView {
                     loading.set(false);
                 }
                 Err(err) => {
-                    error.set(Some(format!("加载分享统计失败：{err}")));
+                    error.set(Some(tf_now("analytics.loadFailed", &[("error", &err.to_string())])));
                     loading.set(false);
                 }
             }
@@ -109,33 +111,33 @@ pub fn GlobalAnalyticsPage() -> impl IntoView {
         <div class="dashboard-shell" data-testid="global-analytics-page">
             <header class="dashboard-header">
                 <div class="dashboard-header-left">
-                    <a href="/dashboard" class="dashboard-chat-link">"← 全部工作区"</a>
-                    <h1 class="dashboard-title">"全局分享与访问分析"</h1>
+                    <a href="/dashboard" class="dashboard-chat-link">{move || i18n.t("workbench.backAll")}</a>
+                    <h1 class="dashboard-title">{move || i18n.t("analytics.globalTitle")}</h1>
                 </div>
             </header>
             <PageStatus
                 loading=Signal::derive(move || loading.get())
                 error=Signal::derive(move || error.get())
                 empty=Signal::derive(move || rows.get().is_empty())
-                empty_text="还没有可统计的工作区。"
+                empty_key="analytics.empty"
             >
                 <section class="dashboard-panel">
-                    <h2>"分享页面访问与互动统计"</h2>
+                    <h2>{move || i18n.t("analytics.sectionTitle")}</h2>
                     <div class="settings-usage-cards">
                         <div class="settings-usage-card">
-                            <span class="settings-usage-label">"总公开浏览量"</span>
+                            <span class="settings-usage-label">{move || i18n.t("analytics.totalViews")}</span>
                             <span class="settings-usage-value" data-testid="analytics-views">
                                 {move || totals.get().0.to_string()}
                             </span>
                         </div>
                         <div class="settings-usage-card">
-                            <span class="settings-usage-label">"独立访客数"</span>
+                            <span class="settings-usage-label">{move || i18n.t("analytics.visitors")}</span>
                             <span class="settings-usage-value" data-testid="analytics-visitors">
                                 {move || totals.get().1.to_string()}
                             </span>
                         </div>
                         <div class="settings-usage-card">
-                            <span class="settings-usage-label">"已开启分享的工作区"</span>
+                            <span class="settings-usage-label">{move || i18n.t("analytics.sharedWorkspaces")}</span>
                             <span class="settings-usage-value">
                                 {move || {
                                     rows.get()
@@ -163,7 +165,7 @@ fn ShareViewsChart(days: std::collections::BTreeMap<String, i64>) -> impl IntoVi
     let series: Vec<(String, i64)> = days.into_iter().collect();
     if series.is_empty() {
         return view! {
-            <p class="page-status-empty" data-testid="share-views-bar-chart">"暂无按日访问数据。"</p>
+            <p class="page-status-empty" data-testid="share-views-bar-chart">{use_i18n().t("analytics.noDaily")}</p>
         }
         .into_any();
     }
@@ -191,7 +193,7 @@ fn ShareViewsChart(days: std::collections::BTreeMap<String, i64>) -> impl IntoVi
             class="share-views-chart"
             viewBox="0 0 640 180"
             role="img"
-            aria-label="访问量柱状图"
+            aria-label=move || use_i18n().t("analytics.chartLabel")
             data-testid="share-views-bar-chart"
         >
             {bars

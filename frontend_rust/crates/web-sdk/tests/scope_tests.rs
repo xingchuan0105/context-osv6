@@ -58,21 +58,15 @@ fn reconcile_attaches_and_strips_only_when_not_manual() {
 
 #[test]
 fn mode_line_covers_empty_search_and_both() {
-    assert_eq!(
-        mode_line(&[], false),
-        "未添加会话文件：添加文件后可检索本会话。"
-    );
-    assert_eq!(mode_line(&[], true), "聊天：回答不检索文档与网络。");
+    assert_eq!(mode_line(&[], false), "chat.modeLineNoSessionFiles");
+    assert_eq!(mode_line(&[], true), "workspaceChatModeLineChat");
     assert_eq!(
         mode_line(&[Capability::Search], false),
-        "网络搜索：回答会检索网页。"
+        "workspaceChatModeLineSearch"
     );
-    assert_eq!(
-        mode_line(&[Capability::Rag], true),
-        "知识库：回答检索已选文档。"
-    );
+    assert_eq!(mode_line(&[Capability::Rag], true), "workspaceChatModeLineRag");
     assert_eq!(
         mode_line(&[Capability::Rag, Capability::Search], true),
-        "知识库 + 网络搜索：回答检索已选文档与网页。"
+        "workspaceChatModeLineBoth"
     );
 }

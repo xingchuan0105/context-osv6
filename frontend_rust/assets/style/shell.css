@@ -128,6 +128,15 @@
     background: var(--cos-surface-hover);
 }
 
+.app-menu-flyout {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    margin: 0 0.35rem 0.35rem 0.85rem;
+    padding: 0.25rem 0 0.35rem;
+    border-left: 1px solid var(--cos-border);
+}
+
 .app-account-card {
     display: flex;
     gap: 0.65rem;

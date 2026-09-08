@@ -1,4 +1,5 @@
 use crate::api_base::poc_api_base;
+use crate::i18n::{tf_now, t_now, use_i18n};
 use leptos::prelude::*;
 use leptos_router::hooks::{use_navigate, use_query_map};
 use leptos_router::NavigateOptions;
@@ -6,6 +7,7 @@ use web_sdk::{auth_reset_confirm, auth_reset_send_code, auth_reset_verify_code};
 
 #[component]
 pub fn ResetPasswordRequestPage() -> impl IntoView {
+    let i18n = use_i18n();
     let navigate = use_navigate();
     let email = RwSignal::new(String::new());
     let error = RwSignal::new(None::<String>);
@@ -17,7 +19,7 @@ pub fn ResetPasswordRequestPage() -> impl IntoView {
             ev.prevent_default();
             let email_val = email.get().trim().to_string();
             if email_val.is_empty() {
-                error.set(Some("请输入注册邮箱".to_string()));
+                error.set(Some(t_now("auth.resetNeedEmail")));
                 return;
             }
             if loading.get() {
@@ -38,7 +40,7 @@ pub fn ResetPasswordRequestPage() -> impl IntoView {
                         );
                     }
                     Err(err) => {
-                        error.set(Some(format!("发送验证码失败：{err}")));
+                        error.set(Some(tf_now("auth.resetSendFailedDetail", &[("error", &err.to_string())])));
                     }
                 }
                 loading.set(false);
@@ -48,14 +50,14 @@ pub fn ResetPasswordRequestPage() -> impl IntoView {
 
     view! {
         <div class="auth-page-container">
-            <main class="auth-card" aria-label="找回密码">
+            <main class="auth-card" aria-label=move || i18n.t("authResetRequestTitle")>
                 <header class="auth-header">
-                    <h1 class="auth-title">"找回密码"</h1>
-                    <p class="auth-subtitle">"输入你的注册邮箱以接收重置验证码"</p>
+                    <h1 class="auth-title">{move || i18n.t("authResetRequestTitle")}</h1>
+                    <p class="auth-subtitle">{move || i18n.t("auth.resetRequestLead")}</p>
                 </header>
                 <form class="auth-form" on:submit=on_submit>
                     <div class="auth-field">
-                        <label for="reset-email">"邮箱"</label>
+                        <label for="reset-email">{move || i18n.t("authEmailLabel")}</label>
                         <input
                             id="reset-email"
                             type="email"
@@ -81,11 +83,11 @@ pub fn ResetPasswordRequestPage() -> impl IntoView {
                         data-testid="reset-request-submit"
                         disabled=move || loading.get()
                     >
-                        {move || if loading.get() { "发送中…" } else { "获取验证码" }}
+                        {move || if loading.get() { i18n.t("authResetSendSubmitting") } else { i18n.t("auth.resetGetCode") }}
                     </button>
                 </form>
                 <footer class="auth-footer-links">
-                    <a href="/login" class="auth-link">"返回登录"</a>
+                    <a href="/login" class="auth-link">{move || i18n.t("authResetBackToLogin")}</a>
                 </footer>
             </main>
         </div>
@@ -94,6 +96,7 @@ pub fn ResetPasswordRequestPage() -> impl IntoView {
 
 #[component]
 pub fn ResetPasswordVerifyPage() -> impl IntoView {
+    let i18n = use_i18n();
     let navigate = use_navigate();
     let query_map = use_query_map();
     let email = Signal::derive(move || query_map.with(|q| q.get("email").unwrap_or_default()));
@@ -108,7 +111,7 @@ pub fn ResetPasswordVerifyPage() -> impl IntoView {
             let email_val = email.get();
             let code_val = code.get().trim().to_string();
             if code_val.is_empty() {
-                error.set(Some("请输入 6 位验证码".to_string()));
+                error.set(Some(t_now("auth.resetNeedSix")));
                 return;
             }
             if loading.get() {
@@ -130,7 +133,7 @@ pub fn ResetPasswordVerifyPage() -> impl IntoView {
                         );
                     }
                     Err(err) => {
-                        error.set(Some(format!("验证失败：{err}")));
+                        error.set(Some(tf_now("auth.resetVerifyFailedDetail", &[("error", &err.to_string())])));
                     }
                 }
                 loading.set(false);
@@ -140,19 +143,22 @@ pub fn ResetPasswordVerifyPage() -> impl IntoView {
 
     view! {
         <div class="auth-page-container">
-            <main class="auth-card" aria-label="输入验证码">
+            <main class="auth-card" aria-label=move || i18n.t("auth.resetVerifyAria")>
                 <header class="auth-header">
-                    <h1 class="auth-title">"输入重置验证码"</h1>
-                    <p class="auth-subtitle">{move || format!("验证码已发送至 {}", email.get())}</p>
+                    <h1 class="auth-title">{move || i18n.t("auth.resetVerifyHeading")}</h1>
+                    <p class="auth-subtitle">{move || {
+                        let addr = email.get();
+                        i18n.tf("auth.resetCodeSentTo", &[("email", addr.as_str())])
+                    }}</p>
                 </header>
                 <form class="auth-form" on:submit=on_submit>
                     <div class="auth-field">
-                        <label for="reset-code">"验证码"</label>
+                        <label for="reset-code">{move || i18n.t("authResetCodeLabel")}</label>
                         <input
                             id="reset-code"
                             type="text"
                             data-testid="reset-code"
-                            placeholder="6 位验证码"
+                            placeholder=move || i18n.t("authResetCodeHint")
                             prop:value=move || code.get()
                             on:input=move |ev| code.set(event_target_value(&ev))
                             required
@@ -173,11 +179,11 @@ pub fn ResetPasswordVerifyPage() -> impl IntoView {
                         data-testid="reset-verify-submit"
                         disabled=move || loading.get()
                     >
-                        {move || if loading.get() { "核验中…" } else { "核验验证码" }}
+                        {move || if loading.get() { i18n.t("auth.resetVerifying") } else { i18n.t("auth.resetVerifySubmit") }}
                     </button>
                 </form>
                 <footer class="auth-footer-links">
-                    <a href="/reset-password" class="auth-link">"重新发送"</a>
+                    <a href="/reset-password" class="auth-link">{move || i18n.t("auth.resetResend")}</a>
                 </footer>
             </main>
         </div>
@@ -186,6 +192,7 @@ pub fn ResetPasswordVerifyPage() -> impl IntoView {
 
 #[component]
 pub fn ResetPasswordConfirmPage() -> impl IntoView {
+    let i18n = use_i18n();
     let navigate = use_navigate();
     let query_map = use_query_map();
     let ticket = Signal::derive(move || query_map.with(|q| q.get("ticket").unwrap_or_default()));
@@ -204,15 +211,15 @@ pub fn ResetPasswordConfirmPage() -> impl IntoView {
             let ticket_val = ticket.get();
 
             if pass_val.len() < 8 {
-                error.set(Some("密码至少需 8 位".to_string()));
+                error.set(Some(t_now("auth.resetNeedPassword")));
                 return;
             }
             if pass_val != confirm_val {
-                error.set(Some("两次输入的密码不一致".to_string()));
+                error.set(Some(t_now("authPasswordMismatch")));
                 return;
             }
             if ticket_val.is_empty() {
-                error.set(Some("缺少重置凭据，请重新申请".to_string()));
+                error.set(Some(t_now("auth.resetMissingTicket")));
                 return;
             }
             if loading.get() {
@@ -234,7 +241,7 @@ pub fn ResetPasswordConfirmPage() -> impl IntoView {
                         });
                     }
                     Err(err) => {
-                        error.set(Some(format!("重置失败：{err}")));
+                        error.set(Some(tf_now("auth.resetFailedDetail", &[("error", &err.to_string())])));
                     }
                 }
                 loading.set(false);
@@ -244,15 +251,15 @@ pub fn ResetPasswordConfirmPage() -> impl IntoView {
 
     view! {
         <div class="auth-page-container">
-            <main class="auth-card" aria-label="设置新密码">
+            <main class="auth-card" aria-label=move || i18n.t("auth.resetNewPasswordAria")>
                 <header class="auth-header">
-                    <h1 class="auth-title">"设置新密码"</h1>
-                    <p class="auth-subtitle">"请输入你的新登录密码"</p>
+                    <h1 class="auth-title">{move || i18n.t("authResetConfirmTitle")}</h1>
+                    <p class="auth-subtitle">{move || i18n.t("auth.resetNewPasswordLead")}</p>
                 </header>
                 <form class="auth-form" on:submit=on_submit>
                     <Show when=move || !success.get()>
                         <div class="auth-field">
-                            <label for="new-password">"新密码 (至少 8 位)"</label>
+                            <label for="new-password">{move || i18n.t("auth.resetNewPasswordField")}</label>
                             <input
                                 id="new-password"
                                 type="password"
@@ -266,7 +273,7 @@ pub fn ResetPasswordConfirmPage() -> impl IntoView {
                     </Show>
                     <Show when=move || !success.get()>
                         <div class="auth-field">
-                            <label for="confirm-new-password">"确认新密码"</label>
+                            <label for="confirm-new-password">{move || i18n.t("auth.resetConfirmNew")}</label>
                             <input
                                 id="confirm-new-password"
                                 type="password"
@@ -294,12 +301,12 @@ pub fn ResetPasswordConfirmPage() -> impl IntoView {
                             data-testid="reset-confirm-submit"
                             disabled=move || loading.get()
                         >
-                            {move || if loading.get() { "提交中…" } else { "确认修改密码" }}
+                            {move || if loading.get() { i18n.t("authResetConfirmSubmitting") } else { i18n.t("auth.resetFinish") }}
                         </button>
                     </Show>
                     <Show when=move || success.get()>
                         <div class="auth-success-message" role="status" data-testid="reset-success">
-                            <p>"密码修改成功！正在返回登录页…"</p>
+                            <p>{move || i18n.t("auth.resetSuccess")}</p>
                         </div>
                     </Show>
                 </form>

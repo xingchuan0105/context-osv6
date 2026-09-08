@@ -1,4 +1,5 @@
 use crate::api_base::poc_api_base;
+use crate::i18n::{UiLocale, UiTheme, use_i18n};
 use crate::routes::dest;
 use leptos::prelude::*;
 use web_sdk::{clear_browser_auth, read_browser_auth, BrowserRestClient};
@@ -6,8 +7,10 @@ use web_sdk::{clear_browser_auth, read_browser_auth, BrowserRestClient};
 #[component]
 pub fn AccountMenu() -> impl IntoView {
     let token = expect_context::<RwSignal<String>>();
+    let i18n = use_i18n();
     let open = RwSignal::new(false);
     let show_admin = RwSignal::new(false);
+    let flyout = RwSignal::new(None::<&'static str>);
 
     let probe_admin = move || {
         let tok = if token.get_untracked().is_empty() {
@@ -37,40 +40,45 @@ pub fn AccountMenu() -> impl IntoView {
                 class="app-top-bar-capsule"
                 aria-haspopup="menu"
                 aria-expanded=move || open.get()
-                aria-label="账户"
+                aria-label=move || i18n.t("dashboardAccountLink")
                 data-testid="dashboard-account-menu-trigger"
                 on:click=move |_| {
                     let next = !open.get();
                     open.set(next);
+                    flyout.set(None);
                     if next {
                         probe_admin();
                     }
                 }
             >
-                "账户"
+                {move || i18n.t("dashboardAccountLink")}
             </button>
             <Show when=move || open.get()>
                 <button
                     type="button"
                     class="app-menu-dismiss"
-                    aria-label="关闭菜单"
-                    on:click=move |_| open.set(false)
+                    aria-label=move || i18n.t("commonMenuClose")
+                    on:click=move |_| {
+                        open.set(false);
+                        flyout.set(None);
+                    }
                 />
                 <div class="app-menu-panel" role="menu" data-testid="dashboard-account-menu">
                     {move || {
                         let signed_in = !token.get().is_empty() || read_browser_auth().is_some();
                         let auth = read_browser_auth();
+                        let fallback = i18n.t("dashboardAccountLink");
                         let name = auth
                             .as_ref()
                             .map(|a| {
                                 let n = a.user.full_name.trim();
                                 if n.is_empty() {
-                                    a.user.email.split('@').next().unwrap_or("账户").to_string()
+                                    a.user.email.split('@').next().unwrap_or(fallback.as_str()).to_string()
                                 } else {
                                     n.to_string()
                                 }
                             })
-                            .unwrap_or_else(|| "账户".to_string());
+                            .unwrap_or_else(|| fallback.clone());
                         let email = auth.map(|a| a.user.email).unwrap_or_default();
                         let initial = name.chars().next().unwrap_or('U').to_uppercase().to_string();
                         view! {
@@ -90,7 +98,7 @@ pub fn AccountMenu() -> impl IntoView {
                                 data-testid="account-membership-cta"
                                 on:click=move |_| open.set(false)
                             >
-                                "会员与充值"
+                                {move || i18n.t("upgradeModal.title")}
                             </a>
                             <a
                                 class="app-menu-item"
@@ -99,7 +107,7 @@ pub fn AccountMenu() -> impl IntoView {
                                 data-testid="account-settings-link"
                                 on:click=move |_| open.set(false)
                             >
-                                "设置"
+                                {move || i18n.t("appPrimaryNav.settings")}
                             </a>
                             <a
                                 class="app-menu-item"
@@ -108,7 +116,7 @@ pub fn AccountMenu() -> impl IntoView {
                                 data-testid="account-help-link"
                                 on:click=move |_| open.set(false)
                             >
-                                "帮助"
+                                {move || i18n.t("accountMenu.help")}
                             </a>
                             <Show when=move || show_admin.get()>
                                 <a
@@ -118,8 +126,97 @@ pub fn AccountMenu() -> impl IntoView {
                                     data-testid="account-admin-link"
                                     on:click=move |_| open.set(false)
                                 >
-                                    "管理台"
+                                    {move || i18n.t("accountMenu.adminConsole")}
                                 </a>
+                            </Show>
+                            <button
+                                type="button"
+                                class="app-menu-item"
+                                role="menuitem"
+                                data-testid="account-theme-toggle"
+                                on:click=move |_| {
+                                    flyout.update(|current| {
+                                        *current = if *current == Some("theme") { None } else { Some("theme") };
+                                    });
+                                }
+                            >
+                                {move || format!("{} ▸", i18n.t("settings.appearance.themeLabel"))}
+                            </button>
+                            <Show when=move || flyout.get() == Some("theme")>
+                                <div class="app-menu-flyout" role="menu" data-testid="account-theme-menu">
+                                    <button
+                                        type="button"
+                                        class="app-menu-item"
+                                        data-testid="account-theme-system"
+                                        on:click=move |_| {
+                                            i18n.set_theme(UiTheme::System);
+                                            flyout.set(None);
+                                        }
+                                    >
+                                        {move || theme_item(i18n, UiTheme::System, "settings.appearance.theme.system")}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="app-menu-item"
+                                        data-testid="account-theme-light"
+                                        on:click=move |_| {
+                                            i18n.set_theme(UiTheme::Light);
+                                            flyout.set(None);
+                                        }
+                                    >
+                                        {move || theme_item(i18n, UiTheme::Light, "settings.appearance.theme.light")}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="app-menu-item"
+                                        data-testid="account-theme-dark"
+                                        on:click=move |_| {
+                                            i18n.set_theme(UiTheme::Dark);
+                                            flyout.set(None);
+                                        }
+                                    >
+                                        {move || theme_item(i18n, UiTheme::Dark, "settings.appearance.theme.dark")}
+                                    </button>
+                                </div>
+                            </Show>
+                            <button
+                                type="button"
+                                class="app-menu-item"
+                                role="menuitem"
+                                data-testid="account-locale-toggle"
+                                on:click=move |_| {
+                                    flyout.update(|current| {
+                                        *current = if *current == Some("locale") { None } else { Some("locale") };
+                                    });
+                                }
+                            >
+                                {move || format!("{} ▸", i18n.t("settings.appearance.localeLabel"))}
+                            </button>
+                            <Show when=move || flyout.get() == Some("locale")>
+                                <div class="app-menu-flyout" role="menu" data-testid="account-locale-menu">
+                                    <button
+                                        type="button"
+                                        class="app-menu-item"
+                                        data-testid="account-locale-zh-CN"
+                                        on:click=move |_| {
+                                            i18n.set_locale(UiLocale::ZhCn);
+                                            flyout.set(None);
+                                        }
+                                    >
+                                        {move || locale_item(i18n, UiLocale::ZhCn, "workspaceLanguageChinese")}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="app-menu-item"
+                                        data-testid="account-locale-en"
+                                        on:click=move |_| {
+                                            i18n.set_locale(UiLocale::En);
+                                            flyout.set(None);
+                                        }
+                                    >
+                                        {move || locale_item(i18n, UiLocale::En, "workspaceLanguageEnglish")}
+                                    </button>
+                                </div>
                             </Show>
                             <Show when=move || signed_in>
                                 <button
@@ -138,7 +235,7 @@ pub fn AccountMenu() -> impl IntoView {
                                         }
                                     }
                                 >
-                                    "退出登录"
+                                    {move || i18n.t("dashboardLogout")}
                                 </button>
                             </Show>
                             <Show when=move || !signed_in>
@@ -149,7 +246,7 @@ pub fn AccountMenu() -> impl IntoView {
                                     data-testid="account-login-link"
                                     on:click=move |_| open.set(false)
                                 >
-                                    "登录"
+                                    {move || i18n.t("marketingChrome.login")}
                                 </a>
                             </Show>
                         }
@@ -158,4 +255,14 @@ pub fn AccountMenu() -> impl IntoView {
             </Show>
         </div>
     }
+}
+
+fn theme_item(i18n: crate::i18n::I18n, value: UiTheme, key: &'static str) -> String {
+    let mark = if i18n.theme.get() == value { "✓ " } else { "" };
+    format!("{mark}{}", i18n.t(key))
+}
+
+fn locale_item(i18n: crate::i18n::I18n, value: UiLocale, key: &'static str) -> String {
+    let mark = if i18n.locale.get() == value { "✓ " } else { "" };
+    format!("{mark}{}", i18n.t(key))
 }

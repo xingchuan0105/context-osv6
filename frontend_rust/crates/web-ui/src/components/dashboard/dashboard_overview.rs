@@ -1,6 +1,7 @@
 use crate::api_base::poc_api_base;
 use crate::components::shell::ProductChrome;
 use crate::components::ui::{AppDialog, Toaster};
+use crate::i18n::{tf_now, t_now, use_i18n};
 use crate::routes::dest;
 use contracts::workspaces::Workspace;
 use leptos::prelude::*;
@@ -31,6 +32,7 @@ pub fn DashboardOverviewPage() -> impl IntoView {
     let delete_target = RwSignal::new(None::<Workspace>);
     let rename_name = RwSignal::new(String::new());
     let toaster = expect_context::<Toaster>();
+    let i18n = use_i18n();
 
     let load_workspaces = move || {
         let tok = if token.get_untracked().is_empty() {
@@ -51,7 +53,7 @@ pub fn DashboardOverviewPage() -> impl IntoView {
                     workspaces.set(resp.workspaces);
                 }
                 Err(err) => {
-                    error.set(Some(format!("加载工作区失败：{err}")));
+                    error.set(Some(tf_now("dashboard.loadFailed", &[("error", &err.to_string())])));
                 }
             }
             if let Ok(prefs) = client.get_preferences().await {
@@ -93,7 +95,7 @@ pub fn DashboardOverviewPage() -> impl IntoView {
                         navigate(&format!("/dashboard/{wid}"), NavigateOptions::default());
                     }
                     Err(err) => {
-                        error.set(Some(format!("创建工作区失败：{err}")));
+                        error.set(Some(tf_now("dashboard.createFailed", &[("error", &err.to_string())])));
                     }
                 }
                 create_loading.set(false);
@@ -106,18 +108,18 @@ pub fn DashboardOverviewPage() -> impl IntoView {
         <div class="dashboard-shell" data-testid="dashboard-overview">
             <header class="dashboard-header">
                 <div class="dashboard-header-left">
-                    <h1 class="dashboard-title">"工作区与持久知识库"</h1>
+                    <h1 class="dashboard-title">{move || i18n.t("dashboard.title")}</h1>
                 </div>
                 <div class="dashboard-header-actions">
-                    <a href=dest::SHARE_TRAFFIC class="dashboard-header-btn">"分享访问"</a>
-                    <a href=dest::DESKTOP class="dashboard-header-btn" data-testid="dashboard-client-link">"客户端"</a>
+                    <a href=dest::SHARE_TRAFFIC class="dashboard-header-btn">{move || i18n.t("dashboardShareTrafficNav")}</a>
+                    <a href=dest::DESKTOP class="dashboard-header-btn" data-testid="dashboard-client-link">{move || i18n.t("productChrome.client")}</a>
                     <button
                         type="button"
                         class="dashboard-create-btn"
                         data-testid="create-workspace-btn"
                         on:click=move |_| show_create.set(true)
                     >
-                        "+ 新建工作区"
+                        {move || i18n.t("dashboard.createWorkspace")}
                     </button>
                 </div>
             </header>
@@ -126,9 +128,9 @@ pub fn DashboardOverviewPage() -> impl IntoView {
                 class="dashboard-modal-backdrop"
                 hidden=move || !show_create.get()
             >
-                <div class="dashboard-modal" role="dialog" aria-label="新建工作区">
+                <div class="dashboard-modal" role="dialog" aria-label=move || i18n.t("workspaceCreateDialogLabel")>
                     <header class="dashboard-modal-header">
-                        <h2>"新建工作区"</h2>
+                        <h2>{move || i18n.t("workspaceCreateDialogLabel")}</h2>
                         <button
                             type="button"
                             class="dashboard-modal-close"
@@ -139,24 +141,24 @@ pub fn DashboardOverviewPage() -> impl IntoView {
                     </header>
                     <form on:submit=on_create class="dashboard-modal-form">
                         <div class="auth-field">
-                            <label for="ws-name">"工作区名称"</label>
+                            <label for="ws-name">{move || i18n.t("dashboard.workspaceName")}</label>
                             <input
                                 id="ws-name"
                                 type="text"
                                 data-testid="new-workspace-name"
-                                placeholder="例如：材料研发知识库"
+                                placeholder=move || i18n.t("dashboard.workspaceNamePlaceholder")
                                 prop:value=move || new_name.get()
                                 on:input=move |ev| new_name.set(event_target_value(&ev))
                                 required
                             />
                         </div>
                         <div class="auth-field">
-                            <label for="ws-desc">"描述 (可选)"</label>
+                            <label for="ws-desc">{move || i18n.t("dashboard.workspaceDesc")}</label>
                             <input
                                 id="ws-desc"
                                 type="text"
                                 data-testid="new-workspace-desc"
-                                placeholder="说明知识库范畴"
+                                placeholder=move || i18n.t("dashboard.workspaceDescPlaceholder")
                                 prop:value=move || new_desc.get()
                                 on:input=move |ev| new_desc.set(event_target_value(&ev))
                             />
@@ -167,7 +169,7 @@ pub fn DashboardOverviewPage() -> impl IntoView {
                                 class="dashboard-btn-cancel"
                                 on:click=move |_| show_create.set(false)
                             >
-                                "取消"
+                                {move || i18n.t("commonCancel")}
                             </button>
                             <button
                                 type="submit"
@@ -175,31 +177,37 @@ pub fn DashboardOverviewPage() -> impl IntoView {
                                 data-testid="submit-create-workspace"
                                 disabled=move || create_loading.get()
                             >
-                                {move || if create_loading.get() { "创建中…" } else { "确认创建" }}
+                                {move || {
+                                    if create_loading.get() {
+                                        i18n.t("dashboard.creating")
+                                    } else {
+                                        i18n.t("dashboard.confirmCreate")
+                                    }
+                                }}
                             </button>
                         </div>
                     </form>
                 </div>
             </div>
 
-            <nav class="dashboard-toolbar" aria-label="工作区筛选">
-                <button type="button" class=move || if tab.get() == "all" { "settings-nav-item is-active" } else { "settings-nav-item" } data-testid="dash-tab-all" on:click=move |_| tab.set("all".into())>"全部"</button>
-                <button type="button" class=move || if tab.get() == "mine" { "settings-nav-item is-active" } else { "settings-nav-item" } data-testid="dash-tab-mine" on:click=move |_| tab.set("mine".into())>"我的"</button>
-                <button type="button" class=move || if tab.get() == "favorites" { "settings-nav-item is-active" } else { "settings-nav-item" } data-testid="dash-tab-favorites" on:click=move |_| tab.set("favorites".into())>"收藏"</button>
+            <nav class="dashboard-toolbar" aria-label=move || i18n.t("dashboard.filterLabel")>
+                <button type="button" class=move || if tab.get() == "all" { "settings-nav-item is-active" } else { "settings-nav-item" } data-testid="dash-tab-all" on:click=move |_| tab.set("all".into())>{move || i18n.t("dashboardTabAll")}</button>
+                <button type="button" class=move || if tab.get() == "mine" { "settings-nav-item is-active" } else { "settings-nav-item" } data-testid="dash-tab-mine" on:click=move |_| tab.set("mine".into())>{move || i18n.t("dashboard.tabMineShort")}</button>
+                <button type="button" class=move || if tab.get() == "favorites" { "settings-nav-item is-active" } else { "settings-nav-item" } data-testid="dash-tab-favorites" on:click=move |_| tab.set("favorites".into())>{move || i18n.t("dashboard.tabFavoritesShort")}</button>
                 <button type="button" class="dashboard-header-btn" data-testid="dash-sort" on:click=move |_| {
                     sort_mode.update(|mode| *mode = if *mode == "recent" { "name".into() } else { "recent".into() });
-                }>{move || if sort_mode.get() == "name" { "按名称" } else { "按最近" }}</button>
+                }>{move || if sort_mode.get() == "name" { i18n.t("dashboard.sortByName") } else { i18n.t("dashboard.sortByRecent") }}</button>
                 <button type="button" class="dashboard-header-btn" data-testid="dash-view" on:click=move |_| {
                     view_mode.update(|mode| *mode = if *mode == "cards" { "list".into() } else { "cards".into() });
-                }>{move || if view_mode.get() == "list" { "列表" } else { "卡片" }}</button>
-                <button type="button" class="dashboard-header-btn" data-testid="dash-search-open" on:click=move |_| show_search.set(true)>"搜索"</button>
+                }>{move || if view_mode.get() == "list" { i18n.t("dashboardViewList") } else { i18n.t("dashboardViewCard") }}</button>
+                <button type="button" class="dashboard-header-btn" data-testid="dash-search-open" on:click=move |_| show_search.set(true)>{move || i18n.t("dashboard.searchOpen")}</button>
             </nav>
 
-            <AppDialog open=Signal::derive(move || show_search.get()) title="搜索工作区" test_id="dashboard-search-dialog" on_close=Callback::new(move |_| show_search.set(false))>
+            <AppDialog open=Signal::derive(move || show_search.get()) title_key="dashboardSearchDialogLabel" test_id="dashboard-search-dialog" on_close=Callback::new(move |_| show_search.set(false))>
                 <input
                     type="search"
                     data-testid="dashboard-search-input"
-                    placeholder="按名称筛选"
+                    placeholder=move || i18n.t("dashboard.searchNamePlaceholder")
                     prop:value=move || search.get()
                     on:input=move |ev| search.set(event_target_value(&ev))
                 />
@@ -216,10 +224,10 @@ pub fn DashboardOverviewPage() -> impl IntoView {
                     })
                 }}
                 <Show when=move || loading.get()>
-                    <p class="dashboard-loading" data-testid="page-loading">"正在加载工作区列表…"</p>
+                    <p class="dashboard-loading" data-testid="page-loading">{move || i18n.t("dashboard.loadingList")}</p>
                 </Show>
                 <p class="page-status-empty" data-testid="page-empty" hidden=move || loading.get() || !visible_workspaces(workspaces.get(), tab.get(), favorite_ids.get(), search.get(), sort_mode.get()).is_empty()>
-                    "还没有工作区。"
+                    {move || i18n.t("dashboardEmptyAllTitle")}
                 </p>
                 <div
                     class=move || if view_mode.get() == "list" { "dashboard-workspace-list" } else { "dashboard-workspace-grid" }
@@ -232,10 +240,12 @@ pub fn DashboardOverviewPage() -> impl IntoView {
                             let wid = ws.id.clone();
                             let href = format!("/dashboard/{wid}");
                             let desc = if ws.description.is_empty() {
-                                "暂无描述".to_string()
+                                i18n.t("dashboardEmptyDescription")
                             } else {
                                 ws.description.clone()
                             };
+                            let doc_count = ws.document_count.to_string();
+                            let docs_label = i18n.tf("dashboard.docCount", &[("count", doc_count.as_str())]);
                             let item = ws.clone();
                             let item_fav = item.clone();
                             let item_rename = item.clone();
@@ -247,7 +257,7 @@ pub fn DashboardOverviewPage() -> impl IntoView {
                                         <div class="dashboard-card-top">
                                             <h3 class="dashboard-card-title">{ws.name.clone()}</h3>
                                             <span class="dashboard-card-docs">
-                                                {format!("{} 篇资料", ws.document_count)}
+                                                {docs_label}
                                             </span>
                                         </div>
                                         <p class="dashboard-card-desc">{desc}</p>
@@ -258,21 +268,21 @@ pub fn DashboardOverviewPage() -> impl IntoView {
                                         data-testid="workspace-menu"
                                         on:click=move |_| menu_id.set(Some(wid.clone()))
                                     >
-                                        "更多"
+                                        {move || i18n.t("commonMore")}
                                     </button>
                                     <div class="dashboard-card-actions" hidden=move || menu_id.get().as_deref() != Some(item_id.as_str())>
                                         <button type="button" data-testid="workspace-favorite" on:click=move |_| toggle_favorite(token, favorite_ids, toaster, item_fav.id.clone())>
-                                            {if favorite_ids.get().contains(&item_fav.id) { "取消收藏" } else { "收藏" }}
+                                            {if favorite_ids.get().contains(&item_fav.id) { i18n.t("dashboardActionUnfavorite") } else { i18n.t("dashboardActionFavorite") }}
                                         </button>
                                         <button type="button" data-testid="workspace-rename" on:click=move |_| {
                                             rename_name.set(item_rename.name.clone());
                                             rename_target.set(Some(item_rename.clone()));
                                             menu_id.set(None);
-                                        }>"重命名"</button>
+                                        }>{move || i18n.t("dashboardActionRename")}</button>
                                         <button type="button" data-testid="workspace-delete" on:click=move |_| {
                                             delete_target.set(Some(item_delete.clone()));
                                             menu_id.set(None);
-                                        }>"删除"</button>
+                                        }>{move || i18n.t("dashboardActionDelete")}</button>
                                     </div>
                                 </article>
                             }
@@ -283,7 +293,7 @@ pub fn DashboardOverviewPage() -> impl IntoView {
 
             <AppDialog
                 open=Signal::derive(move || rename_target.get().is_some())
-                title="重命名工作区"
+                title_key="dashboardRenameDialogTitle"
                 test_id="rename-workspace-dialog"
                 on_close=Callback::new(move |_| rename_target.set(None))
             >
@@ -293,21 +303,21 @@ pub fn DashboardOverviewPage() -> impl IntoView {
                         apply_rename(token, workspaces, toaster, ws.id, rename_name.get(), ws.description.clone());
                     }
                     rename_target.set(None);
-                }>"保存"</button>
+                }>{move || i18n.t("dashboardRenameSubmit")}</button>
             </AppDialog>
             <AppDialog
                 open=Signal::derive(move || delete_target.get().is_some())
-                title="删除工作区"
+                title_key="dashboardDeleteDialogTitle"
                 test_id="delete-workspace-dialog"
                 on_close=Callback::new(move |_| delete_target.set(None))
             >
-                <p>"删除后不可恢复。"</p>
+                <p>{move || i18n.t("dashboard.irreversible")}</p>
                 <button type="button" data-testid="delete-workspace-confirm" on:click=move |_| {
                     if let Some(ws) = delete_target.get() {
                         apply_delete(token, workspaces, toaster, ws.id);
                     }
                     delete_target.set(None);
-                }>"确认删除"</button>
+                }>{move || i18n.t("commonConfirmDelete")}</button>
             </AppDialog>
         </div>
         </ProductChrome>
@@ -368,7 +378,7 @@ fn toggle_favorite(
         let mut prefs = client.get_preferences().await.unwrap_or_default();
         prefs.dashboard.favorite_workspace_ids = next;
         if client.put_preferences(&prefs).await.is_ok() {
-            toaster.push("已更新收藏");
+            toaster.push(t_now("dashboard.favoriteUpdated"));
         }
     });
 }
@@ -396,7 +406,7 @@ fn apply_rename(
                     *item = resp.workspace;
                 }
             });
-            toaster.push("已重命名");
+            toaster.push(t_now("dashboard.renamed"));
         }
     });
 }
@@ -415,7 +425,7 @@ fn apply_delete(
         let client = BrowserRestClient::new(&poc_api_base(), Some(tok));
         if client.delete_workspace(&workspace_id).await.is_ok() {
             workspaces.update(|list| list.retain(|ws| ws.id != workspace_id));
-            toaster.push("已删除工作区");
+            toaster.push(t_now("dashboard.deleted"));
         }
     });
 }

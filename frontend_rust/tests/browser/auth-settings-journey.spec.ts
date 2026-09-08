@@ -69,7 +69,7 @@ test.describe('账号注册流程（E3.1）', () => {
     await page.getByTestId('register-submit').click();
     const alert = page.getByTestId('register-error');
     await expect(alert).toBeVisible();
-    await expect(alert).toContainText('请阅读并同意');
+    await expect(alert).toContainText('请先阅读并同意');
 
     // 勾选条款并提交
     await page.getByTestId('consent-checkbox').check();

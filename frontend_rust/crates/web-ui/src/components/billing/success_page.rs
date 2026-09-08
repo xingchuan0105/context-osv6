@@ -1,4 +1,5 @@
 use crate::api_base::poc_api_base;
+use crate::i18n::use_i18n;
 use leptos::prelude::*;
 use leptos_router::hooks::use_query_map;
 use web_sdk::{BillingOrderStatusResponse, BrowserRestClient};
@@ -6,6 +7,7 @@ use web_sdk::{BillingOrderStatusResponse, BrowserRestClient};
 #[component]
 pub fn UpgradeSuccessPage() -> impl IntoView {
     let token = expect_context::<RwSignal<String>>();
+    let i18n = use_i18n();
     let query_map = use_query_map();
     let order_id = Signal::derive(move || query_map.with(|q| q.get("order_id").or_else(|| q.get("session_id"))));
     let order_status = RwSignal::new(None::<BillingOrderStatusResponse>);
@@ -33,23 +35,26 @@ pub fn UpgradeSuccessPage() -> impl IntoView {
 
     view! {
         <div class="auth-page-container" data-testid="upgrade-success-page">
-            <main class="auth-card" aria-label="支付成功">
+            <main class="auth-card" aria-label=move || i18n.t("upgradeSuccess.title")>
                 <header class="auth-header">
-                    <h1 class="auth-title">"支付成功！"</h1>
-                    <p class="auth-subtitle">"感谢您对 Context-OS 的支持，您的会员权益或充值金额已到账。"</p>
+                    <h1 class="auth-title">{move || i18n.t("upgradeSuccess.title")}</h1>
+                    <p class="auth-subtitle">{move || i18n.t("upgradeSuccess.subtitle")}</p>
                 </header>
                 <div class="success-order-details">
                     <Show when=move || order_id.get().is_some()>
                         <p class="success-order-id" data-testid="success-order-id">
-                            {move || format!("订单号：{}", order_id.get().unwrap_or_default())}
+                            {move || {
+                                let id = order_id.get().unwrap_or_default();
+                                i18n.tf("upgradeSuccess.order", &[("id", id.as_str())])
+                            }}
                         </p>
                     </Show>
                     <div class="success-actions">
                         <a href="/chat" class="auth-submit-btn" data-testid="back-to-chat-btn">
-                            "开始使用对话"
+                            {move || i18n.t("upgradeSuccess.chatCta")}
                         </a>
                         <a href="/dashboard" class="dashboard-chat-link">
-                            "进入工作台"
+                            {move || i18n.t("upgradeSuccess.dashboardCta")}
                         </a>
                     </div>
                 </div>

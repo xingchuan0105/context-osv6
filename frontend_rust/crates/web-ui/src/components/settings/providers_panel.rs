@@ -1,4 +1,5 @@
 use crate::api_base::poc_api_base;
+use crate::i18n::{tf_now, t_now, use_i18n};
 use leptos::prelude::*;
 use web_sdk::{BrowserRestClient, ProviderSecretRow};
 
@@ -44,6 +45,7 @@ const FIXED_PROVIDER_ROWS: &[FixedProviderRow] = &[
 #[component]
 pub fn ProvidersPanel() -> impl IntoView {
     let token = expect_context::<RwSignal<String>>();
+    let i18n = use_i18n();
     let secrets = RwSignal::new(Vec::<ProviderSecretRow>::new());
     let loading = RwSignal::new(false);
     let refresh_gen = RwSignal::new(0_u64);
@@ -71,11 +73,11 @@ pub fn ProvidersPanel() -> impl IntoView {
     });
 
     view! {
-        <section class="settings-panel" aria-label="模型提供商与自备密钥" data-testid="providers-panel">
+        <section class="settings-panel" aria-label=move || i18n.t("providers.panelLabel") data-testid="providers-panel">
             <header class="settings-panel-header">
-                <h2 class="settings-panel-title">"模型提供商密钥 (BYOK)"</h2>
+                <h2 class="settings-panel-title">{move || i18n.t("providers.title")}</h2>
                 <p class="settings-panel-desc">
-                    "配置您自己的 API Key。自备密钥将直接由本地或私有通道调用，系统绝不明文记录密钥。"
+                    {move || i18n.t("providers.subtitle")}
                 </p>
             </header>
             <div class="settings-provider-list">
@@ -120,7 +122,7 @@ fn ProviderRowItem(
             .trim()
             .to_string();
         if val.is_empty() {
-            action_error.set(Some("请输入有效的 API Key".to_string()));
+            action_error.set(Some(t_now("providers.needKey")));
             return;
         }
         let tok = if token.get_untracked().is_empty() {
@@ -160,7 +162,7 @@ fn ProviderRowItem(
                     refresh_gen.update(|n| *n += 1);
                 }
                 Err(err) => {
-                    action_error.set(Some(format!("保存失败：{err}")));
+                    action_error.set(Some(tf_now("providers.saveFailed", &[("error", &err.to_string())])));
                 }
             }
             busy.set(false);
@@ -191,13 +193,14 @@ fn ProviderRowItem(
                     refresh_gen.update(|n| *n += 1);
                 }
                 Err(err) => {
-                    action_error.set(Some(format!("撤销失败：{err}")));
+                    action_error.set(Some(tf_now("providers.revokeFailed", &[("error", &err.to_string())])));
                 }
             }
             busy.set(false);
         });
     };
 
+    let i18n = use_i18n();
     view! {
         <div class="settings-provider-row" data-testid=format!("provider-row-{}", row.id)>
             <div class="settings-provider-meta">
@@ -211,7 +214,7 @@ fn ProviderRowItem(
                         view! {
                             <div class="settings-secret-status">
                                 <span class="settings-status-badge" data-testid=format!("status-{}", row.id)>
-                                    "已配置 (自备密钥)"
+                                    {move || i18n.t("providers.configured")}
                                 </span>
                                 <button
                                     type="button"
@@ -220,7 +223,7 @@ fn ProviderRowItem(
                                     disabled=move || busy.get()
                                     on:click=move |_| on_revoke(sec_id.clone())
                                 >
-                                    "移除密钥"
+                                    {move || i18n.t("providers.removeKey")}
                                 </button>
                             </div>
                         }
@@ -232,7 +235,7 @@ fn ProviderRowItem(
                                     type="password"
                                     class="settings-key-input"
                                     data-testid=format!("input-{}", row.id)
-                                    placeholder="输入 API Key"
+                                    placeholder=move || i18n.t("providers.keyPlaceholder")
                                     node_ref=input_ref
                                 />
                                 <button
@@ -242,7 +245,7 @@ fn ProviderRowItem(
                                     disabled=move || busy.get()
                                     on:click=on_save
                                 >
-                                    "保存"
+                                    {move || i18n.t("commonSave")}
                                 </button>
                             </div>
                         }

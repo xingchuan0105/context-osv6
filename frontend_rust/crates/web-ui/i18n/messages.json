@@ -1,0 +1,6970 @@
+{
+  "accountMenu.adminConsole": {
+    "en": "Admin console",
+    "zh": "管理后台"
+  },
+  "accountMenu.allSettings": {
+    "en": "All settings",
+    "zh": "所有设置"
+  },
+  "accountMenu.help": {
+    "en": "Help",
+    "zh": "帮助"
+  },
+  "accountMenu.manageMembership": {
+    "en": "Membership",
+    "zh": "会员管理"
+  },
+  "accountMenu.upgradeMembership": {
+    "en": "Upgrade plan",
+    "zh": "升级会员"
+  },
+  "admin.auditLogs.sectionSubtitle": {
+    "en": "Trace admin activity by action, resource, and actor.",
+    "zh": "按动作、资源和执行者追踪后台操作。"
+  },
+  "admin.auditLogs.sectionTitle": {
+    "en": "Audit logs",
+    "zh": "审计日志"
+  },
+  "admin.billing.sectionSubtitle": {
+    "en": "Review plan mix, collection status, and billing risks.",
+    "zh": "查看计划分布、收款状态和账单风险。"
+  },
+  "admin.billing.sectionTitle": {
+    "en": "Billing overview",
+    "zh": "账单概览"
+  },
+  "admin.blockAction": {
+    "en": "Block",
+    "zh": "封禁"
+  },
+  "admin.broadcast.bodyLabel": {
+    "en": "Body",
+    "zh": "正文"
+  },
+  "admin.broadcast.error": {
+    "en": "Broadcast failed",
+    "zh": "广播失败"
+  },
+  "admin.broadcast.sending": {
+    "en": "Sending…",
+    "zh": "发送中…"
+  },
+  "admin.broadcast.signInRequired": {
+    "en": "Sign in required",
+    "zh": "请先登录。"
+  },
+  "admin.broadcast.submit": {
+    "en": "Send broadcast",
+    "zh": "发送广播"
+  },
+  "admin.broadcast.subtitle": {
+    "en": "Send an in-app notice to all users. Admins only.",
+    "zh": "向全部用户发送站内通知。仅管理员可用。"
+  },
+  "admin.broadcast.success": {
+    "en": "Created {count} notifications",
+    "zh": "已创建 {count} 条通知"
+  },
+  "admin.broadcast.title": {
+    "en": "Broadcast",
+    "zh": "官方广播"
+  },
+  "admin.broadcast.titleLabel": {
+    "en": "Title",
+    "zh": "标题"
+  },
+  "admin.degradation.sectionSubtitle": {
+    "en": "Review active throttle policies, triggers, and blast radius.",
+    "zh": "查看当前限速策略、触发原因和影响范围。"
+  },
+  "admin.degradation.sectionTitle": {
+    "en": "Throttle policy status",
+    "zh": "限速策略状态"
+  },
+  "admin.detailsAction": {
+    "en": "View details",
+    "zh": "查看详情"
+  },
+  "admin.emptyBody": {
+    "en": "Adjust the current filters and try again.",
+    "zh": "调整筛选条件后再试一次。"
+  },
+  "admin.emptyTitle": {
+    "en": "No matching results",
+    "zh": "没有匹配结果"
+  },
+  "admin.exportAction": {
+    "en": "Export",
+    "zh": "导出"
+  },
+  "admin.featureFlags.sectionSubtitle": {
+    "en": "Manage flag state, change requests, and review flow.",
+    "zh": "管理开关状态、变更请求和审核流。"
+  },
+  "admin.featureFlags.sectionTitle": {
+    "en": "Feature flags",
+    "zh": "功能开关"
+  },
+  "admin.filter.pageSizeLabel": {
+    "en": "Rows per page",
+    "zh": "每页条数"
+  },
+  "admin.filter.periodLabel": {
+    "en": "Period",
+    "zh": "周期"
+  },
+  "admin.filter.roleLabel": {
+    "en": "Role",
+    "zh": "角色"
+  },
+  "admin.filter.sortLabel": {
+    "en": "Sort",
+    "zh": "排序"
+  },
+  "admin.filter.statusLabel": {
+    "en": "Status",
+    "zh": "状态"
+  },
+  "admin.filter.windowLabel": {
+    "en": "Time window",
+    "zh": "时间窗口"
+  },
+  "admin.health.sectionSubtitle": {
+    "en": "Check service status, throttle signals, and recovery hints.",
+    "zh": "检查服务状态、限速信号和恢复建议。"
+  },
+  "admin.health.sectionTitle": {
+    "en": "System health",
+    "zh": "系统健康"
+  },
+  "admin.loadError": {
+    "en": "Failed to load admin data.",
+    "zh": "加载后台数据失败。"
+  },
+  "admin.metrics.totalAccounts": {
+    "en": "Total accounts",
+    "zh": "账户总数"
+  },
+  "admin.metrics.totalDocuments": {
+    "en": "Total documents",
+    "zh": "文档总数"
+  },
+  "admin.metrics.totalRequests": {
+    "en": "Total requests",
+    "zh": "请求总数"
+  },
+  "admin.metrics.totalUsers": {
+    "en": "Total users",
+    "zh": "用户总数"
+  },
+  "admin.nav.accounts": {
+    "en": "Accounts",
+    "zh": "账户"
+  },
+  "admin.nav.auditLogs": {
+    "en": "Audit logs",
+    "zh": "审计日志"
+  },
+  "admin.nav.billing": {
+    "en": "Billing",
+    "zh": "账单"
+  },
+  "admin.nav.broadcast": {
+    "en": "Broadcast",
+    "zh": "广播"
+  },
+  "admin.nav.degradation": {
+    "en": "Throttle policy",
+    "zh": "限速策略"
+  },
+  "admin.nav.featureFlags": {
+    "en": "Feature flags",
+    "zh": "功能开关"
+  },
+  "admin.nav.health": {
+    "en": "Health",
+    "zh": "健康"
+  },
+  "admin.nav.ragHealth": {
+    "en": "Retrieval health",
+    "zh": "检索健康"
+  },
+  "admin.nav.usage": {
+    "en": "Usage",
+    "zh": "用量"
+  },
+  "admin.nav.users": {
+    "en": "Users",
+    "zh": "用户"
+  },
+  "admin.nav.workers": {
+    "en": "Background jobs",
+    "zh": "后台任务"
+  },
+  "admin.navLabel": {
+    "en": "Admin navigation",
+    "zh": "后台导航"
+  },
+  "admin.pageSubtitle": {
+    "en": "Review accounts, usage, health, and system-wide operational signals.",
+    "zh": "查看账户、用量、健康与系统级运营数据。"
+  },
+  "admin.refreshAction": {
+    "en": "Refresh",
+    "zh": "刷新"
+  },
+  "admin.searchLabel": {
+    "en": "Search",
+    "zh": "搜索"
+  },
+  "admin.searchPlaceholder": {
+    "en": "Filter by name, email, or resource ID",
+    "zh": "按名称、邮箱或资源编号筛选"
+  },
+  "admin.shellTitle": {
+    "en": "Admin",
+    "zh": "后台管理"
+  },
+  "admin.status.active": {
+    "en": "Active",
+    "zh": "正常"
+  },
+  "admin.status.blocked": {
+    "en": "Blocked",
+    "zh": "已封禁"
+  },
+  "admin.status.degraded": {
+    "en": "Throttled",
+    "zh": "限速中"
+  },
+  "admin.status.healthy": {
+    "en": "Healthy",
+    "zh": "健康"
+  },
+  "admin.status.unhealthy": {
+    "en": "Unhealthy",
+    "zh": "异常"
+  },
+  "admin.table.account": {
+    "en": "Account",
+    "zh": "账户"
+  },
+  "admin.table.createdAt": {
+    "en": "Created at",
+    "zh": "创建时间"
+  },
+  "admin.table.lastActive": {
+    "en": "Last active",
+    "zh": "最近活跃"
+  },
+  "admin.table.plan": {
+    "en": "Plan",
+    "zh": "计划"
+  },
+  "admin.table.requests": {
+    "en": "Requests",
+    "zh": "请求数"
+  },
+  "admin.table.status": {
+    "en": "Status",
+    "zh": "状态"
+  },
+  "admin.table.users": {
+    "en": "Users",
+    "zh": "用户数"
+  },
+  "admin.unblockAction": {
+    "en": "Unblock",
+    "zh": "解除封禁"
+  },
+  "admin.workers.sectionSubtitle": {
+    "en": "Review queue health, capacity, and failing workers.",
+    "zh": "查看任务队列、处理能力和异常节点。"
+  },
+  "admin.workers.sectionTitle": {
+    "en": "Background job status",
+    "zh": "后台任务状态"
+  },
+  "adminNavAccounts": {
+    "en": "Accounts",
+    "zh": "账户"
+  },
+  "adminNavAuditLogs": {
+    "en": "Audit Logs",
+    "zh": "审计日志"
+  },
+  "adminNavBilling": {
+    "en": "Billing",
+    "zh": "账单"
+  },
+  "adminNavBroadcast": {
+    "en": "Broadcast",
+    "zh": "广播"
+  },
+  "adminNavDegradation": {
+    "en": "Throttle policy",
+    "zh": "限速策略"
+  },
+  "adminNavFeatureFlags": {
+    "en": "Feature Flags",
+    "zh": "功能开关"
+  },
+  "adminNavHealth": {
+    "en": "Health",
+    "zh": "健康"
+  },
+  "adminNavLabel": {
+    "en": "Admin navigation",
+    "zh": "后台导航"
+  },
+  "adminNavRagHealth": {
+    "en": "Retrieval health",
+    "zh": "检索健康"
+  },
+  "adminNavUsage": {
+    "en": "Usage",
+    "zh": "用量"
+  },
+  "adminNavUsers": {
+    "en": "Users",
+    "zh": "用户"
+  },
+  "adminNavWorkers": {
+    "en": "Background jobs",
+    "zh": "后台任务"
+  },
+  "adminShellTitle": {
+    "en": "Admin",
+    "zh": "后台管理"
+  },
+  "alipayQrCancel": {
+    "en": "Cancel payment",
+    "zh": "取消支付"
+  },
+  "alipayQrPaid": {
+    "en": "Payment successful",
+    "zh": "支付成功"
+  },
+  "alipayQrScanHint": {
+    "en": "Open the Alipay app and scan the QR code to pay",
+    "zh": "请打开支付宝 App 扫码支付"
+  },
+  "alipayQrTimeout": {
+    "en": "Payment timed out. Please start a new payment.",
+    "zh": "支付超时，请重新发起支付"
+  },
+  "alipayQrTitle": {
+    "en": "Pay with Alipay",
+    "zh": "支付宝扫码支付"
+  },
+  "alipayQrWaiting": {
+    "en": "Waiting for payment confirmation…",
+    "zh": "等待支付确认…"
+  },
+  "analytics.chartLabel": {
+    "en": "Views chart",
+    "zh": "访问量柱状图"
+  },
+  "analytics.empty": {
+    "en": "No workspaces to summarize yet.",
+    "zh": "还没有可统计的工作区。"
+  },
+  "analytics.globalTitle": {
+    "en": "Share traffic analytics",
+    "zh": "全局分享与访问分析"
+  },
+  "analytics.loadFailed": {
+    "en": "Failed to load share analytics: {error}",
+    "zh": "加载分享统计失败：{error}"
+  },
+  "analytics.loginRequired": {
+    "en": "Sign in to view share analytics.",
+    "zh": "请先登录后查看分享统计。"
+  },
+  "analytics.noDaily": {
+    "en": "No daily view data yet.",
+    "zh": "暂无按日访问数据。"
+  },
+  "analytics.redirecting": {
+    "en": "Opening share center…",
+    "zh": "正在前往分享中心…"
+  },
+  "analytics.sectionTitle": {
+    "en": "Share page views and engagement",
+    "zh": "分享页面访问与互动统计"
+  },
+  "analytics.sharedWorkspaces": {
+    "en": "Shared workspaces",
+    "zh": "已开启分享的工作区"
+  },
+  "analytics.totalViews": {
+    "en": "Public views",
+    "zh": "总公开浏览量"
+  },
+  "analytics.visitors": {
+    "en": "Unique visitors",
+    "zh": "独立访客数"
+  },
+  "apiAccess.advancedHint": {
+    "en": "Per-field copy, user agent token, probes. Day-to-day setup uses the full pack above.",
+    "zh": "单字段复制、用户态 token、探测说明。日常接入用上方完整包即可。"
+  },
+  "apiAccess.advancedTitle": {
+    "en": "Advanced",
+    "zh": "高级"
+  },
+  "apiAccess.agentCloudHint": {
+    "en": "Cloud and local use the same MCP tool table; only the base URL differs.",
+    "zh": "云端与本机使用同一 MCP 工具表，仅 base URL 不同。"
+  },
+  "apiAccess.agentDesktopHint": {
+    "en": "Local client default API is 127.0.0.1:18080; ensure the client stack is running.",
+    "zh": "本机客户端默认 API 为 127.0.0.1:18080；请先确认客户端栈已启动。"
+  },
+  "apiAccess.agentProbeNote": {
+    "en": "Probe: context-os status. Desktop: context-os auth from-desktop --save. Tool args must use this page’s workspace_id.",
+    "zh": "探活：context-os status。本机可 context-os auth from-desktop --save。工具参数 workspace_id 须与本页一致。"
+  },
+  "apiAccess.agentSubtitle": {
+    "en": "After creating a key, copy the full agent pack once and paste it into Cursor / Claude / an external agent.",
+    "zh": "创建密钥后，一次复制完整接入包，粘贴给 Cursor / Claude / 外接 Agent 即可连接。"
+  },
+  "apiAccess.agentTitle": {
+    "en": "Connect this workspace (for agents)",
+    "zh": "接入本工作区（给 Agent）"
+  },
+  "apiAccess.agentTokenHint": {
+    "en": "Short-lived user JWT (default 120 min). Workspace keys cannot create workspaces or manage share; advanced only.",
+    "zh": "短时用户 JWT（默认 120 分钟）。工作区密钥不能建库或管分享；仅高级自动化需要。"
+  },
+  "apiAccess.agentTokenTitle": {
+    "en": "User agent token (create workspace / share tools)",
+    "zh": "用户态 agent token（建库 / 分享工具）"
+  },
+  "apiAccess.copied": {
+    "en": "Copied: {label}",
+    "zh": "已复制：{label}"
+  },
+  "apiAccess.copy": {
+    "en": "Copy",
+    "zh": "复制"
+  },
+  "apiAccess.copyConfig": {
+    "en": "Copy config",
+    "zh": "复制配置"
+  },
+  "apiAccess.copyFailed": {
+    "en": "Copy failed; select {label} manually",
+    "zh": "复制失败，请手动选择 {label}"
+  },
+  "apiAccess.copyPack": {
+    "en": "Copy full agent pack",
+    "zh": "复制完整接入包"
+  },
+  "apiAccess.copyPackDisabled": {
+    "en": "Create a key first",
+    "zh": "先创建密钥"
+  },
+  "apiAccess.copyToken": {
+    "en": "Copy token",
+    "zh": "复制 token"
+  },
+  "apiAccess.createAction": {
+    "en": "Create key",
+    "zh": "创建密钥"
+  },
+  "apiAccess.createSubtitle": {
+    "en": "Keys are scoped to this workspace for indexing capability and rate limits.",
+    "zh": "按工作区粒度创建密钥，控制索引能力与频率限制。"
+  },
+  "apiAccess.createTitle": {
+    "en": "Create API key",
+    "zh": "创建 API 密钥"
+  },
+  "apiAccess.creating": {
+    "en": "Creating…",
+    "zh": "创建中…"
+  },
+  "apiAccess.docsAgentLabel": {
+    "en": "For agents",
+    "zh": "给 Agent"
+  },
+  "apiAccess.docsHumanLabel": {
+    "en": "For humans",
+    "zh": "给人类"
+  },
+  "apiAccess.docsSubtitle": {
+    "en": "Connect first; docs are secondary. Links are absolute.",
+    "zh": "连接优先；文档作补强。链接均为绝对地址。"
+  },
+  "apiAccess.docsTitle": {
+    "en": "Documentation",
+    "zh": "说明链接"
+  },
+  "apiAccess.empty": {
+    "en": "No API keys yet.",
+    "zh": "还没有 API 密钥。"
+  },
+  "apiAccess.errCreateKey": {
+    "en": "Failed to create API key",
+    "zh": "创建 API 密钥失败"
+  },
+  "apiAccess.errInvalidWorkspaceId": {
+    "en": "Invalid workspace id ({id} is not a UUID); no API call was made.",
+    "zh": "工作区 ID 无效（{id} 不是 UUID），未发起 API 请求。"
+  },
+  "apiAccess.errLoadKeys": {
+    "en": "Failed to load API keys",
+    "zh": "加载 API 密钥失败"
+  },
+  "apiAccess.errMintToken": {
+    "en": "Failed to mint agent token",
+    "zh": "签发 agent token 失败"
+  },
+  "apiAccess.errMissingWorkspaceId": {
+    "en": "Missing workspace id; no API call was made. Check the route.",
+    "zh": "工作区 ID 缺失，未发起 API 请求。请检查路由参数。"
+  },
+  "apiAccess.errNameRequired": {
+    "en": "Enter a key name.",
+    "zh": "请输入密钥名称。"
+  },
+  "apiAccess.errNoToken": {
+    "en": "No token returned",
+    "zh": "未返回 token"
+  },
+  "apiAccess.errPermissions": {
+    "en": "Select at least one permission.",
+    "zh": "请至少选择一种权限。"
+  },
+  "apiAccess.errRateLimit": {
+    "en": "Rate limit must be a positive integer.",
+    "zh": "速率限制必须是正整数。"
+  },
+  "apiAccess.errRevokeKey": {
+    "en": "Failed to revoke API key",
+    "zh": "撤销 API 密钥失败"
+  },
+  "apiAccess.errSession": {
+    "en": "Session expired; sign in again.",
+    "zh": "登录状态失效，请重新登录。"
+  },
+  "apiAccess.errSessionMint": {
+    "en": "Session expired; sign in again before minting an agent token.",
+    "zh": "登录状态失效，请重新登录后再签发 agent token。"
+  },
+  "apiAccess.errWithDetail": {
+    "en": "{fallback}: {detail}",
+    "zh": "{fallback}：{detail}"
+  },
+  "apiAccess.expiresLabel": {
+    "en": "Expires at RFC3339 (optional)",
+    "zh": "过期时间 RFC3339（可选）"
+  },
+  "apiAccess.listSubtitle": {
+    "en": "Only active workspace API keys are listed.",
+    "zh": "仅展示当前仍处于生效状态的工作区 API 密钥。"
+  },
+  "apiAccess.listTitle": {
+    "en": "Created keys",
+    "zh": "已创建密钥"
+  },
+  "apiAccess.loading": {
+    "en": "Loading…",
+    "zh": "加载中…"
+  },
+  "apiAccess.mcpSnippetHint": {
+    "en": "Already included in the full pack; use this to copy JSON alone.",
+    "zh": "已含于完整接入包；需要单独复制时用此按钮。"
+  },
+  "apiAccess.mcpSnippetTitle": {
+    "en": "stdio MCP snippet",
+    "zh": "stdio MCP 配置片段"
+  },
+  "apiAccess.metaExpires": {
+    "en": "Expires {value}",
+    "zh": "过期时间 {value}"
+  },
+  "apiAccess.metaLastUsed": {
+    "en": "Last used {value}",
+    "zh": "最近使用 {value}"
+  },
+  "apiAccess.mintToken": {
+    "en": "Mint 2h token",
+    "zh": "签发 2h token"
+  },
+  "apiAccess.minted": {
+    "en": "Minted agent token",
+    "zh": "已签发 agent token"
+  },
+  "apiAccess.mintedWithExpiry": {
+    "en": "Minted agent token (~{minutes} min, until {expires})",
+    "zh": "已签发 agent token（约 {minutes} 分钟，至 {expires}）"
+  },
+  "apiAccess.minting": {
+    "en": "Minting…",
+    "zh": "签发中…"
+  },
+  "apiAccess.nameLabel": {
+    "en": "Key name",
+    "zh": "密钥名称"
+  },
+  "apiAccess.never": {
+    "en": "Never",
+    "zh": "永不"
+  },
+  "apiAccess.neverUsed": {
+    "en": "Never",
+    "zh": "从未"
+  },
+  "apiAccess.newKeyOnce": {
+    "en": "Plaintext is shown only once.",
+    "zh": "明文只会返回这一次。"
+  },
+  "apiAccess.newKeyTitle": {
+    "en": "New key",
+    "zh": "新密钥"
+  },
+  "apiAccess.packCopied": {
+    "en": "Full agent pack copied — paste into your agent",
+    "zh": "已复制完整接入包，可粘贴给 Agent"
+  },
+  "apiAccess.packNeedKey": {
+    "en": "Create a workspace key above to enable the primary copy action.",
+    "zh": "请先在上方创建工作区密钥，主按钮才会启用。"
+  },
+  "apiAccess.packPreviewTitle": {
+    "en": "Pack preview",
+    "zh": "接入包预览"
+  },
+  "apiAccess.packReady": {
+    "en": "Includes this session’s key — ready to hand to an agent.",
+    "zh": "已含本次密钥，可直接交给 Agent。"
+  },
+  "apiAccess.permIndex": {
+    "en": "Index",
+    "zh": "索引（index）"
+  },
+  "apiAccess.permNote": {
+    "en": "API keys cover source management and knowledge-base query only; chat and web search are not available by default.",
+    "zh": "API 密钥只支持资料管理与知识库查询；聊天与网络搜索默认不可用。"
+  },
+  "apiAccess.permQuery": {
+    "en": "Query",
+    "zh": "查询（query）"
+  },
+  "apiAccess.permShortIndex": {
+    "en": "Index",
+    "zh": "索引"
+  },
+  "apiAccess.permShortQuery": {
+    "en": "Query",
+    "zh": "查询"
+  },
+  "apiAccess.permissionsLabel": {
+    "en": "Permissions",
+    "zh": "权限"
+  },
+  "apiAccess.rateLimitLabel": {
+    "en": "Rate limit (RPM)",
+    "zh": "速率限制（RPM）"
+  },
+  "apiAccess.revoke": {
+    "en": "Revoke",
+    "zh": "撤销"
+  },
+  "apiAccess.revoking": {
+    "en": "Revoking…",
+    "zh": "撤销中…"
+  },
+  "apiAccess.statusActive": {
+    "en": "Active",
+    "zh": "生效中"
+  },
+  "apiAccess.statusRevoked": {
+    "en": "Revoked",
+    "zh": "已撤销"
+  },
+  "apiAccess.title": {
+    "en": "API access",
+    "zh": "API 访问"
+  },
+  "appModal.close": {
+    "en": "Close",
+    "zh": "关闭"
+  },
+  "appPrimaryNav.settings": {
+    "en": "Settings",
+    "zh": "设置"
+  },
+  "auth.consentAnd": {
+    "en": " and ",
+    "zh": " 与 "
+  },
+  "auth.consentPrefix": {
+    "en": "I have read and agree to the ",
+    "zh": "我已阅读并同意 "
+  },
+  "auth.hasAccountCta": {
+    "en": "Already have an account? Sign in",
+    "zh": "已有账号？立即登录"
+  },
+  "auth.loginAria": {
+    "en": "Sign in",
+    "zh": "登录"
+  },
+  "auth.loginFailedDetail": {
+    "en": "Sign-in failed: {error}",
+    "zh": "登录失败：{error}"
+  },
+  "auth.loginHeading": {
+    "en": "Sign in to Context-OS",
+    "zh": "登录 Context-OS"
+  },
+  "auth.loginLead": {
+    "en": "Enter your credentials to continue",
+    "zh": "输入凭据以继续使用"
+  },
+  "auth.nameNickname": {
+    "en": "Name / nickname",
+    "zh": "姓名 / 昵称"
+  },
+  "auth.needEmailPassword": {
+    "en": "Enter email and password",
+    "zh": "请输入邮箱和密码"
+  },
+  "auth.noAccountCta": {
+    "en": "Need an account? Sign up",
+    "zh": "没有账号？立即注册"
+  },
+  "auth.passwordMinField": {
+    "en": "Password (at least 8 characters)",
+    "zh": "密码 (至少 8 位)"
+  },
+  "auth.registerAria": {
+    "en": "Sign up",
+    "zh": "注册"
+  },
+  "auth.registerFailedDetail": {
+    "en": "Sign-up failed: {error}",
+    "zh": "注册失败：{error}"
+  },
+  "auth.registerHeading": {
+    "en": "Create a Context-OS account",
+    "zh": "注册 Context-OS"
+  },
+  "auth.registerLead": {
+    "en": "Create an account to get started",
+    "zh": "创建新账号以开始使用"
+  },
+  "auth.registerNeedFields": {
+    "en": "Enter email and password",
+    "zh": "请输入邮箱与密码"
+  },
+  "auth.registerSubmit": {
+    "en": "Create account",
+    "zh": "注册账号"
+  },
+  "auth.resetCodeSentTo": {
+    "en": "Code sent to {email}",
+    "zh": "验证码已发送至 {email}"
+  },
+  "auth.resetConfirmNew": {
+    "en": "Confirm new password",
+    "zh": "确认新密码"
+  },
+  "auth.resetFailedDetail": {
+    "en": "Reset failed: {error}",
+    "zh": "重置失败：{error}"
+  },
+  "auth.resetFinish": {
+    "en": "Update password",
+    "zh": "确认修改密码"
+  },
+  "auth.resetGetCode": {
+    "en": "Get code",
+    "zh": "获取验证码"
+  },
+  "auth.resetMissingTicket": {
+    "en": "Reset session missing. Start again.",
+    "zh": "缺少重置凭据，请重新申请"
+  },
+  "auth.resetNeedEmail": {
+    "en": "Enter your registered email",
+    "zh": "请输入注册邮箱"
+  },
+  "auth.resetNeedPassword": {
+    "en": "Password must be at least 8 characters",
+    "zh": "密码至少需 8 位"
+  },
+  "auth.resetNeedSix": {
+    "en": "Enter the 6-digit code",
+    "zh": "请输入 6 位验证码"
+  },
+  "auth.resetNewPasswordAria": {
+    "en": "Set a new password",
+    "zh": "设置新密码"
+  },
+  "auth.resetNewPasswordField": {
+    "en": "New password (at least 8 characters)",
+    "zh": "新密码 (至少 8 位)"
+  },
+  "auth.resetNewPasswordLead": {
+    "en": "Enter your new password",
+    "zh": "请输入你的新登录密码"
+  },
+  "auth.resetRequestLead": {
+    "en": "Enter your email and we will send a reset code",
+    "zh": "输入你的注册邮箱以接收重置验证码"
+  },
+  "auth.resetResend": {
+    "en": "Send again",
+    "zh": "重新发送"
+  },
+  "auth.resetSendFailedDetail": {
+    "en": "Failed to send the code: {error}",
+    "zh": "发送验证码失败：{error}"
+  },
+  "auth.resetSuccess": {
+    "en": "Password updated. Returning to sign in…",
+    "zh": "密码修改成功！正在返回登录页…"
+  },
+  "auth.resetVerifyAria": {
+    "en": "Enter code",
+    "zh": "输入验证码"
+  },
+  "auth.resetVerifyFailedDetail": {
+    "en": "Verification failed: {error}",
+    "zh": "验证失败：{error}"
+  },
+  "auth.resetVerifyHeading": {
+    "en": "Enter the reset code",
+    "zh": "输入重置验证码"
+  },
+  "auth.resetVerifySubmit": {
+    "en": "Verify code",
+    "zh": "核验验证码"
+  },
+  "auth.resetVerifying": {
+    "en": "Verifying…",
+    "zh": "核验中…"
+  },
+  "authConfirmPasswordLabel": {
+    "en": "Confirm password",
+    "zh": "确认密码"
+  },
+  "authCreateAccount": {
+    "en": "Create account",
+    "zh": "创建账号"
+  },
+  "authCreatingAccount": {
+    "en": "Creating...",
+    "zh": "创建中…"
+  },
+  "authEmailAndCodeRequired": {
+    "en": "Enter your email and verification code.",
+    "zh": "请输入邮箱和验证码。"
+  },
+  "authEmailAndPasswordRequired": {
+    "en": "Enter your email and password.",
+    "zh": "请输入邮箱和密码。"
+  },
+  "authEmailLabel": {
+    "en": "Email",
+    "zh": "邮箱"
+  },
+  "authErrorAccountNotRegistered": {
+    "en": "This account is not registered yet. Sign up first.",
+    "zh": "该账号还未注册，请先注册。"
+  },
+  "authErrorConsentRequired": {
+    "en": "Read and accept the Terms of Service and Privacy Policy first.",
+    "zh": "请先阅读并同意用户协议与隐私政策。"
+  },
+  "authErrorEmailExists": {
+    "en": "This email is already registered. Sign in instead.",
+    "zh": "该邮箱已注册，请直接登录。"
+  },
+  "authErrorInvalidCredentials": {
+    "en": "Incorrect email or password.",
+    "zh": "邮箱或密码错误。"
+  },
+  "authErrorInvalidLegalContext": {
+    "en": "The legal acceptance request was invalid. Refresh the page and try again.",
+    "zh": "同意确认记录无效，请刷新页面后重试。"
+  },
+  "authErrorInvalidPassword": {
+    "en": "Incorrect password.",
+    "zh": "密码错误。"
+  },
+  "authErrorInvalidPrivacyVersion": {
+    "en": "The Privacy Policy was updated. Refresh the page and try again.",
+    "zh": "隐私政策版本已更新，请刷新页面后重试。"
+  },
+  "authErrorInvalidResetTicket": {
+    "en": "The reset session is invalid or has expired.",
+    "zh": "重置会话无效或已过期。"
+  },
+  "authErrorInvalidTermsVersion": {
+    "en": "The Terms of Service were updated. Refresh the page and try again.",
+    "zh": "用户协议版本已更新，请刷新页面后重试。"
+  },
+  "authErrorPasswordResetUnavailable": {
+    "en": "Password reset is currently unavailable. Contact an administrator.",
+    "zh": "当前未开放密码找回，请联系管理员。"
+  },
+  "authErrorServiceUnavailable": {
+    "en": "The service is temporarily unavailable. Try again later.",
+    "zh": "服务暂时不可用，请稍后再试。"
+  },
+  "authForgotPassword": {
+    "en": "Forgot password",
+    "zh": "忘记密码"
+  },
+  "authHasAccount": {
+    "en": "Already have an account?",
+    "zh": "已有账号？"
+  },
+  "authLoginFailed": {
+    "en": "Sign-in failed. Try again later.",
+    "zh": "登录失败，请稍后再试。"
+  },
+  "authLoginSubmit": {
+    "en": "Continue",
+    "zh": "继续登录"
+  },
+  "authLoginSubmitting": {
+    "en": "Signing in...",
+    "zh": "登录中…"
+  },
+  "authLoginSubtitle": {
+    "en": "Sign in to continue into your workspace",
+    "zh": "登录以继续进入您的工作区"
+  },
+  "authLoginTitle": {
+    "en": "Welcome back",
+    "zh": "欢迎回来"
+  },
+  "authNameLabel": {
+    "en": "Name",
+    "zh": "姓名"
+  },
+  "authNeedsAccount": {
+    "en": "Need an account?",
+    "zh": "还没有账号？"
+  },
+  "authNewPasswordLabel": {
+    "en": "New password",
+    "zh": "新密码"
+  },
+  "authNewPasswordRequired": {
+    "en": "Enter a new password.",
+    "zh": "请输入新密码。"
+  },
+  "authOptional": {
+    "en": "Optional",
+    "zh": "可选"
+  },
+  "authPasswordLabel": {
+    "en": "Password",
+    "zh": "密码"
+  },
+  "authPasswordMinLengthHint": {
+    "en": "At least 8 characters",
+    "zh": "至少 8 位"
+  },
+  "authPasswordMinLengthRequired": {
+    "en": "Password must be at least 8 characters.",
+    "zh": "密码至少需要 8 位。"
+  },
+  "authPasswordMismatch": {
+    "en": "Passwords do not match.",
+    "zh": "两次输入的密码不一致。"
+  },
+  "authReferralCodeHint": {
+    "en": "Optional — both sides get ¥5 credit",
+    "zh": "可选，填写后双方各得 ¥5 储值"
+  },
+  "authReferralCodeLabel": {
+    "en": "Invite code",
+    "zh": "邀请码"
+  },
+  "authReferralCodePlaceholder": {
+    "en": "e.g. COS-A1B2C3",
+    "zh": "例如 COS-A1B2C3"
+  },
+  "authRegisterFailed": {
+    "en": "Account creation failed. Try again later.",
+    "zh": "创建账号失败，请稍后再试。"
+  },
+  "authRegisterSubtitle": {
+    "en": "Create your account with email to get started with Context-OS.",
+    "zh": "使用邮箱创建账号，开始使用 Context-OS。"
+  },
+  "authResetBackToLogin": {
+    "en": "Back to sign in",
+    "zh": "返回登录"
+  },
+  "authResetBackToPrevious": {
+    "en": "Back",
+    "zh": "返回上一步"
+  },
+  "authResetBackToStart": {
+    "en": "Back to reset",
+    "zh": "返回找回密码"
+  },
+  "authResetCodeHint": {
+    "en": "6-digit code",
+    "zh": "6 位验证码"
+  },
+  "authResetCodeLabel": {
+    "en": "Verification code",
+    "zh": "验证码"
+  },
+  "authResetConfirmFailed": {
+    "en": "Password reset failed. Try again later.",
+    "zh": "重置密码失败，请稍后再试。"
+  },
+  "authResetConfirmSubmit": {
+    "en": "Finish reset",
+    "zh": "完成重置"
+  },
+  "authResetConfirmSubmitting": {
+    "en": "Submitting...",
+    "zh": "提交中…"
+  },
+  "authResetConfirmSubtitle": {
+    "en": "Set a new password to finish the reset flow.",
+    "zh": "输入新密码后即可完成重置。"
+  },
+  "authResetConfirmTitle": {
+    "en": "Set a new password",
+    "zh": "设置新密码"
+  },
+  "authResetConfirmUnavailable": {
+    "en": "Complete code verification first.",
+    "zh": "请先完成验证码验证。"
+  },
+  "authResetEmailRequired": {
+    "en": "Enter your email.",
+    "zh": "请输入邮箱。"
+  },
+  "authResetRequestSubtitle": {
+    "en": "Enter your email and we'll send a verification code.",
+    "zh": "输入邮箱后，我们会把验证码发送给你。"
+  },
+  "authResetRequestTitle": {
+    "en": "Reset password",
+    "zh": "找回密码"
+  },
+  "authResetSendFailed": {
+    "en": "Failed to send the verification code. Try again later.",
+    "zh": "发送验证码失败，请稍后再试。"
+  },
+  "authResetSendSubmit": {
+    "en": "Send code",
+    "zh": "发送验证码"
+  },
+  "authResetSendSubmitting": {
+    "en": "Sending...",
+    "zh": "发送中…"
+  },
+  "authResetUnavailable": {
+    "en": "Password reset is currently unavailable.",
+    "zh": "密码重置暂不可用。"
+  },
+  "authResetVerifyFailed": {
+    "en": "Verification failed. Try again later.",
+    "zh": "验证验证码失败，请稍后再试。"
+  },
+  "authResetVerifySubmit": {
+    "en": "Continue",
+    "zh": "继续"
+  },
+  "authResetVerifySubmitting": {
+    "en": "Verifying...",
+    "zh": "验证中…"
+  },
+  "authResetVerifySubtitle": {
+    "en": "Enter your email and verification code to continue.",
+    "zh": "输入邮箱和验证码，继续设置新密码。"
+  },
+  "authResetVerifyTitle": {
+    "en": "Verify code",
+    "zh": "验证验证码"
+  },
+  "authSignIn": {
+    "en": "Sign in",
+    "zh": "去登录"
+  },
+  "authSignUp": {
+    "en": "Sign up",
+    "zh": "去注册"
+  },
+  "chat.allWorkspaces": {
+    "en": "View all workspaces",
+    "zh": "查看全部工作区"
+  },
+  "chat.attachFile": {
+    "en": "Attach file",
+    "zh": "添加文件"
+  },
+  "chat.backToPersonal": {
+    "en": "Back to personal chat",
+    "zh": "返回个人对话"
+  },
+  "chat.canvasLabel": {
+    "en": "Chat canvas",
+    "zh": "对话画布"
+  },
+  "chat.citationScope.session": {
+    "en": "Session file",
+    "zh": "本会话文件"
+  },
+  "chat.citationScope.workspace": {
+    "en": "Workspace material",
+    "zh": "工作区资料"
+  },
+  "chat.citationTombstone": {
+    "en": "Source deleted. Citation facts retained only.",
+    "zh": "来源已删除，仅保留引用信息。"
+  },
+  "chat.citationsLabel": {
+    "en": "Citations",
+    "zh": "引用"
+  },
+  "chat.composerInputLabel": {
+    "en": "Message",
+    "zh": "输入消息"
+  },
+  "chat.composerLabel": {
+    "en": "Chat composer",
+    "zh": "对话输入框"
+  },
+  "chat.composerPlaceholder": {
+    "en": "Write a message. Enter to send (Shift+Enter for a new line)",
+    "zh": "输入消息，Enter 发送（Shift+Enter 换行）"
+  },
+  "chat.composerSendLabel": {
+    "en": "Send message",
+    "zh": "发送消息"
+  },
+  "chat.copyAnswer": {
+    "en": "Copy answer",
+    "zh": "复制回答"
+  },
+  "chat.degradeReasons": {
+    "en": "Retrieval notes: {reasons}",
+    "zh": "检索观察：{reasons}"
+  },
+  "chat.feedbackDown": {
+    "en": "Mark not helpful",
+    "zh": "踩回答"
+  },
+  "chat.feedbackDownShort": {
+    "en": "Down",
+    "zh": "踩"
+  },
+  "chat.feedbackFailed": {
+    "en": "Could not send feedback. Try again.",
+    "zh": "反馈提交失败，请稍后重试"
+  },
+  "chat.feedbackUp": {
+    "en": "Mark helpful",
+    "zh": "赞同回答"
+  },
+  "chat.feedbackUpShort": {
+    "en": "Up",
+    "zh": "赞"
+  },
+  "chat.fileActionFailed": {
+    "en": "File action failed. Please try again.",
+    "zh": "文件操作失败，请重试。"
+  },
+  "chat.fileBlockedHint": {
+    "en": "Sending is blocked until files finish processing; remove pending files to continue.",
+    "zh": "文件处理完成后才能发送消息；可移除未就绪的文件后继续。"
+  },
+  "chat.fileRemove": {
+    "en": "Remove",
+    "zh": "移除"
+  },
+  "chat.fileRetry": {
+    "en": "Retry parse",
+    "zh": "重试解析"
+  },
+  "chat.fileStatus.failed": {
+    "en": "Failed",
+    "zh": "解析失败"
+  },
+  "chat.fileStatus.parsing": {
+    "en": "Parsing",
+    "zh": "解析中"
+  },
+  "chat.fileStatus.ready": {
+    "en": "Ready",
+    "zh": "就绪"
+  },
+  "chat.fileStatus.uploading": {
+    "en": "Uploading",
+    "zh": "上传中"
+  },
+  "chat.fileTrayCount": {
+    "en": "Session files · {count}",
+    "zh": "会话文件 · {count}"
+  },
+  "chat.fileTrayLabel": {
+    "en": "Session files",
+    "zh": "会话文件"
+  },
+  "chat.guarded": {
+    "en": "Safety checks adjusted this answer.",
+    "zh": "本轮输出经过内容护栏处理。"
+  },
+  "chat.guardedWithReasons": {
+    "en": "Safety checks adjusted this answer. Retrieval notes: {reasons}",
+    "zh": "本轮输出经过内容护栏处理。检索观察：{reasons}"
+  },
+  "chat.heroEmpty": {
+    "en": "Start a new chat. Choose knowledge base or web search below.",
+    "zh": "开始一轮新的对话。可在下方选择知识库或网络搜索。"
+  },
+  "chat.heroSubtitle": {
+    "en": "Ask directly, or turn on web search when you need current information.",
+    "zh": "直接提问；需要最新信息时可开启网络搜索。"
+  },
+  "chat.historyLoading": {
+    "en": "Loading this chat…",
+    "zh": "正在加载会话…"
+  },
+  "chat.listLoadError": {
+    "en": "Recent chats could not be loaded. You can still start a new chat.",
+    "zh": "最近对话加载失败；仍可开始新对话。"
+  },
+  "chat.loadError": {
+    "en": "Failed to load this chat.",
+    "zh": "加载对话记录失败。"
+  },
+  "chat.loadSessionFailed": {
+    "en": "Failed to load this chat: {error}",
+    "zh": "加载会话失败：{error}"
+  },
+  "chat.loading": {
+    "en": "Loading chats…",
+    "zh": "正在加载对话…"
+  },
+  "chat.modeLineNoSessionFiles": {
+    "en": "No session files yet — attach files to search this chat.",
+    "zh": "未添加会话文件：添加文件后可检索本会话。"
+  },
+  "chat.modelBadgeLabel": {
+    "en": "Current model",
+    "zh": "当前模型配置"
+  },
+  "chat.modelRole.agent": {
+    "en": "Workspace agent",
+    "zh": "工作区 Agent"
+  },
+  "chat.modelRole.quickChatByok": {
+    "en": "Chat · qwen3.8-flash (custom key)",
+    "zh": "对话 · qwen3.8-flash (自定义密钥)"
+  },
+  "chat.modelRole.quickChatDefault": {
+    "en": "Chat · qwen3.8-flash (default)",
+    "zh": "对话 · qwen3.8-flash (默认)"
+  },
+  "chat.newConversation": {
+    "en": "New chat",
+    "zh": "新对话"
+  },
+  "chat.noRecent": {
+    "en": "No recent chats yet.",
+    "zh": "还没有最近对话。"
+  },
+  "chat.noSessions": {
+    "en": "No chats yet.",
+    "zh": "还没有会话。"
+  },
+  "chat.openSource": {
+    "en": "Open source",
+    "zh": "打开来源"
+  },
+  "chat.pageTitle": {
+    "en": "Context-OS chat",
+    "zh": "Context-OS 对话"
+  },
+  "chat.personalContext": {
+    "en": "This chat",
+    "zh": "本对话"
+  },
+  "chat.progressCancelled": {
+    "en": "Stopped",
+    "zh": "已停止"
+  },
+  "chat.progressDone": {
+    "en": "Thinking complete",
+    "zh": "思考完成"
+  },
+  "chat.progressError": {
+    "en": "Incomplete",
+    "zh": "未完成"
+  },
+  "chat.progressLabel": {
+    "en": "Progress",
+    "zh": "进度"
+  },
+  "chat.progressStreaming": {
+    "en": "In progress",
+    "zh": "进行中"
+  },
+  "chat.reasoningSummary": {
+    "en": "Reasoning summary",
+    "zh": "推理摘要"
+  },
+  "chat.recent": {
+    "en": "Recent",
+    "zh": "最近"
+  },
+  "chat.regionLabel": {
+    "en": "Chat",
+    "zh": "对话"
+  },
+  "chat.requestFailed": {
+    "en": "Request failed ({code}): {message}",
+    "zh": "请求失败（{code}）：{message}"
+  },
+  "chat.retry": {
+    "en": "Retry",
+    "zh": "重试"
+  },
+  "chat.roleAssistant": {
+    "en": "Assistant",
+    "zh": "助手"
+  },
+  "chat.roleUser": {
+    "en": "You",
+    "zh": "我"
+  },
+  "chat.sessionsDismiss": {
+    "en": "Close chat list",
+    "zh": "关闭会话列表"
+  },
+  "chat.sessionsListLabel": {
+    "en": "Chat list",
+    "zh": "会话列表"
+  },
+  "chat.sessionsLoading": {
+    "en": "Loading chats…",
+    "zh": "正在加载会话列表…"
+  },
+  "chat.sessionsToggle": {
+    "en": "Chats",
+    "zh": "会话"
+  },
+  "chat.sessionsToggleClose": {
+    "en": "Close chats",
+    "zh": "关闭会话"
+  },
+  "chat.sidebarLabel": {
+    "en": "Chats and workspaces",
+    "zh": "对话与工作区"
+  },
+  "chat.signInToLoadSessions": {
+    "en": "Sign in to load chats",
+    "zh": "登录后即可加载会话"
+  },
+  "chat.sourceDeleted": {
+    "en": "Source deleted",
+    "zh": "来源已删除"
+  },
+  "chat.statusCancelled": {
+    "en": "Stopped",
+    "zh": "已停止"
+  },
+  "chat.statusDone": {
+    "en": "Done",
+    "zh": "已完成"
+  },
+  "chat.statusStreaming": {
+    "en": "Generating…",
+    "zh": "正在生成回答…"
+  },
+  "chat.transcriptLabel": {
+    "en": "Messages",
+    "zh": "消息列表"
+  },
+  "chat.untitled": {
+    "en": "Untitled chat",
+    "zh": "未命名对话"
+  },
+  "chat.webSources": {
+    "en": "Web sources {count}",
+    "zh": "网页来源 {count}"
+  },
+  "chat.webSourcesLabel": {
+    "en": "Web sources",
+    "zh": "网页来源"
+  },
+  "chat.workspaceContext": {
+    "en": "Workspace · {name}",
+    "zh": "工作区 · {name}"
+  },
+  "chat.workspaces": {
+    "en": "Workspaces",
+    "zh": "工作区"
+  },
+  "commandPalette.empty": {
+    "en": "No matches",
+    "zh": "没有匹配项"
+  },
+  "commandPalette.group.billing": {
+    "en": "Plan & wallet",
+    "zh": "会员与余额"
+  },
+  "commandPalette.group.help": {
+    "en": "Help & client",
+    "zh": "帮助与客户端"
+  },
+  "commandPalette.group.nav": {
+    "en": "Navigate",
+    "zh": "导航"
+  },
+  "commandPalette.group.sessions": {
+    "en": "Sessions",
+    "zh": "会话"
+  },
+  "commandPalette.group.sources": {
+    "en": "Documents",
+    "zh": "文档"
+  },
+  "commandPalette.group.workspaces": {
+    "en": "Workspaces",
+    "zh": "工作区"
+  },
+  "commandPalette.hint": {
+    "en": "↑↓ select · Enter open · Esc close",
+    "zh": "↑↓ 选择 · Enter 打开 · Esc 关闭"
+  },
+  "commandPalette.item.billing": {
+    "en": "Settings · billing",
+    "zh": "设置 · 账单"
+  },
+  "commandPalette.item.shareTraffic": {
+    "en": "Share traffic (all)",
+    "zh": "分享访问（汇总）"
+  },
+  "commandPalette.item.topup": {
+    "en": "Top up wallet",
+    "zh": "充值余额"
+  },
+  "commandPalette.loadingSearch": {
+    "en": "Searching…",
+    "zh": "正在搜索…"
+  },
+  "commandPalette.loadingWorkspaces": {
+    "en": "Loading workspaces…",
+    "zh": "正在加载工作区…"
+  },
+  "commandPalette.placeholder": {
+    "en": "Search sessions, workspaces, docs, and pages…",
+    "zh": "搜索会话、工作区、文档与页面…"
+  },
+  "commandPalette.sessionLabel": {
+    "en": "Session · {title}",
+    "zh": "会话 · {title}"
+  },
+  "commandPalette.sessionUntitled": {
+    "en": "Untitled session",
+    "zh": "未命名会话"
+  },
+  "commandPalette.sourceLabel": {
+    "en": "Doc · {name}",
+    "zh": "文档 · {name}"
+  },
+  "commandPalette.sourceLabelWithWs": {
+    "en": "Doc · {name} ({workspace})",
+    "zh": "文档 · {name}（{workspace}）"
+  },
+  "commandPalette.title": {
+    "en": "Quick jump",
+    "zh": "快速跳转"
+  },
+  "commandPalette.workspaceRecent": {
+    "en": "Recent · {title}",
+    "zh": "最近 · {title}"
+  },
+  "commonAnalytics": {
+    "en": "Analytics",
+    "zh": "数据分析"
+  },
+  "commonCancel": {
+    "en": "Cancel",
+    "zh": "取消"
+  },
+  "commonConfirmDelete": {
+    "en": "Delete",
+    "zh": "确认删除"
+  },
+  "commonLoading": {
+    "en": "Loading…",
+    "zh": "正在加载…"
+  },
+  "commonMenuClose": {
+    "en": "Close menu",
+    "zh": "关闭菜单"
+  },
+  "commonMore": {
+    "en": "More",
+    "zh": "更多"
+  },
+  "commonSave": {
+    "en": "Save",
+    "zh": "保存"
+  },
+  "commonUnlimited": {
+    "en": "Unlimited",
+    "zh": "不限"
+  },
+  "currentPlan": {
+    "en": "Current plan",
+    "zh": "当前方案"
+  },
+  "dashboard.confirmCreate": {
+    "en": "Create",
+    "zh": "确认创建"
+  },
+  "dashboard.createFailed": {
+    "en": "Failed to create workspace: {error}",
+    "zh": "创建工作区失败：{error}"
+  },
+  "dashboard.createWorkspace": {
+    "en": "+ New workspace",
+    "zh": "+ 新建工作区"
+  },
+  "dashboard.creating": {
+    "en": "Creating…",
+    "zh": "创建中…"
+  },
+  "dashboard.deleted": {
+    "en": "Workspace deleted",
+    "zh": "已删除工作区"
+  },
+  "dashboard.docCount": {
+    "en": "{count} sources",
+    "zh": "{count} 篇资料"
+  },
+  "dashboard.favoriteUpdated": {
+    "en": "Favorites updated",
+    "zh": "已更新收藏"
+  },
+  "dashboard.filterLabel": {
+    "en": "Workspace filters",
+    "zh": "工作区筛选"
+  },
+  "dashboard.irreversible": {
+    "en": "This cannot be undone.",
+    "zh": "删除后不可恢复。"
+  },
+  "dashboard.loadFailed": {
+    "en": "Failed to load workspaces: {error}",
+    "zh": "加载工作区失败：{error}"
+  },
+  "dashboard.loadingList": {
+    "en": "Loading workspaces…",
+    "zh": "正在加载工作区列表…"
+  },
+  "dashboard.renamed": {
+    "en": "Renamed",
+    "zh": "已重命名"
+  },
+  "dashboard.searchNamePlaceholder": {
+    "en": "Filter by name",
+    "zh": "按名称筛选"
+  },
+  "dashboard.searchOpen": {
+    "en": "Search",
+    "zh": "搜索"
+  },
+  "dashboard.sortByName": {
+    "en": "By name",
+    "zh": "按名称"
+  },
+  "dashboard.sortByRecent": {
+    "en": "Recent",
+    "zh": "按最近"
+  },
+  "dashboard.tabFavoritesShort": {
+    "en": "Favorites",
+    "zh": "收藏"
+  },
+  "dashboard.tabMineShort": {
+    "en": "Mine",
+    "zh": "我的"
+  },
+  "dashboard.title": {
+    "en": "Workspaces",
+    "zh": "工作区与持久知识库"
+  },
+  "dashboard.workspaceDesc": {
+    "en": "Description (optional)",
+    "zh": "描述 (可选)"
+  },
+  "dashboard.workspaceDescPlaceholder": {
+    "en": "What this workspace is for",
+    "zh": "说明知识库范畴"
+  },
+  "dashboard.workspaceName": {
+    "en": "Workspace name",
+    "zh": "工作区名称"
+  },
+  "dashboard.workspaceNamePlaceholder": {
+    "en": "e.g. Research library",
+    "zh": "例如：材料研发知识库"
+  },
+  "dashboardAccountLink": {
+    "en": "Account",
+    "zh": "账户"
+  },
+  "dashboardActionDelete": {
+    "en": "Delete",
+    "zh": "删除"
+  },
+  "dashboardActionFailed": {
+    "en": "Something went wrong. Please try again.",
+    "zh": "操作失败，请稍后重试。"
+  },
+  "dashboardActionFavorite": {
+    "en": "Favorite",
+    "zh": "收藏"
+  },
+  "dashboardActionRename": {
+    "en": "Rename",
+    "zh": "重命名"
+  },
+  "dashboardActionRetry": {
+    "en": "Retry",
+    "zh": "重试"
+  },
+  "dashboardActionUnfavorite": {
+    "en": "Unfavorite",
+    "zh": "取消收藏"
+  },
+  "dashboardAppearanceLink": {
+    "en": "Preferences",
+    "zh": "偏好"
+  },
+  "dashboardBackToDashboard": {
+    "en": "← Dashboard",
+    "zh": "← 工作台"
+  },
+  "dashboardBackToWorkspaces": {
+    "en": "Back to dashboard",
+    "zh": "返回工作台"
+  },
+  "dashboardBillingLink": {
+    "en": "Usage",
+    "zh": "用量信息"
+  },
+  "dashboardBrandSubtitle": {
+    "en": "Workspace dashboard",
+    "zh": "工作区控制台"
+  },
+  "dashboardByWorkspace": {
+    "en": "By workspace",
+    "zh": "按工作区"
+  },
+  "dashboardChartTotal": {
+    "en": "Range total {n}",
+    "zh": "区间合计 {n}"
+  },
+  "dashboardCreateFirst": {
+    "en": "Create the first workspace",
+    "zh": "创建第一个工作区"
+  },
+  "dashboardCreatedAtColumn": {
+    "en": "Created",
+    "zh": "创建时间"
+  },
+  "dashboardDeleteDialogBody": {
+    "en": "Delete {title}? This cannot be undone.",
+    "zh": "确定删除「{title}」吗？此操作无法撤销。"
+  },
+  "dashboardDeleteDialogTitle": {
+    "en": "Delete workspace",
+    "zh": "删除工作区"
+  },
+  "dashboardDrillDown": {
+    "en": "Share center",
+    "zh": "分享中心"
+  },
+  "dashboardEmptyAllTitle": {
+    "en": "No workspaces yet",
+    "zh": "还没有工作区"
+  },
+  "dashboardEmptyBody": {
+    "en": "Create a workspace first, then jump into the workspace shell.",
+    "zh": "先创建一个工作区，再进入使用。"
+  },
+  "dashboardEmptyDescription": {
+    "en": "No description",
+    "zh": "暂无描述"
+  },
+  "dashboardEmptyFavoritesTitle": {
+    "en": "No favorited workspaces yet",
+    "zh": "还没有收藏的工作区"
+  },
+  "dashboardFilterAll": {
+    "en": "All",
+    "zh": "全部"
+  },
+  "dashboardFilterWorkspace": {
+    "en": "Workspace",
+    "zh": "工作区"
+  },
+  "dashboardHeadingAll": {
+    "en": "All workspaces",
+    "zh": "全部工作区"
+  },
+  "dashboardHeadingCount": {
+    "en": "{count} workspaces",
+    "zh": "{count} 个工作区"
+  },
+  "dashboardHeadingFavorites": {
+    "en": "Favorites",
+    "zh": "我的收藏"
+  },
+  "dashboardHeadingMine": {
+    "en": "My workspaces",
+    "zh": "我的工作区"
+  },
+  "dashboardListLabel": {
+    "en": "Workspace list",
+    "zh": "工作区列表"
+  },
+  "dashboardLoadError": {
+    "en": "Failed to load workspaces.",
+    "zh": "加载工作区失败。"
+  },
+  "dashboardLoading": {
+    "en": "Loading…",
+    "zh": "加载中…"
+  },
+  "dashboardLoginRequired": {
+    "en": "Please sign in first.",
+    "zh": "请先登录。"
+  },
+  "dashboardLogout": {
+    "en": "Log out",
+    "zh": "退出登录"
+  },
+  "dashboardNewWorkspace": {
+    "en": "New workspace",
+    "zh": "新建工作区"
+  },
+  "dashboardProfileLink": {
+    "en": "Profile",
+    "zh": "个人资料"
+  },
+  "dashboardRange30": {
+    "en": "30 days",
+    "zh": "近 30 天"
+  },
+  "dashboardRange7": {
+    "en": "7 days",
+    "zh": "近 7 天"
+  },
+  "dashboardRenameDialogTitle": {
+    "en": "Rename workspace",
+    "zh": "重命名工作区"
+  },
+  "dashboardRenameSubmit": {
+    "en": "Save",
+    "zh": "保存"
+  },
+  "dashboardRoleColumn": {
+    "en": "Role",
+    "zh": "角色"
+  },
+  "dashboardRoleMember": {
+    "en": "Member",
+    "zh": "成员"
+  },
+  "dashboardRoleOwner": {
+    "en": "Owner",
+    "zh": "所有者"
+  },
+  "dashboardSearchDialogLabel": {
+    "en": "Global search",
+    "zh": "全局搜索"
+  },
+  "dashboardSearchEmptyIdle": {
+    "en": "Type to search sessions, workspaces, and sources.",
+    "zh": "输入关键词，全局搜索会话、工作区和资料。"
+  },
+  "dashboardSearchEmptyNoMatch": {
+    "en": "No matching results",
+    "zh": "没有匹配的内容"
+  },
+  "dashboardSearchLabel": {
+    "en": "Global search",
+    "zh": "全局搜索"
+  },
+  "dashboardSearchPlaceholder": {
+    "en": "Search sessions, workspaces, sources…",
+    "zh": "搜索会话、工作区、资料…"
+  },
+  "dashboardShareAnalyticsSubtitle": {
+    "en": "Aggregate views across shared workspaces. Drill into Share center for one workspace.",
+    "zh": "全部已分享工作区的访问汇总。下钻进入该工作区的「分享中心」看单库趋势与访客活动。"
+  },
+  "dashboardShareAnalyticsTitle": {
+    "en": "Share traffic",
+    "zh": "分享访问"
+  },
+  "dashboardShareOff": {
+    "en": "Share off",
+    "zh": "未开启分享"
+  },
+  "dashboardShareTrafficNav": {
+    "en": "Share traffic",
+    "zh": "分享访问"
+  },
+  "dashboardSharedWorkspaces": {
+    "en": "Shared workspaces",
+    "zh": "已分享工作区"
+  },
+  "dashboardSortRecent": {
+    "en": "Created",
+    "zh": "创建时间"
+  },
+  "dashboardSortTitle": {
+    "en": "Title",
+    "zh": "标题"
+  },
+  "dashboardSourceCountMany": {
+    "en": "{count} sources",
+    "zh": "{count} 个来源"
+  },
+  "dashboardSourceCountOne": {
+    "en": "1 source",
+    "zh": "1 个来源"
+  },
+  "dashboardSourcesColumn": {
+    "en": "Sources",
+    "zh": "来源"
+  },
+  "dashboardStatusFailed": {
+    "en": "Failed",
+    "zh": "异常"
+  },
+  "dashboardStatusProcessing": {
+    "en": "Processing",
+    "zh": "处理中"
+  },
+  "dashboardStatusReady": {
+    "en": "Ready",
+    "zh": "就绪"
+  },
+  "dashboardTabAll": {
+    "en": "All",
+    "zh": "全部"
+  },
+  "dashboardTabFavorites": {
+    "en": "Favorites",
+    "zh": "我的收藏"
+  },
+  "dashboardTabMine": {
+    "en": "My workspaces",
+    "zh": "我的工作区"
+  },
+  "dashboardTabsLabel": {
+    "en": "Workspace tabs",
+    "zh": "工作区标签"
+  },
+  "dashboardTimeDimension": {
+    "en": "Time range",
+    "zh": "时间维度"
+  },
+  "dashboardToolbarSearch": {
+    "en": "Global search",
+    "zh": "全局搜索"
+  },
+  "dashboardTotalViews": {
+    "en": "Total views",
+    "zh": "总访问次数"
+  },
+  "dashboardTotalsTitle": {
+    "en": "Totals",
+    "zh": "汇总"
+  },
+  "dashboardTrendEmpty": {
+    "en": "No view data yet. Enable share and wait for traffic.",
+    "zh": "暂无访问数据。开启分享并产生访问后，这里会出现趋势图。"
+  },
+  "dashboardUniqueVisitors": {
+    "en": "Unique visitors",
+    "zh": "独立访客"
+  },
+  "dashboardUntitledWorkspace": {
+    "en": "Untitled workspace",
+    "zh": "未命名工作区"
+  },
+  "dashboardViewCard": {
+    "en": "Cards",
+    "zh": "卡片"
+  },
+  "dashboardViewGridLabel": {
+    "en": "Workspace cards",
+    "zh": "工作区卡片"
+  },
+  "dashboardViewList": {
+    "en": "List",
+    "zh": "列表"
+  },
+  "dashboardViewModeLabel": {
+    "en": "Workspace view mode",
+    "zh": "工作区视图模式"
+  },
+  "dashboardViewTrend": {
+    "en": "View trend",
+    "zh": "访问趋势"
+  },
+  "dashboardViewTrendSubtitle": {
+    "en": "Daily views (bars). Change range or workspace to refresh totals.",
+    "zh": "按日访问量（柱状）。切换时间维度或工作区可刷新下方汇总。"
+  },
+  "dashboardViews30d": {
+    "en": "Last 30d views",
+    "zh": "近 30 日访问"
+  },
+  "dashboardViews7d": {
+    "en": "Last 7d views",
+    "zh": "近 7 日访问"
+  },
+  "dashboardViewsVisitors": {
+    "en": "Views {views} · visitors {visitors}",
+    "zh": "访问 {views} · 访客 {visitors}"
+  },
+  "dashboardWorkspaceNameField": {
+    "en": "Name",
+    "zh": "名称"
+  },
+  "desktop.activateInClient": {
+    "en": "Activate in Context-OS",
+    "zh": "在 Context-OS 中激活"
+  },
+  "desktop.activateRedirect": {
+    "en": "The client is free — no activation. Redirecting to the download page…",
+    "zh": "客户端免费，无需激活。正在前往下载页…"
+  },
+  "desktop.backToHub": {
+    "en": "Back to brand site",
+    "zh": "返回官网"
+  },
+  "desktop.benefitsTitle": {
+    "en": "Why download the client?",
+    "zh": "为什么下载客户端？"
+  },
+  "desktop.buyCta": {
+    "en": "Cloud pricing (share slots)",
+    "zh": "云端定价（分享名额）"
+  },
+  "desktop.buyFreeBanner": {
+    "en": "Desktop buyout is retired. Download the free installer; cloud share slots are on Pricing.",
+    "zh": "客户端买断已退役。请免费下载安装包；上云经营请看分享名额定价。"
+  },
+  "desktop.buyFreeCta": {
+    "en": "Free client download",
+    "zh": "免费下载客户端"
+  },
+  "desktop.buyLegacyTitle": {
+    "en": "Legacy license tiers (optional)",
+    "zh": "历史授权档位（可选）"
+  },
+  "desktop.buyPricingCta": {
+    "en": "Cloud pricing (share slots)",
+    "zh": "云端定价（分享名额）"
+  },
+  "desktop.buySubtitle": {
+    "en": "The client is free to download. Cloud share slots and wallet are on Pricing.",
+    "zh": "客户端本身免费下载使用。云端分享名额与钱包见定价页。"
+  },
+  "desktop.buyTitle": {
+    "en": "Client is free",
+    "zh": "客户端免费"
+  },
+  "desktop.cloudLoginByokHint": {
+    "en": "💡 Tip: You can switch to Bring-Your-Own-Key (BYOK) anytime under Settings → Providers.",
+    "zh": "💡 提示：登录后可随时在「设置 → 模型服务商」切换为您自备的 API Key (BYOK)。"
+  },
+  "desktop.cloudLoginChecking": {
+    "en": "Checking cloud sign-in…",
+    "zh": "正在检查云登录状态…"
+  },
+  "desktop.cloudLoginEmail": {
+    "en": "Account Email",
+    "zh": "账号邮箱"
+  },
+  "desktop.cloudLoginFailed": {
+    "en": "Sign-in failed; check your network or credentials and retry",
+    "zh": "登录失败，请检查网络或账号密码后重试"
+  },
+  "desktop.cloudLoginForgotPassword": {
+    "en": "Forgot password?",
+    "zh": "忘记密码？"
+  },
+  "desktop.cloudLoginNoAccount": {
+    "en": "Don't have an account?",
+    "zh": "还没有账号？"
+  },
+  "desktop.cloudLoginPassword": {
+    "en": "Password",
+    "zh": "密码"
+  },
+  "desktop.cloudLoginPrivacyHint": {
+    "en": "🔒 Privacy First: Your local docs, vector indexes, and chat history never leave your machine.",
+    "zh": "🔒 数据隐私承诺：您的知识库文档、向量索引与聊天记录仅保存在本机。"
+  },
+  "desktop.cloudLoginRegister": {
+    "en": "Sign up →",
+    "zh": "立即注册 →"
+  },
+  "desktop.cloudLoginSubmit": {
+    "en": "Sign in & continue",
+    "zh": "登录并进入工作区"
+  },
+  "desktop.cloudLoginSubmitting": {
+    "en": "Signing in & initializing…",
+    "zh": "正在登录并初始化…"
+  },
+  "desktop.cloudLoginSubtitle": {
+    "en": "Sign in to access official models out of the box. Your docs and indexes stay local.",
+    "zh": "登录账号以启用官方模型开箱即用。文档与索引全程保留在您的本地设备。"
+  },
+  "desktop.cloudLoginTitle": {
+    "en": "Welcome to Context-OS",
+    "zh": "欢迎使用 Context-OS"
+  },
+  "desktop.ctaTitle": {
+    "en": "Download & related",
+    "zh": "下载与相关入口"
+  },
+  "desktop.downloadLoading": {
+    "en": "Checking download…",
+    "zh": "正在获取下载信息…"
+  },
+  "desktop.downloadMeta": {
+    "en": "v{version} · {size}",
+    "zh": "v{version} · {size}"
+  },
+  "desktop.downloadUnavailable": {
+    "en": "Installer not published yet",
+    "zh": "安装包暂未发布"
+  },
+  "desktop.downloadUnavailableHint": {
+    "en": "Please try again later or contact support.",
+    "zh": "请稍后再试，或联系支持获取安装包。"
+  },
+  "desktop.downloadWindows": {
+    "en": "Download for Windows",
+    "zh": "下载 Windows 客户端"
+  },
+  "desktop.drawer.about": {
+    "en": "About",
+    "zh": "关于"
+  },
+  "desktop.drawer.aboutFree": {
+    "en": "The client is free; cloud share slots and wallet are on Pricing.",
+    "zh": "客户端免费；云端分享名额与钱包见定价页。"
+  },
+  "desktop.drawer.account": {
+    "en": "Account",
+    "zh": "账户"
+  },
+  "desktop.drawer.accountCloud": {
+    "en": "Cloud account",
+    "zh": "云账户"
+  },
+  "desktop.drawer.balance": {
+    "en": "Balance",
+    "zh": "余额"
+  },
+  "desktop.drawer.clientPage": {
+    "en": "Client page",
+    "zh": "客户端页"
+  },
+  "desktop.drawer.close": {
+    "en": "Close",
+    "zh": "关闭"
+  },
+  "desktop.drawer.data": {
+    "en": "Data",
+    "zh": "数据"
+  },
+  "desktop.drawer.dataDir": {
+    "en": "Data directory",
+    "zh": "数据目录"
+  },
+  "desktop.drawer.diagnostics": {
+    "en": "Diagnostics",
+    "zh": "诊断"
+  },
+  "desktop.drawer.diagnosticsHint": {
+    "en": "Local runtime diagnostics (PostgreSQL vector DB, Redis cache, and core engine status).",
+    "zh": "本地运行环境诊断信息（PostgreSQL 向量库、Redis 缓存与核心引擎状态）。"
+  },
+  "desktop.drawer.envFile": {
+    "en": "Runtime env file",
+    "zh": "运行时 env 文件"
+  },
+  "desktop.drawer.login": {
+    "en": "Sign in",
+    "zh": "登录"
+  },
+  "desktop.drawer.logout": {
+    "en": "Sign out of cloud",
+    "zh": "退出云登录"
+  },
+  "desktop.drawer.logoutConfirm": {
+    "en": "Sign out? Official relay models will be paused; your local workspaces and history remain intact.",
+    "zh": "确认退出登录？退出后将暂停官方模型中继服务，您的本地知识库与历史记录将完整保留。"
+  },
+  "desktop.drawer.logoutConfirmAction": {
+    "en": "Confirm sign-out",
+    "zh": "确认退出"
+  },
+  "desktop.drawer.logoutWorking": {
+    "en": "Signing out…",
+    "zh": "正在退出…"
+  },
+  "desktop.drawer.logsDir": {
+    "en": "Logs directory",
+    "zh": "日志目录"
+  },
+  "desktop.drawer.modelByok": {
+    "en": "Bring your own key (BYOK)",
+    "zh": "自备模型密钥 (BYOK)"
+  },
+  "desktop.drawer.modelByokHint": {
+    "en": "Your key writes the final answer with no chat wallet debit. Qwen3.7 Flash is the fast model for both document indexing and the retrieval worker. Otherwise sign in for official models.",
+    "zh": "优先用您的 Key 写最终回答，不扣平台对话费。Qwen3.7 Flash 作为快速模型，同时用于文档索引和检索子代理。未配置时登录即可使用官方托管模型。"
+  },
+  "desktop.drawer.modelChat": {
+    "en": "Chat model",
+    "zh": "对话模型"
+  },
+  "desktop.drawer.modelEmbedding": {
+    "en": "Embedding model",
+    "zh": "向量模型"
+  },
+  "desktop.drawer.modelManage": {
+    "en": "Manage providers (BYOK) →",
+    "zh": "管理模型服务商 (BYOK) →"
+  },
+  "desktop.drawer.modelOfficial": {
+    "en": "Official models (metered)",
+    "zh": "官方托管模型（按量计费）"
+  },
+  "desktop.drawer.modelOfficialHint": {
+    "en": "Relayed through the cloud and debited by usage — no own key needed.",
+    "zh": "通过平台安全中继调用模型，按实际 Token 用量从账户余额扣除，无需自备 Key。"
+  },
+  "desktop.drawer.modelRerank": {
+    "en": "Rerank model",
+    "zh": "重排模型"
+  },
+  "desktop.drawer.modelSource": {
+    "en": "Current source",
+    "zh": "当前来源"
+  },
+  "desktop.drawer.models": {
+    "en": "Models",
+    "zh": "模型"
+  },
+  "desktop.drawer.notLoggedIn": {
+    "en": "Not signed in. After sign-in, official models are metered by usage; you can also configure your own keys anytime.",
+    "zh": "未登录账号。登录后默认使用官方托管模型（按量计费）；亦可随时配置自备 Key。"
+  },
+  "desktop.drawer.open": {
+    "en": "Open",
+    "zh": "打开"
+  },
+  "desktop.drawer.pricingPage": {
+    "en": "Pricing",
+    "zh": "定价"
+  },
+  "desktop.drawer.railLabel": {
+    "en": "Client settings sections",
+    "zh": "客户端设置分区"
+  },
+  "desktop.drawer.stackStatus": {
+    "en": "Local data stack",
+    "zh": "本机数据栈"
+  },
+  "desktop.drawer.title": {
+    "en": "Client settings",
+    "zh": "客户端设置"
+  },
+  "desktop.drawer.topup": {
+    "en": "Top up",
+    "zh": "充值"
+  },
+  "desktop.drawer.updateAvailableHint": {
+    "en": "New version v{version} found; it installs and restarts automatically.",
+    "zh": "发现新版本 v{version}，下载后将自动安装并重启。"
+  },
+  "desktop.drawer.updateCheck": {
+    "en": "Check for updates",
+    "zh": "检查更新"
+  },
+  "desktop.drawer.updateChecking": {
+    "en": "Checking…",
+    "zh": "检查中…"
+  },
+  "desktop.drawer.updateDownloading": {
+    "en": "{percent}% downloaded",
+    "zh": "已下载 {percent}%"
+  },
+  "desktop.drawer.updateInstall": {
+    "en": "Download and install",
+    "zh": "下载并安装"
+  },
+  "desktop.drawer.updateUpToDate": {
+    "en": "Up to date",
+    "zh": "已是最新版本"
+  },
+  "desktop.drawer.updateWorking": {
+    "en": "Updating…",
+    "zh": "正在更新…"
+  },
+  "desktop.drawer.version": {
+    "en": "Version",
+    "zh": "版本"
+  },
+  "desktop.feature1": {
+    "en": "Private by default: docs and indexes stay on this machine",
+    "zh": "数据本地私有：文档与索引默认保存在本机，核心检索无需数据上云"
+  },
+  "desktop.feature2": {
+    "en": "Out of the box + BYOK: official models ready to use, or bring your own LLM keys",
+    "zh": "开箱即用 + BYOK：内置官方托管模型免配置体验，同时支持自备主流大模型 Key"
+  },
+  "desktop.feature3": {
+    "en": "Desktop-agent ready: standard MCP & CLI for Claude Code, Codex, and local agents",
+    "zh": "桌面 Agent 友好：提供标准 MCP / CLI 接口，无缝接入 Claude Code、Codex 等本地编程助手"
+  },
+  "desktop.feature4": {
+    "en": "Client is free; upgrade cloud share slots only when you publish online",
+    "zh": "完全免费使用客户端；需要上云分享时再升级云端名额"
+  },
+  "desktop.feature5": {
+    "en": "Bring your own LLM key; one-click local stack",
+    "zh": "自带 LLM Key（BYOK），本地栈一键启动"
+  },
+  "desktop.feature6": {
+    "en": "Optional cloud workspace sync. Public sharing requires publish-to-cloud (vector import, no re-ingest) and still follows cloud plan limits",
+    "zh": "可选与云端工作区互通。对外分享需先发布到云端（向量导入、不重灌库），仍走云端档位规则"
+  },
+  "desktop.installStep1": {
+    "en": "Download the Windows client installer",
+    "zh": "下载 Windows 客户端安装包"
+  },
+  "desktop.installStep2": {
+    "en": "Run the installer (Windows 10+ with WebView2)",
+    "zh": "运行安装程序（需 Windows 10+ 与 WebView2）"
+  },
+  "desktop.installStep3": {
+    "en": "Sign in to chat immediately with official models, or switch to your own key and connect agents (MCP / CLI)",
+    "zh": "启动后登录账号即可直接问答（开箱自带官方模型），亦可按需切换自备 Key 或连接桌面 Agent (MCP / CLI)"
+  },
+  "desktop.installTitle": {
+    "en": "Install steps",
+    "zh": "安装步骤"
+  },
+  "desktop.learnMore": {
+    "en": "Agent access guide",
+    "zh": "Agent 接入说明"
+  },
+  "desktop.licensesSubtitle": {
+    "en": "Manage Context-OS licenses and activated devices",
+    "zh": "管理 Context-OS 授权与已激活设备"
+  },
+  "desktop.needClientHint": {
+    "en": "Don't have the client yet? Download it before activating.",
+    "zh": "尚未安装客户端？请先下载再激活。"
+  },
+  "desktop.openSaaS": {
+    "en": "Open cloud app",
+    "zh": "打开云端应用"
+  },
+  "desktop.portableHint": {
+    "en": "Portable EXE: run after download (keep a stable folder).",
+    "zh": "当前为便携版 EXE：下载后直接运行即可（建议固定安装目录）。"
+  },
+  "desktop.productSubtitle": {
+    "en": "Private by default, official models out of the box or BYOK, callable by Claude / Codex via MCP / CLI. 100% free with no license fee.",
+    "zh": "数据本地私有，开箱即用官方模型或配置自备 Key，可被 Claude / Codex 等桌面 Agent 以 MCP / CLI 调用。完全免费，无需买断许可。"
+  },
+  "desktop.productTitle": {
+    "en": "AI knowledge base desktop client · free",
+    "zh": "AI 知识库桌面客户端 · 完全免费"
+  },
+  "desktop.sha256Label": {
+    "en": "SHA256",
+    "zh": "SHA256"
+  },
+  "desktop.signedHint": {
+    "en": "Installer is Authenticode-signed. SmartScreen may still warn for new/self-signed publishers — use Run anyway if needed.",
+    "zh": "安装包已 Authenticode 签名。若仍见 SmartScreen，选择「仍要运行」（自签/新发布者需积累信誉）。"
+  },
+  "desktop.smartScreenHint": {
+    "en": "If SmartScreen warns about an unknown app, choose Run anyway (normal until publisher reputation builds).",
+    "zh": "若 SmartScreen 提示未知应用，选择「仍要运行」（正式签名信誉积累前属正常现象）。"
+  },
+  "desktop.startingClient": {
+    "en": "Starting client…",
+    "zh": "正在启动客户端…"
+  },
+  "desktop.unsignedHint": {
+    "en": "Installer is not yet signed with a commercial code-signing certificate; SmartScreen may warn.",
+    "zh": "安装包尚未使用商业代码签名证书；SmartScreen 可能提示未知发布者。"
+  },
+  "desktop.versionLabel": {
+    "en": "Version",
+    "zh": "版本"
+  },
+  "desktop.welcomeTitle": {
+    "en": "Welcome to Context-OS",
+    "zh": "欢迎使用 Context-OS"
+  },
+  "desktopBuy.back": {
+    "en": "← Back to the client page",
+    "zh": "← 返回客户端页面"
+  },
+  "desktopBuy.downloadCta": {
+    "en": "Download the desktop app",
+    "zh": "下载桌面安装包"
+  },
+  "desktopBuy.freeBody": {
+    "en": "The desktop client is free to download and use. Cloud models still use wallet top-up or a membership plan.",
+    "zh": "根据最新 ADR-0010 规范，Context-OS 桌面客户端已面向所有用户免费开放下载与连接，无需额外激活授权卡。云端高级模型服务可通过按量充值或订阅 Pro 会员解锁。"
+  },
+  "desktopBuy.freeTitle": {
+    "en": "The client is free",
+    "zh": "客户端免费开放使用"
+  },
+  "desktopBuy.subtitle": {
+    "en": "Native desktop app with local or private compute",
+    "zh": "独立桌面版本，原生流畅体验，支持本地或私有算力"
+  },
+  "desktopBuy.title": {
+    "en": "Context-OS desktop client",
+    "zh": "Context-OS 桌面客户端购买与授权"
+  },
+  "desktopBuy.upgradeCta": {
+    "en": "Upgrade or top up →",
+    "zh": "升级云端会员 / 充值 →"
+  },
+  "gateCheckingSession": {
+    "en": "Checking your session...",
+    "zh": "正在检查登录状态…"
+  },
+  "gateRedirectingChat": {
+    "en": "Opening chat...",
+    "zh": "正在进入对话…"
+  },
+  "gateRedirectingLogin": {
+    "en": "Redirecting to sign in...",
+    "zh": "正在跳转到登录页…"
+  },
+  "helpAccountSettings": {
+    "en": "Account settings",
+    "zh": "账户设置"
+  },
+  "helpApiAccessAutomationBody": {
+    "en": "Scripts and coding agents should use a workspace API key with MCP. On the desktop client, context-os-mcp (stdio) forwards to 127.0.0.1:18080; HTTP POST /api/v1/mcp also works. Copy snippets from workspace API Access → For agents.",
+    "zh": "脚本与 coding agent 请用工作区 API 密钥调用 MCP。本机客户端可用 context-os-mcp（stdio）转发到 127.0.0.1:18080；也可用 HTTP POST /api/v1/mcp。配置片段在工作区 API Access「给 Agent 用」。"
+  },
+  "helpApiAccessAutomationStep1": {
+    "en": "Create a workspace in the UI, open API Access on that workspace, and mint a key with index/query.",
+    "zh": "在产品 UI 创建 Workspace，打开该工作区的 API Access，创建带 index/query 的密钥。"
+  },
+  "helpApiAccessAutomationStep2": {
+    "en": "Desktop: build or stage context-os (includes context-os-mcp), set CONTEXT_OS_API_KEY, then run context-os status.",
+    "zh": "本机客户端：构建或 stage context-os（含 context-os-mcp），设置 CONTEXT_OS_API_KEY 后运行 context-os status。"
+  },
+  "helpApiAccessAutomationStep3": {
+    "en": "Agents use stdio MCP (command = context-os-mcp); scripts can use context-os ingest/ask; always pass workspace_id.",
+    "zh": "Agent 用 stdio MCP（command = context-os-mcp）；脚本可用 context-os ingest/ask；工具参数带上 workspace_id。"
+  },
+  "helpApiAccessAutomationStep4": {
+    "en": "Share, members, and key management stay on the signed-in user UI only.",
+    "zh": "分享、成员与密钥管理仍只在用户会话 UI 中完成。"
+  },
+  "helpApiAccessAutomationTitle": {
+    "en": "For automation",
+    "zh": "需要自动化时"
+  },
+  "helpApiAccessBackHelp": {
+    "en": "Back to help",
+    "zh": "返回帮助中心"
+  },
+  "helpApiAccessOverviewTitle": {
+    "en": "What this page covers",
+    "zh": "你会在这里找到"
+  },
+  "helpApiAccessSubtitle": {
+    "en": "API access for personal users. Each workspace has its own keys; automated agents should use the agent docs.",
+    "zh": "面向个人用户的 API 接入说明。每个工作区单独管理密钥；自动化代理请使用 agent 文档。"
+  },
+  "helpApiAccessTitle": {
+    "en": "API Access",
+    "zh": "API 访问"
+  },
+  "helpBackDashboard": {
+    "en": "Back to dashboard",
+    "zh": "返回 Dashboard"
+  },
+  "helpBackHelp": {
+    "en": "Back to help",
+    "zh": "返回帮助中心"
+  },
+  "helpItemAccount1": {
+    "en": "Registration, sign-in, password reset, and sign-out are all supported.",
+    "zh": "支持注册、登录、重置密码与退出登录。"
+  },
+  "helpItemAccount2": {
+    "en": "Protected routes return to sign-in automatically when the session expires.",
+    "zh": "登录态失效时，受保护路由会自动回到登录页。"
+  },
+  "helpItemAccount3": {
+    "en": "If you hit a 401 or 403, confirm the current token is still valid first.",
+    "zh": "如果遇到 401 或 403，先确认当前 token 是否仍然有效。"
+  },
+  "helpItemApi1": {
+    "en": "Each workspace can create and revoke its own API keys.",
+    "zh": "每个工作区可以单独创建和撤销 API 密钥。"
+  },
+  "helpItemApi2": {
+    "en": "API Access shows scopes, rate limits, and one-time plaintext key reveal.",
+    "zh": "当前 API Access 页面提供权限、速率限制和一次性明文 key 展示。"
+  },
+  "helpItemApi3": {
+    "en": "Workspace API keys only cover uploads, URL imports, and knowledge-base queries for that workspace. Create the workspace in the app first, then mint a key here.",
+    "zh": "工作区 API 密钥只用于该工作区的资料上传、URL 导入和知识库查询；先在应用里创建工作区，再在此页创建密钥。"
+  },
+  "helpItemApiAgentDocs": {
+    "en": "Open the agent API docs",
+    "zh": "打开 Agent API 文档"
+  },
+  "helpItemApiHumanDocs": {
+    "en": "Open the human developer API docs",
+    "zh": "打开人类开发者 API 文档"
+  },
+  "helpItemCollab1": {
+    "en": "Share Center covers access levels, share links, member invites, and access logs.",
+    "zh": "Share Center 支持访问级别、分享链接、成员邀请和访问日志。"
+  },
+  "helpItemCollab2": {
+    "en": "Public share links open a read-only shared workspace page.",
+    "zh": "公开分享链接会落到只读的 shared workspace 页面。"
+  },
+  "helpItemCollab3": {
+    "en": "Invite flows let signed-out users sign in or register before accepting access.",
+    "zh": "邀请页支持未登录用户先登录或注册，再继续接受邀请。"
+  },
+  "helpItemDesktop1": {
+    "en": "The Windows client is free. Data can stay local; MCP / CLI work with desktop agents.",
+    "zh": "Windows 客户端完全免费下载使用；数据可留在本机，支持 MCP / CLI 供桌面 Agent 调用。"
+  },
+  "helpItemDesktop2": {
+    "en": "Sign in after installation to chat immediately with official models, or configure your own keys; use Run anyway if SmartScreen warns.",
+    "zh": "安装后登录账号即可直接问答（开箱自带官方模型），亦支持配置自备 Key；SmartScreen 提示时选择仍要运行。"
+  },
+  "helpItemDesktopBuy": {
+    "en": "Legacy license records (not primary)",
+    "zh": "历史授权记录（非主路径）"
+  },
+  "helpItemDesktopDownload": {
+    "en": "Download / learn about the client (free)",
+    "zh": "下载 / 了解客户端（免费）"
+  },
+  "helpItemDocs1": {
+    "en": "You can upload files and add URL-based sources.",
+    "zh": "支持上传文件和添加 URL 资料源。"
+  },
+  "helpItemDocs2": {
+    "en": "Sessions can limit retrieval to selected documents, which shapes what the knowledge base can cite.",
+    "zh": "会话可以按资料勾选限定检索范围，直接影响知识库回答所用的文档。"
+  },
+  "helpItemDocs3": {
+    "en": "If source state looks wrong, reindex it and watch status changes in the right rail.",
+    "zh": "资料状态异常时可以执行重建索引，并在右侧面板观察状态变化。"
+  },
+  "helpItemTroubleshooting1": {
+    "en": "If share pages are empty, confirm sharing is enabled. Desktop local libraries must publish to the cloud first.",
+    "zh": "分享页没有数据时，先确认该工作区是否已经启用分享链接。桌面本机库需先「发布到云端」再开分享。"
+  },
+  "helpItemTroubleshooting2": {
+    "en": "If API calls fail, check the key is still active, unexpired, and targeting the correct workspace path.",
+    "zh": "API 调用失败时，先确认密钥仍处于生效状态、没有过期，且命中了正确的 workspace 路径。"
+  },
+  "helpItemTroubleshooting3": {
+    "en": "If UI copy or state looks inconsistent, verify you are not still on a compatibility redirect path.",
+    "zh": "界面文案或状态不一致时，优先检查当前路由是否仍停留在兼容跳转链路上。"
+  },
+  "helpItemWorkspace1": {
+    "en": "Each workspace contains history on the left, chat in the middle, and sources plus notes on the right.",
+    "zh": "每个工作区包含左侧历史、中间对话区，以及右侧资料和笔记面板。"
+  },
+  "helpItemWorkspace2": {
+    "en": "The history list supports filtering, and opening a thread restores its messages.",
+    "zh": "历史列表支持关键词过滤；点击已有线程会恢复对应会话消息。"
+  },
+  "helpItemWorkspace3": {
+    "en": "The top bar now provides Share, API Access, and New Workspace shortcuts; account settings live in the account menu on the right.",
+    "zh": "顶栏现在提供分享、API Access 和新建工作区快捷入口，账户相关设置收进右侧账户菜单。"
+  },
+  "helpItemWrite1": {
+    "en": "Enter a topic to auto-research, outline, and draft a long-form article in sections.",
+    "zh": "输入主题后自动调研、生成大纲并分段撰写长文。"
+  },
+  "helpItemWrite2": {
+    "en": "Includes statistical-fingerprint refinement to reduce detectable AI patterns.",
+    "zh": "支持统计指纹精修，降低 AI 生成痕迹。"
+  },
+  "helpItemWrite3": {
+    "en": "Falls back to single-path research when one research path fails.",
+    "zh": "单路调研失败时会自动降级为单路模式。"
+  },
+  "helpItemWriteDocs": {
+    "en": "Read Write mode documentation",
+    "zh": "查看 Write 模式文档"
+  },
+  "helpItemWriteMore": {
+    "en": "Learn about Write mode (long-form auto-writing)",
+    "zh": "了解 Write 模式（长文自动写作）"
+  },
+  "helpSectionAccountTitle": {
+    "en": "1. Accounts & authentication",
+    "zh": "1. 账户与认证"
+  },
+  "helpSectionApiTitle": {
+    "en": "5. API access",
+    "zh": "5. API 接入"
+  },
+  "helpSectionCollabTitle": {
+    "en": "4. Sharing & collaboration",
+    "zh": "4. 分享与协作"
+  },
+  "helpSectionDesktopTitle": {
+    "en": "7. Client",
+    "zh": "7. 客户端"
+  },
+  "helpSectionDocsTitle": {
+    "en": "3. Source management & doc scope",
+    "zh": "3. 资料管理与 Doc Scope"
+  },
+  "helpSectionTroubleshootingTitle": {
+    "en": "6. Common troubleshooting",
+    "zh": "6. 常见排查"
+  },
+  "helpSectionWorkspaceTitle": {
+    "en": "2. Workspaces & sessions",
+    "zh": "2. 工作区与会话"
+  },
+  "helpSectionWriteTitle": {
+    "en": "Write mode",
+    "zh": "Write 模式"
+  },
+  "helpSubtitle": {
+    "en": "A wiki-style guide to Context-OS core workflows, API boundaries, and the first troubleshooting path to check.",
+    "zh": "按 Wiki 方式整理 Context-OS 的核心工作流、API 能力边界，以及出现问题时的优先排查路径。"
+  },
+  "helpTitle": {
+    "en": "Help center",
+    "zh": "帮助中心"
+  },
+  "helpWriteDegradeBody": {
+    "en": "When quality checks are not fully satisfied, the article is still delivered (soft exit) with a validation warning. If one research path fails, it falls back to single-path.",
+    "zh": "当质量校验未全部通过时，文章仍会交付（软结束），并附带校验警告。单路调研失败时自动降级为单路。"
+  },
+  "helpWriteDegradeTitle": {
+    "en": "Degradation",
+    "zh": "降级说明"
+  },
+  "helpWriteLlmCalls": {
+    "en": "LLM calls",
+    "zh": "LLM 调用"
+  },
+  "helpWriteMetricColumn": {
+    "en": "Metric",
+    "zh": "指标"
+  },
+  "helpWritePageSubtitle": {
+    "en": "Automatically writes long-form articles from a topic, with built-in research, outlining, sectioned drafting, and statistical-fingerprint refinement.",
+    "zh": "根据主题自动撰写长文，内置调研、大纲、分段写作与统计指纹精修。"
+  },
+  "helpWritePerArticle": {
+    "en": "article",
+    "zh": "篇"
+  },
+  "helpWriteRangeColumn": {
+    "en": "Typical range",
+    "zh": "典型范围"
+  },
+  "helpWriteTokenFull": {
+    "en": "Token (full)",
+    "zh": "Token（全文）"
+  },
+  "helpWriteUsageTitle": {
+    "en": "Usage expectations",
+    "zh": "用量预期"
+  },
+  "helpWriteWallClock": {
+    "en": "Time taken",
+    "zh": "用时"
+  },
+  "home.seoBulletAgents": {
+    "en": "External agents (MCP / API): mint per-workspace keys and connect the knowledge base to agents like Cursor or Claude over MCP or HTTP API.",
+    "zh": "外接 Agent（MCP / API）：每个工作区可单独创建密钥，通过 MCP 或 HTTP API 把知识库接到 Cursor、Claude 等 Agent。"
+  },
+  "home.seoBulletDiff": {
+    "en": "Unique advantage in open connectivity: differing from standalone notes, Context OS turns ingested docs into structured retrieval surfaces accessible to external agents via MCP/API, with shareable guest workspaces (see comparison guide).",
+    "zh": "独特优势在于开放连接：与单机笔记或封闭知识库形成显著差异，Context OS 文档入库后即成结构化检索面，可直接通过 MCP / API 开放给外部 Agent 调用，并支持向访客分享免登录公开库（详见选型对比）。"
+  },
+  "home.seoBulletDocs": {
+    "en": "Docs in, answers out: upload files or paste URLs as sources; scope retrieval per workspace, with answers traceable to specific documents.",
+    "zh": "文档入库与问答：上传文件或粘贴 URL 即成资料源；提问可按库限定检索范围，回答可溯源到具体文档。"
+  },
+  "home.seoBulletShare": {
+    "en": "Membership & share slots: start free; upgrade for more shareable slots so guests can browse public workspaces without signing in.",
+    "zh": "会员与分享名额：免费档即可建仓；升级会员获得更多可分享名额，访客免登录浏览公开库。"
+  },
+  "home.seoCtaAgents": {
+    "en": "Agent access guide",
+    "zh": "Agent 接入说明"
+  },
+  "home.seoCtaCompare": {
+    "en": "Compare",
+    "zh": "选型对比"
+  },
+  "home.seoCtaEnter": {
+    "en": "Open the app",
+    "zh": "进入应用"
+  },
+  "home.seoCtaFaq": {
+    "en": "FAQ",
+    "zh": "FAQ"
+  },
+  "home.seoCtaIntegrations": {
+    "en": "Integrations",
+    "zh": "集成承接"
+  },
+  "home.seoCtaPricing": {
+    "en": "View pricing",
+    "zh": "查看定价"
+  },
+  "home.seoSectionAgents": {
+    "en": "External agents (MCP / API)",
+    "zh": "外接 Agent（MCP / API）"
+  },
+  "home.seoSectionDiff": {
+    "en": "Core advantages & differentiation",
+    "zh": "核心优势与差异化定位"
+  },
+  "home.seoSectionDocs": {
+    "en": "Documents & Q&A",
+    "zh": "文档入库与问答"
+  },
+  "home.seoSectionShare": {
+    "en": "Membership & share slots",
+    "zh": "会员与可分享名额"
+  },
+  "home.seoSubtitle": {
+    "en": "Turn scattered documents into a searchable, shareable, AI-citable personal AI knowledge base — ask questions yourself, or open a workspace to guests and external agents.",
+    "zh": "把分散的文档变成可检索、可分享、可被 AI 引用的个人 AI 知识库：自己问答，也可以把库开放给访客或外接 Agent。"
+  },
+  "home.seoTitle": {
+    "en": "Context OS by ContextLM — a locally deployable personal AI knowledge base",
+    "zh": "Context OS（ContextLM 旗下）— 可本地部署的个人 AI 知识库"
+  },
+  "home.seoUpdated": {
+    "en": "Page copy last updated: {date}",
+    "zh": "页面说明更新日期：{date}"
+  },
+  "legalBackToCenter": {
+    "en": "Back to legal center",
+    "zh": "返回法律中心"
+  },
+  "legalConsentAnd": {
+    "en": " and ",
+    "zh": "与"
+  },
+  "legalConsentPrefix": {
+    "en": "I have read and agree to the ",
+    "zh": "我已阅读并同意"
+  },
+  "legalConsentPrivacy": {
+    "en": "Privacy Policy",
+    "zh": "《隐私政策》"
+  },
+  "legalConsentTerms": {
+    "en": "Terms of Service",
+    "zh": "《用户服务协议》"
+  },
+  "legalFooterLicenses": {
+    "en": "Open source",
+    "zh": "开源声明"
+  },
+  "legalFooterPrivacy": {
+    "en": "Privacy",
+    "zh": "隐私政策"
+  },
+  "legalFooterTerms": {
+    "en": "Terms",
+    "zh": "用户协议"
+  },
+  "legalLastUpdated": {
+    "en": "Last updated: {date}",
+    "zh": "最后更新：{date}"
+  },
+  "legalReacceptanceBody": {
+    "en": "We updated the Terms of Service or Privacy Policy. Read and accept the latest versions before continuing.",
+    "zh": "我们更新了用户服务协议或隐私政策。继续使用前，请阅读并确认最新版本。"
+  },
+  "legalReacceptanceConfirm": {
+    "en": "Confirm and continue",
+    "zh": "确认并继续"
+  },
+  "legalReacceptanceConsentRequired": {
+    "en": "Read and accept the latest Terms of Service and Privacy Policy first",
+    "zh": "请先阅读并同意最新版用户协议与隐私政策。"
+  },
+  "legalReacceptanceSubmitting": {
+    "en": "Submitting...",
+    "zh": "提交中…"
+  },
+  "legalReacceptanceTitle": {
+    "en": "Terms updated",
+    "zh": "协议已更新"
+  },
+  "legalTocAria": {
+    "en": "Document contents",
+    "zh": "文档目录"
+  },
+  "legalTocTitle": {
+    "en": "Contents",
+    "zh": "目录"
+  },
+  "legalVersion": {
+    "en": "Version: {version}",
+    "zh": "版本：{version}"
+  },
+  "marketingChrome.enterApp": {
+    "en": "Open app",
+    "zh": "进入应用"
+  },
+  "marketingChrome.legal": {
+    "en": "Legal",
+    "zh": "法律"
+  },
+  "marketingChrome.login": {
+    "en": "Log in",
+    "zh": "登录"
+  },
+  "marketingChrome.navAria": {
+    "en": "Marketing navigation",
+    "zh": "营销导航"
+  },
+  "marketingChrome.navLabel": {
+    "en": "Product navigation",
+    "zh": "产品导航"
+  },
+  "notFound.backToChat": {
+    "en": "Back to chat",
+    "zh": "返回对话"
+  },
+  "notFound.title": {
+    "en": "This page does not exist.",
+    "zh": "页面不存在。"
+  },
+  "notifications.close": {
+    "en": "Close notifications",
+    "zh": "关闭通知"
+  },
+  "notifications.emptyBody": {
+    "en": "Account notifications will show up here.",
+    "zh": "账户通知会显示在这里。"
+  },
+  "notifications.emptyTitle": {
+    "en": "No notifications",
+    "zh": "暂无通知"
+  },
+  "notifications.listLabel": {
+    "en": "Notifications",
+    "zh": "通知列表"
+  },
+  "notifications.loading": {
+    "en": "Loading notifications…",
+    "zh": "正在加载通知…"
+  },
+  "notifications.trigger": {
+    "en": "Notifications",
+    "zh": "通知"
+  },
+  "paywall.body": {
+    "en": "You may have hit the free allowance, or this library feature needs a paid plan.",
+    "zh": "您可能已超出免费体验额度，或正在访问受限的持久知识库高级能力。升级后可立享高速专属通道。"
+  },
+  "paywall.pricingCta": {
+    "en": "View pricing and upgrade →",
+    "zh": "查看定价与升级套餐 →"
+  },
+  "paywall.subtitle": {
+    "en": "This needs a Pro plan or wallet balance",
+    "zh": "当前功能需要 Pro 专业版或可用钱包余额"
+  },
+  "paywall.title": {
+    "en": "Upgrade to continue",
+    "zh": "需升级会员以继续使用"
+  },
+  "paywall.topupCta": {
+    "en": "Top up the wallet",
+    "zh": "按需充值钱包余额"
+  },
+  "paywallContinueFree": {
+    "en": "Not now",
+    "zh": "稍后再说"
+  },
+  "paywallErrorBackDashboard": {
+    "en": "Back to dashboard",
+    "zh": "返回工作台"
+  },
+  "paywallErrorLoad": {
+    "en": "Unable to load upgrade details. Please try again later.",
+    "zh": "无法加载升级信息，请稍后重试。"
+  },
+  "paywallLoading": {
+    "en": "Loading...",
+    "zh": "加载中…"
+  },
+  "paywallResetHint": {
+    "en": "Or add a custom provider so chat does not spend platform balance",
+    "zh": "也可配置自定义 Provider，对话不再消耗平台余额。"
+  },
+  "paywallSubtitle5h": {
+    "en": "Without balance or a custom provider, the platform may throttle. Top up balance, add a custom provider, or upgrade share slots.",
+    "zh": "余额不足且未配置自定义 Provider 时，平台会暂时限速。充值余额、配置自定义 Provider，或升级分享名额即可恢复。"
+  },
+  "paywallSubtitle7d": {
+    "en": "Without balance or a custom provider, the platform may throttle. Top up balance, add a custom provider, or upgrade share slots.",
+    "zh": "余额不足且未配置自定义 Provider 时，平台会暂时限速。充值余额、配置自定义 Provider，或升级分享名额即可恢复。"
+  },
+  "paywallTitle5h": {
+    "en": "Platform protective limit reached",
+    "zh": "平台保护限速已触发"
+  },
+  "paywallTitle7d": {
+    "en": "Platform protective limit reached",
+    "zh": "平台保护限速已触发"
+  },
+  "paywallViewPlans": {
+    "en": "View membership plans",
+    "zh": "查看会员档位"
+  },
+  "planEntry.upgrade": {
+    "en": "Upgrade",
+    "zh": "升级"
+  },
+  "planEntry.viewSubscription": {
+    "en": "Usage",
+    "zh": "用量信息"
+  },
+  "pricing.agreeLabel": {
+    "en": "I have read and agree to the terms and top-up notes",
+    "zh": "我已阅读并同意用户服务协议与充值说明"
+  },
+  "pricing.agreeRequired": {
+    "en": "Accept the terms before topping up.",
+    "zh": "请先同意服务条款后再充值。"
+  },
+  "pricing.alipayButton": {
+    "en": "Alipay (sandbox / test)",
+    "zh": "支付宝 (Alipay 沙箱/测试)"
+  },
+  "pricing.checkoutFailed": {
+    "en": "Could not create checkout: {error}",
+    "zh": "创建结账会话失败：{error}"
+  },
+  "pricing.creemButton": {
+    "en": "Creem (intl cards / test)",
+    "zh": "Creem (国际卡/测试)"
+  },
+  "pricing.fallbackFreeDesc": {
+    "en": "Personal Q&A and a light start",
+    "zh": "适合个人基础问答与轻量体验"
+  },
+  "pricing.fallbackFreeName": {
+    "en": "Free",
+    "zh": "免费体验版"
+  },
+  "pricing.fallbackPriceMonth": {
+    "en": "¥99/month",
+    "zh": "¥99/月"
+  },
+  "pricing.fallbackPriceYear": {
+    "en": "¥999/year",
+    "zh": "¥999/年"
+  },
+  "pricing.fallbackProDesc": {
+    "en": "Deep libraries, persistent sources, and faster agents",
+    "zh": "深度知识库构建、无限持久资料与高速 Agent"
+  },
+  "pricing.fallbackProName": {
+    "en": "Pro",
+    "zh": "Pro 专业版"
+  },
+  "pricing.faqAnytime": {
+    "en": "Can I top up anytime?",
+    "zh": "可以随时充值吗？"
+  },
+  "pricing.faqAnytimeAnswer": {
+    "en": "Yes. Credit is available as soon as payment completes.",
+    "zh": "可以。充值完成后余额立即到账。"
+  },
+  "pricing.faqBalance": {
+    "en": "What is the wallet for?",
+    "zh": "余额用在哪里？"
+  },
+  "pricing.faqBalanceAnswer": {
+    "en": "Platform model calls, document parse, and web search debit the wallet.",
+    "zh": "平台模型推理、文档解析与网络搜索按量扣费。"
+  },
+  "pricing.loginRequired": {
+    "en": "Sign in to top up",
+    "zh": "请先登录后进行充值"
+  },
+  "pricing.payDialog": {
+    "en": "Scan to pay",
+    "zh": "扫码支付"
+  },
+  "pricing.payHint": {
+    "en": "Complete payment with the selected method.",
+    "zh": "请使用所选支付方式完成付款。"
+  },
+  "pricing.payLink": {
+    "en": "Open the payment gateway (test) →",
+    "zh": "点击前往支付网关（测试模式）→"
+  },
+  "pricing.plansFallback": {
+    "en": "Plans are temporarily unavailable. Showing product copy.",
+    "zh": "套餐接口暂时不可用，以下为营销说明。"
+  },
+  "pricing.topupNow": {
+    "en": "Top up now",
+    "zh": "立即充值"
+  },
+  "pricingFaqReset": {
+    "en": "Who pays for visitor questions?",
+    "zh": "访客提问谁付费？"
+  },
+  "pricingFaqResetAnswer": {
+    "en": "On shared workspaces, the workspace owner pays model costs. Configure a custom provider in Settings if needed.",
+    "zh": "分享问答的成本由工作区所有者承担。可在设置中配置自定义 Provider。"
+  },
+  "pricingFaqTitle": {
+    "en": "FAQ",
+    "zh": "常见问题"
+  },
+  "pricingFaqToken": {
+    "en": "What am I buying?",
+    "zh": "主商品是什么？"
+  },
+  "pricingFaqTokenAnswer": {
+    "en": "Primary product is shareable workspace slots (Free 3 / Plus 10 / Pro 100). The client and private workspaces are free.",
+    "zh": "主商品是可分享工作区名额（Free 3 / Plus 10 / Pro 100）。客户端与仅自己使用的工作区免费。"
+  },
+  "pricingFaqTopup": {
+    "en": "Top-up vs membership?",
+    "zh": "充值和会员有什么区别？"
+  },
+  "pricingFaqTopupAnswer": {
+    "en": "Membership controls share slots; top-up is the model wallet. Buy either independently. Upgrade tiers above; top up with packs below on this page.",
+    "zh": "会员控制可分享工作区名额；充值是模型调用余额。两者可单独购买。本页上方升级档位，下方可直接选套餐包充值。"
+  },
+  "pricingFaqUpgrade": {
+    "en": "Does upgrade take effect immediately?",
+    "zh": "升级后立即生效吗？"
+  },
+  "pricingFaqUpgradeAnswer": {
+    "en": "Effective immediately after payment. Downgrade at end of billing cycle.",
+    "zh": "支付成功后立即生效。降级在当前计费周期结束时生效。"
+  },
+  "pricingMembershipLead": {
+    "en": "Pick a tier and check out here. You are buying concurrent shareable workspace slots.",
+    "zh": "选择档位后在本页完成支付。主商品是可同时开启分享的工作区数量。"
+  },
+  "pricingMembershipTitle": {
+    "en": "Membership · shareable workspaces",
+    "zh": "会员档位 · 可分享工作区"
+  },
+  "pricingMonthly": {
+    "en": "Monthly",
+    "zh": "月付"
+  },
+  "pricingMonthlyInterval": {
+    "en": "Billed monthly",
+    "zh": "按月计费"
+  },
+  "pricingPayMethodAlipay": {
+    "en": "Alipay",
+    "zh": "支付宝"
+  },
+  "pricingPayMethodAlipayHint": {
+    "en": "CNY QR code",
+    "zh": "人民币扫码"
+  },
+  "pricingPayMethodCreemHint": {
+    "en": "USD · intl cards",
+    "zh": "美元 · 国际卡"
+  },
+  "pricingPayMethodLabel": {
+    "en": "Payment method",
+    "zh": "支付方式"
+  },
+  "pricingPayMethodRecommended": {
+    "en": "Recommended",
+    "zh": "推荐"
+  },
+  "pricingPlanFreeDescription": {
+    "en": "Client and private workspaces free; 3 shareable workspaces.",
+    "zh": "客户端与私有工作区免费；可分享工作区 3 个。"
+  },
+  "pricingPlanPlusDescription": {
+    "en": "10 shareable workspaces for team sharing.",
+    "zh": "可分享工作区 10 个，适合团队对外协作。"
+  },
+  "pricingPlanProDescription": {
+    "en": "100 shareable workspaces for scale.",
+    "zh": "可分享工作区 100 个，适合规模化知识服务。"
+  },
+  "pricingShareSlots": {
+    "en": "{n} shareable workspaces",
+    "zh": "可分享工作区 {n} 个"
+  },
+  "pricingSubtitle": {
+    "en": "Client free · private use free. Membership unlocks share slots; platform models use wallet top-up.",
+    "zh": "客户端免费 · 私有使用免费。会员解锁可分享名额；平台模型调用另用余额充值。"
+  },
+  "pricingTierPlusBadge": {
+    "en": "Recommended",
+    "zh": "推荐"
+  },
+  "pricingTitle": {
+    "en": "Choose your plan",
+    "zh": "选择适合你的方案"
+  },
+  "pricingTopupBody": {
+    "en": "Wallet is independent of plan. Platform models, retrieval, and shared guest Q&A (billed to the workspace owner) debit the wallet. With a custom provider, the final answer uses your quota; document indexing, the retrieval worker (Qwen3.7 Flash), and embeddings still debit the wallet.",
+    "zh": "余额与会员独立。使用平台模型、向量检索，以及分享页访客问答（所有者付费）时从余额扣费。已配置自定义 Provider 时，最终回答走你自己的额度；文档索引、检索子代理（Qwen3.7 Flash）与向量检索仍从余额扣费。"
+  },
+  "pricingTopupByokCta": {
+    "en": "Configure providers",
+    "zh": "配置自定义 Provider"
+  },
+  "pricingTopupCreemHint": {
+    "en": "Credit is CNY-denominated; Creem charges in USD — exact amount shown at checkout.",
+    "zh": "充值额度以人民币计价；Creem 渠道按美元结算，金额以收银台显示为准。"
+  },
+  "pricingTopupFailed": {
+    "en": "Top-up failed: {message}",
+    "zh": "充值发起失败：{message}"
+  },
+  "pricingTopupLoading": {
+    "en": "Creating order…",
+    "zh": "创建订单中…"
+  },
+  "pricingTopupLoginHint": {
+    "en": "If you are signed out, top-up sends you to log in, then back here.",
+    "zh": "未登录时点击充值会先进入登录，完成后回到本页。"
+  },
+  "pricingTopupPackAction": {
+    "en": "Top up {label}",
+    "zh": "充值 {label}"
+  },
+  "pricingTopupPacksLabel": {
+    "en": "Choose a pack",
+    "zh": "选择充值金额"
+  },
+  "pricingTopupPoint1": {
+    "en": "Pick a pack on the right; top up here after sign-in",
+    "zh": "在本页右侧选择套餐包，登录后可直接支付充值"
+  },
+  "pricingTopupPoint2": {
+    "en": "Prefer your own key for answers: configure a provider to cut chat billing (indexing and the retrieval worker still use Qwen3.7 Flash)",
+    "zh": "不想用平台模型写回答：可改配自备 Key，减少对话扣费（文档索引与检索子代理仍走 Qwen3.7 Flash）"
+  },
+  "pricingTopupPoint3": {
+    "en": "Upgrade-only adds share slots; platform models still need wallet or BYOK",
+    "zh": "只升级会员不充值：分享名额增加，但平台模型仍需余额或 BYOK"
+  },
+  "pricingTopupTitle": {
+    "en": "Top-up · model wallet",
+    "zh": "充值 · 模型调用余额"
+  },
+  "pricingUpgradeTo": {
+    "en": "Upgrade to {name}",
+    "zh": "升级 {name}"
+  },
+  "pricingViewDetails": {
+    "en": "View {name} details",
+    "zh": "查看 {name} 详情"
+  },
+  "pricingWalletBalance": {
+    "en": "Balance {balance}",
+    "zh": "当前余额 {balance}"
+  },
+  "pricingYearly": {
+    "en": "Yearly",
+    "zh": "年付"
+  },
+  "pricingYearlyHint": {
+    "en": "~10 months price",
+    "zh": "约 10 个月价"
+  },
+  "pricingYearlyInterval": {
+    "en": "Billed yearly",
+    "zh": "按年计费"
+  },
+  "productChrome.brandHome": {
+    "en": "Brand site",
+    "zh": "品牌官网"
+  },
+  "productChrome.brandHomeShort": {
+    "en": "Brand site",
+    "zh": "品牌首页"
+  },
+  "productChrome.client": {
+    "en": "Client",
+    "zh": "客户端"
+  },
+  "productChrome.footerNavLabel": {
+    "en": "Product and legal links",
+    "zh": "产品与法律链接"
+  },
+  "productChrome.help": {
+    "en": "Help",
+    "zh": "产品帮助"
+  },
+  "productChrome.legalCenter": {
+    "en": "Legal center",
+    "zh": "法律中心"
+  },
+  "productChrome.licenses": {
+    "en": "Open source",
+    "zh": "开源声明"
+  },
+  "productChrome.pricing": {
+    "en": "Pricing",
+    "zh": "定价"
+  },
+  "productChrome.privacy": {
+    "en": "Privacy",
+    "zh": "隐私政策"
+  },
+  "productChrome.productHome": {
+    "en": "Dashboard",
+    "zh": "工作台"
+  },
+  "productChrome.terms": {
+    "en": "Terms",
+    "zh": "用户协议"
+  },
+  "productChrome.topup": {
+    "en": "Top-up",
+    "zh": "充值"
+  },
+  "productGuide.billing.linkPricing": {
+    "en": "Pricing & top-up",
+    "zh": "查看定价与充值说明"
+  },
+  "productGuide.billing.memberBody": {
+    "en": "Primary product is shareable workspace slots. Client and private workspaces stay free. Upgrading means more concurrent public shares.",
+    "zh": "主商品是可分享工作区名额。客户端与仅自己使用的工作区不收费。升级会员 = 能同时对外分享更多库。"
+  },
+  "productGuide.billing.memberTitle": {
+    "en": "Membership (Free / Plus / Pro)",
+    "zh": "会员（Free / Plus / Pro）"
+  },
+  "productGuide.billing.title": {
+    "en": "What membership vs top-up does",
+    "zh": "会员是干什么的 · 充值是干什么的"
+  },
+  "productGuide.billing.topupBody": {
+    "en": "Wallet pays platform model calls and metered retrieval. Independent of plan — top up with packs on the pricing page, or upgrade only.",
+    "zh": "余额用于平台模型调用与向量检索等计量能力。与会员档位独立：在定价页选套餐包即可充值，也可以只升级不充值。"
+  },
+  "productGuide.billing.topupTitle": {
+    "en": "Top-up (model wallet)",
+    "zh": "充值（模型调用余额）"
+  },
+  "productGuide.client.body": {
+    "en": "The client is free: data can stay local, with MCP / CLI for desktop agents (Claude Code, Codex, …). Public sharing requires publish-to-cloud (vector import, no re-ingest), then cloud share slots.",
+    "zh": "客户端完全免费：数据默认可留在本机，支持 MCP / CLI，可被 Claude Code、Codex 等桌面 Agent 调用。对外分享需先发布到云端（向量导入、不重灌库），再使用云端名额。"
+  },
+  "productGuide.client.link": {
+    "en": "Open client page",
+    "zh": "打开客户端介绍页"
+  },
+  "productGuide.client.title": {
+    "en": "Desktop client",
+    "zh": "本地客户端"
+  },
+  "productGuide.fullHelp": {
+    "en": "Full help page →",
+    "zh": "打开完整帮助页 →"
+  },
+  "productGuide.graph.api": {
+    "en": "API / agent access",
+    "zh": "API / Agent 接入"
+  },
+  "productGuide.graph.hint": {
+    "en": "Modules cross-link; continue from any entry.",
+    "zh": "模块之间互相引用；从任一入口继续深入。"
+  },
+  "productGuide.graph.providers": {
+    "en": "Providers",
+    "zh": "模型服务商"
+  },
+  "productGuide.graph.title": {
+    "en": "Related entries (graph)",
+    "zh": "相关入口（图谱）"
+  },
+  "productGuide.llm.byokBody": {
+    "en": "Add your own API keys under Settings → Providers. The final answer uses your quota. Qwen3.7 Flash is the fast model for both document indexing and the retrieval worker.",
+    "zh": "在设置 → 模型服务商中填入你自己的 API Key（如 DeepSeek / 百炼 / SiliconFlow）。最终回答走你自己的额度。Qwen3.7 Flash 作为快速模型，同时用于文档索引和检索子代理。"
+  },
+  "productGuide.llm.byokTitle": {
+    "en": "BYOK · custom provider",
+    "zh": "BYOK · 自定义 Provider"
+  },
+  "productGuide.llm.linkBilling": {
+    "en": "Top up on pricing",
+    "zh": "定价页充值"
+  },
+  "productGuide.llm.linkProviders": {
+    "en": "Configure providers",
+    "zh": "配置模型服务商"
+  },
+  "productGuide.llm.platformBody": {
+    "en": "Platform models debit your wallet. Guest Q&A on shared pages is billed to the workspace owner. Top up on the pricing page.",
+    "zh": "使用平台模型时从余额扣费。访客在分享页提问时默认由工作区所有者承担。可在定价页直接充值。"
+  },
+  "productGuide.llm.platformTitle": {
+    "en": "Platform models · wallet",
+    "zh": "平台代购 · 余额扣费"
+  },
+  "productGuide.llm.title": {
+    "en": "Two ways to use LLMs",
+    "zh": "两种 LLM 方式"
+  },
+  "productGuide.nav.billing": {
+    "en": "Plan & top-up",
+    "zh": "会员与充值"
+  },
+  "productGuide.nav.client": {
+    "en": "Client",
+    "zh": "客户端"
+  },
+  "productGuide.nav.graph": {
+    "en": "Related links",
+    "zh": "相关入口"
+  },
+  "productGuide.nav.llm": {
+    "en": "Two LLM paths",
+    "zh": "两种 LLM"
+  },
+  "productGuide.nav.overview": {
+    "en": "Overview",
+    "zh": "总览"
+  },
+  "productGuide.nav.settings": {
+    "en": "Settings & data",
+    "zh": "设置与数据"
+  },
+  "productGuide.nav.share": {
+    "en": "Share",
+    "zh": "分享"
+  },
+  "productGuide.nav.workspace": {
+    "en": "Workspaces",
+    "zh": "工作区"
+  },
+  "productGuide.open": {
+    "en": "Guide",
+    "zh": "上手"
+  },
+  "productGuide.openFull": {
+    "en": "Open overview",
+    "zh": "打开总览"
+  },
+  "productGuide.openHint": {
+    "en": "How the product fits together (not primary nav)",
+    "zh": "产品说明与模块关系（非主导航）"
+  },
+  "productGuide.overview.body": {
+    "en": "Workspaces are the hub: upload → index → Q&A; enable share when you publish. The desktop client exposes the same stack to agents via MCP / CLI.",
+    "zh": "Context-OS 以工作区为中心：上传文档 → 索引 → 问答；需要对外时再开启分享。本地客户端可把同一能力接到桌面 Agent（MCP / CLI）。"
+  },
+  "productGuide.overview.step1": {
+    "en": "Create or open a workspace on the dashboard",
+    "zh": "在工作台新建或打开一个工作区"
+  },
+  "productGuide.overview.step2": {
+    "en": "Configure LLM (BYOK or platform) then upload docs",
+    "zh": "配置 LLM（BYOK 或平台额度）后上传文档"
+  },
+  "productGuide.overview.step3": {
+    "en": "Chat in the workspace; turn on share for public Q&A",
+    "zh": "在对话里提问；需要对外时打开分享与访客问答"
+  },
+  "productGuide.settings.body": {
+    "en": "Account, preferences, billing, security, and notifications live in Settings — plus providers, usage, and referrals.",
+    "zh": "账户、偏好、账单、安全与通知集中在设置。模型服务商、用量与邀请奖励也在这里管理。"
+  },
+  "productGuide.settings.link": {
+    "en": "Open settings",
+    "zh": "打开设置"
+  },
+  "productGuide.settings.title": {
+    "en": "Settings & data",
+    "zh": "设置与数据"
+  },
+  "productGuide.share.body": {
+    "en": "Enable share so guests can browse or ask. Plans limit how many workspaces can be shared at once (Free 3 / Plus 10 / Pro 100), not total workspaces. Manage data, visitors, and trends in Share center and Analytics.",
+    "zh": "在工作区开启分享后，访客可浏览或提问。档位限制的是「可同时开启分享的工作区数量」（Free 3 / Plus 10 / Pro 100），不是工作区总数。数据管理、访客与趋势见工作区内分享中心与数据分析。"
+  },
+  "productGuide.share.linkAnalytics": {
+    "en": "Share analytics",
+    "zh": "分享数据分析"
+  },
+  "productGuide.share.title": {
+    "en": "Share · settings · use cases",
+    "zh": "分享 · 设置 · 场景"
+  },
+  "productGuide.share.useCases": {
+    "en": "Common uses: public KB, team handbooks, product FAQ, public research notes.",
+    "zh": "常见场景：对外知识库、团队说明页、产品 FAQ、研究笔记公开副本。"
+  },
+  "productGuide.subtitle": {
+    "en": "Modules linked like a knowledge graph: LLM, workspaces, share, client, billing. Use the left topics or linked entries.",
+    "zh": "像知识图谱一样串联各模块：LLM、工作区、分享、客户端与计费。点左侧主题或下方链接即可跳转。"
+  },
+  "productGuide.title": {
+    "en": "Guide · product map",
+    "zh": "上手 · 产品说明"
+  },
+  "productGuide.workspace.body": {
+    "en": "Each workspace is an isolated knowledge base: sources, notes, chat, and share state do not cross. The source count on a card is how many docs are attached.",
+    "zh": "每个工作区是一套独立知识库：来源、笔记、对话与分享状态互不串线。卡片上的「来源数」表示已接入文档量。"
+  },
+  "productGuide.workspace.link": {
+    "en": "Back to dashboard",
+    "zh": "回到工作台"
+  },
+  "productGuide.workspace.title": {
+    "en": "Workspaces & documents",
+    "zh": "工作区与文档"
+  },
+  "productName.client": {
+    "en": "Context-OS",
+    "zh": "Context-OS"
+  },
+  "productName.short": {
+    "en": "Context-OS",
+    "zh": "Context-OS"
+  },
+  "progress.compose_answer": {
+    "en": "Writing the answer",
+    "zh": "正在整理回答"
+  },
+  "progress.delegate_rag": {
+    "en": "Retrieving workspace documents",
+    "zh": "正在检索工作区文档"
+  },
+  "progress.delegate_search": {
+    "en": "Retrieving web sources",
+    "zh": "正在检索网页"
+  },
+  "progress.detail.emptyQuery": {
+    "en": "Query “{query}”",
+    "zh": "检索式「{query}」"
+  },
+  "progress.detail.hitsOnly": {
+    "en": "{n} hits",
+    "zh": "命中 {n} 条"
+  },
+  "progress.detail.query": {
+    "en": "“{query}”",
+    "zh": "「{query}」"
+  },
+  "progress.detail.queryWithHits": {
+    "en": "“{query}” · {n} hits",
+    "zh": "「{query}」· 命中 {n} 条"
+  },
+  "progress.fallback_unavailable": {
+    "en": "Fallback retrieval unavailable",
+    "zh": "补充检索不可用"
+  },
+  "progress.fetch_url.done": {
+    "en": "Page fetch complete",
+    "zh": "完成读取网页"
+  },
+  "progress.fetch_url.empty": {
+    "en": "Could not fetch page",
+    "zh": "未能读取网页"
+  },
+  "progress.fetch_url.running": {
+    "en": "Fetching page",
+    "zh": "正在读取网页"
+  },
+  "progress.final_check_degraded": {
+    "en": "Insufficient material; using a short notice",
+    "zh": "材料不足，使用简短说明"
+  },
+  "progress.final_check_fallback": {
+    "en": "Answer format incomplete; using a short notice",
+    "zh": "答复格式仍不完整，使用简短说明"
+  },
+  "progress.final_check_repair": {
+    "en": "Fixing answer format",
+    "zh": "正在整理答复格式"
+  },
+  "progress.final_check_rerender": {
+    "en": "Rewriting answer from evidence",
+    "zh": "正在依据材料重写答复"
+  },
+  "progress.memory": {
+    "en": "Recalling relevant context",
+    "zh": "正在回忆相关上下文"
+  },
+  "progress.reasonPreview": {
+    "en": "Reasoning summary",
+    "zh": "思考摘要"
+  },
+  "progress.retrieve_doc.done": {
+    "en": "Document read complete",
+    "zh": "完成文档阅读"
+  },
+  "progress.retrieve_doc.empty": {
+    "en": "No relevant document content",
+    "zh": "未找到相关文档内容"
+  },
+  "progress.retrieve_doc.running": {
+    "en": "Reading documents",
+    "zh": "正在阅读文档"
+  },
+  "progress.retrieve_graph.done": {
+    "en": "Relation search complete",
+    "zh": "完成关系检索"
+  },
+  "progress.retrieve_graph.empty": {
+    "en": "No relevant results (relation search)",
+    "zh": "未找到相关内容（关系检索）"
+  },
+  "progress.retrieve_graph.running": {
+    "en": "Running relation search",
+    "zh": "正在关系检索"
+  },
+  "progress.retrieve_keyword.done": {
+    "en": "Keyword search complete",
+    "zh": "完成关键词检索"
+  },
+  "progress.retrieve_keyword.empty": {
+    "en": "No relevant results (keyword search)",
+    "zh": "未找到相关内容（关键词检索）"
+  },
+  "progress.retrieve_keyword.running": {
+    "en": "Running keyword search",
+    "zh": "正在关键词检索"
+  },
+  "progress.retrieve_semantic.done": {
+    "en": "Semantic search complete",
+    "zh": "完成语义检索"
+  },
+  "progress.retrieve_semantic.empty": {
+    "en": "No relevant results (semantic search)",
+    "zh": "未找到相关内容（语义检索）"
+  },
+  "progress.retrieve_semantic.running": {
+    "en": "Running semantic search",
+    "zh": "正在语义检索"
+  },
+  "progress.search_web.done": {
+    "en": "Web search complete",
+    "zh": "完成网页搜索"
+  },
+  "progress.search_web.empty": {
+    "en": "No relevant web results",
+    "zh": "未找到相关网页"
+  },
+  "progress.search_web.running": {
+    "en": "Searching the web",
+    "zh": "正在网页搜索"
+  },
+  "progress.synthesis_held_for_verify": {
+    "en": "Draft ready; verifying",
+    "zh": "草稿已就绪，正在核对"
+  },
+  "progress.understand": {
+    "en": "Understanding your question",
+    "zh": "正在理解问题"
+  },
+  "progress.write_draft": {
+    "en": "Drafting the article",
+    "zh": "正在起草正文"
+  },
+  "progress.write_draft_section": {
+    "en": "Drafting section {section}",
+    "zh": "正在起草第 {section} 节"
+  },
+  "progress.write_outline": {
+    "en": "Planning article outline",
+    "zh": "正在规划文章大纲"
+  },
+  "progress.write_refine": {
+    "en": "Refining the draft",
+    "zh": "正在润色修订"
+  },
+  "progress.write_refine_round": {
+    "en": "Refine round {section}",
+    "zh": "正在润色第 {section} 轮"
+  },
+  "progress.write_research": {
+    "en": "Gathering writing material",
+    "zh": "正在收集写作素材"
+  },
+  "progress.write_validate": {
+    "en": "Validating the draft",
+    "zh": "正在校验文稿"
+  },
+  "providers.configured": {
+    "en": "Configured (custom key)",
+    "zh": "已配置 (自备密钥)"
+  },
+  "providers.keyPlaceholder": {
+    "en": "Enter API key",
+    "zh": "输入 API Key"
+  },
+  "providers.needKey": {
+    "en": "Enter a valid API key",
+    "zh": "请输入有效的 API Key"
+  },
+  "providers.panelLabel": {
+    "en": "Providers and keys",
+    "zh": "模型提供商与自备密钥"
+  },
+  "providers.removeKey": {
+    "en": "Remove key",
+    "zh": "移除密钥"
+  },
+  "providers.revokeFailed": {
+    "en": "Remove failed: {error}",
+    "zh": "撤销失败：{error}"
+  },
+  "providers.saveFailed": {
+    "en": "Save failed: {error}",
+    "zh": "保存失败：{error}"
+  },
+  "providers.subtitle": {
+    "en": "Add your own API key. Keys stay on your channel; the product does not store them in plaintext.",
+    "zh": "配置您自己的 API Key。自备密钥将直接由本地或私有通道调用，系统绝不明文记录密钥。"
+  },
+  "providers.title": {
+    "en": "Provider keys (BYOK)",
+    "zh": "模型提供商密钥 (BYOK)"
+  },
+  "referral.bulletBoth": {
+    "en": "When a friend registers with your code and verifies: you both get ¥5 gift credit in the wallet.",
+    "zh": "好友用你的邀请码完成注册并通过验证：你与好友各得 ¥5 赠送金（入余额）。"
+  },
+  "referral.bulletQuota": {
+    "en": "Invite quota: 5 base + 1 per ¥50 lifetime paid top-up (cash only).",
+    "zh": "邀请次数：基础 5 次；每累计充值 ¥50 现金再 +1 次（仅实付充值计入）。"
+  },
+  "referral.bulletStack": {
+    "en": "New users still get the ¥20 signup grant; referral stacks on top (invitee up to ¥25 gift face value).",
+    "zh": "好友仍享注册礼 ¥20，与邀请奖励叠加（被邀请人合计最高 ¥25 赠送面值）。"
+  },
+  "referral.bulletWalletOnly": {
+    "en": "Rewards top up wallet balance only — not share slots. Separate from workspace member invites.",
+    "zh": "奖励只加钱包余额，不增加可分享工作区名额；与工作区协作邀请无关。"
+  },
+  "referral.copyLink": {
+    "en": "Copy link",
+    "zh": "复制链接"
+  },
+  "referral.fabLabel": {
+    "en": "Invite friends for gift credit",
+    "zh": "邀请好友赚赠送金"
+  },
+  "referral.fabText": {
+    "en": "Invite & earn",
+    "zh": "邀请有礼"
+  },
+  "referral.finePrint": {
+    "en": "Self-invite and abuse are rejected without reward. Rules: product ADR-0010.",
+    "zh": "自邀与异常设备将被拒绝且不计奖。参数见产品商业模式（ADR-0010）。"
+  },
+  "referral.hero": {
+    "en": "Share Context-OS with colleagues and friends — you both earn gift credit when they join.",
+    "zh": "把知识库带给同事与朋友：他们注册你得奖励，你也帮他们开局。"
+  },
+  "referral.loadError": {
+    "en": "Could not load your referral code. Try again later.",
+    "zh": "暂时无法加载邀请码，请稍后再试。"
+  },
+  "referral.loading": {
+    "en": "Loading referral…",
+    "zh": "加载邀请信息…"
+  },
+  "referral.modalTitle": {
+    "en": "Invite friends · ¥5 each",
+    "zh": "邀请好友 · 双方各得 ¥5"
+  },
+  "referral.progress": {
+    "en": "{rewarded} rewarded / quota {quota} · {remaining} left",
+    "zh": "已成功 {rewarded} / 额度 {quota} · 剩余 {remaining}"
+  },
+  "referral.shareLinkLabel": {
+    "en": "Invite link",
+    "zh": "邀请链接"
+  },
+  "settings.appearance.currentLanguage": {
+    "en": "Current language",
+    "zh": "当前语言"
+  },
+  "settings.appearance.currentTheme": {
+    "en": "Current theme",
+    "zh": "当前主题"
+  },
+  "settings.appearance.localeDescription.en": {
+    "en": "Useful for cross-team collaboration and external walkthroughs.",
+    "zh": "适合跨团队协作或对外演示。"
+  },
+  "settings.appearance.localeDescription.zh-CN": {
+    "en": "The default language for the current primary audience.",
+    "zh": "面向当前主要用户群的默认语言。"
+  },
+  "settings.appearance.localeLabel": {
+    "en": "Interface language",
+    "zh": "界面语言"
+  },
+  "settings.appearance.localeSubtitle": {
+    "en": "Choose the interface display language.",
+    "zh": "选择界面显示语言。"
+  },
+  "settings.appearance.sectionSubtitle": {
+    "en": "Control how the workspace and admin surfaces look.",
+    "zh": "控制工作台和后台页面的明暗观感。"
+  },
+  "settings.appearance.sectionTitle": {
+    "en": "Appearance",
+    "zh": "外观"
+  },
+  "settings.appearance.theme.dark": {
+    "en": "Dark",
+    "zh": "深色"
+  },
+  "settings.appearance.theme.light": {
+    "en": "Light",
+    "zh": "浅色"
+  },
+  "settings.appearance.theme.system": {
+    "en": "System",
+    "zh": "跟随系统"
+  },
+  "settings.appearance.themeDescription.dark": {
+    "en": "Reduce glare and emphasize layered work surfaces.",
+    "zh": "降低夜间眩光，强调工作区层次。"
+  },
+  "settings.appearance.themeDescription.light": {
+    "en": "Keep surfaces bright and high-contrast.",
+    "zh": "适合白天和高亮环境。"
+  },
+  "settings.appearance.themeDescription.system": {
+    "en": "Follow the operating system preference.",
+    "zh": "自动匹配设备当前主题。"
+  },
+  "settings.appearance.themeLabel": {
+    "en": "Theme",
+    "zh": "主题"
+  },
+  "settings.billing.availablePlansTitle": {
+    "en": "Available plans",
+    "zh": "可用方案"
+  },
+  "settings.billing.byokApiKey": {
+    "en": "API Key",
+    "zh": "API Key"
+  },
+  "settings.billing.byokBaseUrl": {
+    "en": "Base URL (optional)",
+    "zh": "Base URL（可选）"
+  },
+  "settings.billing.byokModelHint": {
+    "en": "Model hint (optional)",
+    "zh": "模型提示（可选）"
+  },
+  "settings.billing.byokProvider": {
+    "en": "Provider",
+    "zh": "Provider"
+  },
+  "settings.billing.byokRevoke": {
+    "en": "Revoke",
+    "zh": "撤销"
+  },
+  "settings.billing.byokRevoked": {
+    "en": "Revoked",
+    "zh": "已吊销"
+  },
+  "settings.billing.byokSave": {
+    "en": "Save key",
+    "zh": "保存密钥"
+  },
+  "settings.billing.byokSubtitle": {
+    "en": "Keys are encrypted at rest. Your main-chat key writes the final answer. Qwen3.7 Flash is the fast model for both document indexing and the retrieval worker; embeddings still debit your balance.",
+    "zh": "密钥加密存储。自备主对话 Key 只用于最终回答。Qwen3.7 Flash 作为快速模型，同时用于文档索引和检索子代理；向量检索仍从余额扣费。"
+  },
+  "settings.billing.byokTitle": {
+    "en": "Custom provider",
+    "zh": "自定义 Provider"
+  },
+  "settings.billing.changePlanAction": {
+    "en": "Change plan",
+    "zh": "更换方案"
+  },
+  "settings.billing.currentPlanBadge": {
+    "en": "Current",
+    "zh": "当前"
+  },
+  "settings.billing.currentPlanLabel": {
+    "en": "Current tier",
+    "zh": "当前档位"
+  },
+  "settings.billing.documentsLabel": {
+    "en": "Documents",
+    "zh": "文档"
+  },
+  "settings.billing.failedData": {
+    "en": "Some membership data failed to load: {items}",
+    "zh": "部分会员信息加载失败：{items}"
+  },
+  "settings.billing.failedItem.plans": {
+    "en": "plans",
+    "zh": "方案"
+  },
+  "settings.billing.failedItem.subscription": {
+    "en": "subscription",
+    "zh": "订阅"
+  },
+  "settings.billing.failedItem.usage": {
+    "en": "usage",
+    "zh": "用量"
+  },
+  "settings.billing.failedItem.wallet": {
+    "en": "balance",
+    "zh": "余额"
+  },
+  "settings.billing.loading": {
+    "en": "Loading membership information...",
+    "zh": "正在加载会员信息…"
+  },
+  "settings.billing.loadingPlans": {
+    "en": "Loading plans...",
+    "zh": "正在加载方案…"
+  },
+  "settings.billing.loadingPortal": {
+    "en": "Loading...",
+    "zh": "加载中…"
+  },
+  "settings.billing.loadingUsage": {
+    "en": "Loading usage...",
+    "zh": "正在加载用量…"
+  },
+  "settings.billing.managePlanAction": {
+    "en": "Upgrade / manage plan",
+    "zh": "升级 / 管理方案"
+  },
+  "settings.billing.noPlans": {
+    "en": "No plans available.",
+    "zh": "暂无可用方案。"
+  },
+  "settings.billing.noUsageData": {
+    "en": "No usage data.",
+    "zh": "暂无用量数据。"
+  },
+  "settings.billing.notActive": {
+    "en": "Not active",
+    "zh": "未开通"
+  },
+  "settings.billing.openPricingPage": {
+    "en": "Open pricing",
+    "zh": "打开定价页"
+  },
+  "settings.billing.payerFundsRequired": {
+    "en": "Balance is empty and no custom provider is configured. Top up or add a provider.",
+    "zh": "余额不足，且未配置可用的自定义 Provider。请充值或添加 Provider 后再试。"
+  },
+  "settings.billing.payerFundsTopUpHint": {
+    "en": "Open Settings → Usage to top up, or configure a custom provider.",
+    "zh": "前往设置 → 用量信息充值，或配置自定义 Provider。"
+  },
+  "settings.billing.planPickerHint": {
+    "en": "Selecting a plan opens the pricing/checkout page to complete the change.",
+    "zh": "选择方案后将进入定价/结账页完成变更。"
+  },
+  "settings.billing.portalAction": {
+    "en": "Open payment portal",
+    "zh": "打开支付门户"
+  },
+  "settings.billing.portalEmpty": {
+    "en": "Billing portal URL is empty.",
+    "zh": "订阅入口返回为空。"
+  },
+  "settings.billing.portalFallbackHint": {
+    "en": "Open pricing for Creem/Alipay checkout.",
+    "zh": "请打开定价页，通过 Creem 或支付宝完成支付。"
+  },
+  "settings.billing.portalUnavailable": {
+    "en": "Self-service payment portal is not available. Try again later, or contact support.",
+    "zh": "自助支付门户暂未开通。请稍后重试，或联系支持。"
+  },
+  "settings.billing.providerSummaryActive": {
+    "en": "Configured · {provider}",
+    "zh": "已配置 · {provider}"
+  },
+  "settings.billing.providerSummaryNone": {
+    "en": "No custom provider",
+    "zh": "未配置自定义 Provider"
+  },
+  "settings.billing.referralCodeLabel": {
+    "en": "Your code",
+    "zh": "我的邀请码"
+  },
+  "settings.billing.referralCopied": {
+    "en": "Copied",
+    "zh": "已复制"
+  },
+  "settings.billing.referralCopy": {
+    "en": "Copy",
+    "zh": "复制"
+  },
+  "settings.billing.referralRewardedLabel": {
+    "en": "Rewarded invites",
+    "zh": "已成功邀请"
+  },
+  "settings.billing.referralSubtitle": {
+    "en": "Friends who register with your code earn ¥5 gift credit each.",
+    "zh": "好友注册填写你的邀请码，双方各得 ¥5 赠送金。"
+  },
+  "settings.billing.referralTitle": {
+    "en": "Referral",
+    "zh": "邀请码"
+  },
+  "settings.billing.renewsOnLabel": {
+    "en": "Renews on",
+    "zh": "续费日期"
+  },
+  "settings.billing.sectionSubtitle": {
+    "en": "Plan tier, share slots, renewal, and balance. Open pricing to change plan.",
+    "zh": "档位、分享名额、到期时间与余额一览。更换方案请前往定价页。"
+  },
+  "settings.billing.sectionTitle": {
+    "en": "Usage",
+    "zh": "用量信息"
+  },
+  "settings.billing.shareQuotaLabel": {
+    "en": "Share slots",
+    "zh": "分享名额"
+  },
+  "settings.billing.shareQuotaValue": {
+    "en": "{used} / {max}",
+    "zh": "{used} / {max}"
+  },
+  "settings.billing.status.active": {
+    "en": "Active",
+    "zh": "有效"
+  },
+  "settings.billing.status.canceled": {
+    "en": "Canceled",
+    "zh": "已取消"
+  },
+  "settings.billing.status.past_due": {
+    "en": "Past due",
+    "zh": "逾期"
+  },
+  "settings.billing.statusLabel": {
+    "en": "Status",
+    "zh": "状态"
+  },
+  "settings.billing.tokensLabel": {
+    "en": "Tokens",
+    "zh": "令牌"
+  },
+  "settings.billing.usageDetailsLink": {
+    "en": "Usage details",
+    "zh": "消费明细"
+  },
+  "settings.billing.usageTitle": {
+    "en": "Usage",
+    "zh": "用量"
+  },
+  "settings.billing.walletBalanceLabel": {
+    "en": "Available balance",
+    "zh": "可用余额"
+  },
+  "settings.billing.walletLifetimePaidLabel": {
+    "en": "Lifetime paid top-ups",
+    "zh": "累计充值"
+  },
+  "settings.billing.walletLoading": {
+    "en": "Loading balance…",
+    "zh": "正在加载余额…"
+  },
+  "settings.billing.walletTopupCta": {
+    "en": "Top up on pricing",
+    "zh": "去定价页充值"
+  },
+  "settings.billing.walletTopupHint": {
+    "en": "Packs and payment complete under Pricing → Top-up (canonical checkout).",
+    "zh": "套餐包与支付在定价页「充值」区完成（唯一结账入口）。"
+  },
+  "settings.billingGoto": {
+    "en": "Open pricing & top-up",
+    "zh": "打开定价与充值"
+  },
+  "settings.billingHint": {
+    "en": "Change plan or top up on the pricing page.",
+    "zh": "套餐与充值请前往定价页完成。"
+  },
+  "settings.changePassword": {
+    "en": "Change password",
+    "zh": "修改密码"
+  },
+  "settings.loadError": {
+    "en": "Failed to load settings.",
+    "zh": "加载设置失败。"
+  },
+  "settings.metric.embedding_tokens": {
+    "en": "Embedding tokens",
+    "zh": "嵌入令牌"
+  },
+  "settings.metric.llm_input_tokens": {
+    "en": "LLM input tokens",
+    "zh": "模型输入令牌"
+  },
+  "settings.metric.llm_output_tokens": {
+    "en": "LLM output tokens",
+    "zh": "模型输出令牌"
+  },
+  "settings.metric.pages_processed": {
+    "en": "Pages processed",
+    "zh": "处理页数"
+  },
+  "settings.metric.storage_bytes": {
+    "en": "Storage",
+    "zh": "存储空间"
+  },
+  "settings.navAria": {
+    "en": "Settings",
+    "zh": "设置导航"
+  },
+  "settings.notifications.bellLabel": {
+    "en": "Notifications",
+    "zh": "通知"
+  },
+  "settings.notifications.emailUpdatesLabel": {
+    "en": "Email updates",
+    "zh": "邮件更新"
+  },
+  "settings.notifications.emptyBody": {
+    "en": "New system notices and account alerts will appear here.",
+    "zh": "新的系统通知和账户提醒会显示在这里。"
+  },
+  "settings.notifications.emptyTitle": {
+    "en": "No notifications yet",
+    "zh": "还没有通知"
+  },
+  "settings.notifications.event.product_update": {
+    "en": "Product update",
+    "zh": "产品动态"
+  },
+  "settings.notifications.event.security_alert": {
+    "en": "Security alert",
+    "zh": "安全提醒"
+  },
+  "settings.notifications.event.weekly_digest": {
+    "en": "Weekly digest",
+    "zh": "每周摘要"
+  },
+  "settings.notifications.historyTitle": {
+    "en": "Notification history",
+    "zh": "通知历史"
+  },
+  "settings.notifications.invalidTime": {
+    "en": "Use HH:MM in 24-hour time.",
+    "zh": "请使用 24 小时制 HH:MM。"
+  },
+  "settings.notifications.listLabel": {
+    "en": "Notification list",
+    "zh": "通知列表"
+  },
+  "settings.notifications.loading": {
+    "en": "Loading notifications...",
+    "zh": "正在加载通知…"
+  },
+  "settings.notifications.markAllRead": {
+    "en": "Mark all read",
+    "zh": "全部已读"
+  },
+  "settings.notifications.markRead": {
+    "en": "Mark as read",
+    "zh": "标记已读"
+  },
+  "settings.notifications.processing": {
+    "en": "Processing...",
+    "zh": "处理中…"
+  },
+  "settings.notifications.productUpdatesLabel": {
+    "en": "Product updates",
+    "zh": "产品动态"
+  },
+  "settings.notifications.quietHoursEndLabel": {
+    "en": "Quiet hours end",
+    "zh": "免打扰结束时间"
+  },
+  "settings.notifications.quietHoursPlaceholderEnd": {
+    "en": "For example 08:00",
+    "zh": "例如 08:00"
+  },
+  "settings.notifications.quietHoursPlaceholderStart": {
+    "en": "For example 22:00",
+    "zh": "例如 22:00"
+  },
+  "settings.notifications.quietHoursStartLabel": {
+    "en": "Quiet hours start",
+    "zh": "免打扰开始时间"
+  },
+  "settings.notifications.read": {
+    "en": "Read",
+    "zh": "已读"
+  },
+  "settings.notifications.saveAction": {
+    "en": "Save notification settings",
+    "zh": "保存通知设置"
+  },
+  "settings.notifications.sectionSubtitle": {
+    "en": "Manage message preferences, digest cadence, and quiet hours.",
+    "zh": "管理消息偏好、摘要频率和免打扰时段。"
+  },
+  "settings.notifications.sectionTitle": {
+    "en": "Notifications",
+    "zh": "通知"
+  },
+  "settings.notifications.securityAlertsLabel": {
+    "en": "Security alerts",
+    "zh": "安全提醒"
+  },
+  "settings.notifications.unreadCount": {
+    "en": "{count} unread",
+    "zh": "{count} 条未读"
+  },
+  "settings.notifications.weeklyDigestLabel": {
+    "en": "Weekly digest",
+    "zh": "每周摘要"
+  },
+  "settings.pageHeading": {
+    "en": "Account & settings",
+    "zh": "账号与设置"
+  },
+  "settings.pageSubtitle": {
+    "en": "Manage usage, profile, appearance, notification, and security settings.",
+    "zh": "管理用量信息、资料、外观、通知和安全设置。"
+  },
+  "settings.pageTitle": {
+    "en": "Settings",
+    "zh": "设置"
+  },
+  "settings.prefsSaved": {
+    "en": "Preferences saved",
+    "zh": "偏好已保存"
+  },
+  "settings.prefsSubtitle": {
+    "en": "Theme and language apply to this device immediately.",
+    "zh": "主题与语言会立即应用到本机界面。"
+  },
+  "settings.profile.avatarLabel": {
+    "en": "Avatar",
+    "zh": "头像"
+  },
+  "settings.profile.bannerLabel": {
+    "en": "Banner",
+    "zh": "封面图"
+  },
+  "settings.profile.bioLabel": {
+    "en": "Bio",
+    "zh": "简介"
+  },
+  "settings.profile.bioPlaceholder": {
+    "en": "A short intro about you (optional)",
+    "zh": "一句话介绍你自己（可选）"
+  },
+  "settings.profile.bioTooLong": {
+    "en": "Bio must be at most 500 characters.",
+    "zh": "简介不能超过 500 个字符。"
+  },
+  "settings.profile.contactLabel": {
+    "en": "Contact link",
+    "zh": "联系链接"
+  },
+  "settings.profile.contactPlaceholder": {
+    "en": "https://…",
+    "zh": "https://…"
+  },
+  "settings.profile.emailLabel": {
+    "en": "Email",
+    "zh": "邮箱"
+  },
+  "settings.profile.invalidContactUrl": {
+    "en": "Contact link must be an http(s) URL.",
+    "zh": "联系链接须为 http(s) URL。"
+  },
+  "settings.profile.mediaHint": {
+    "en": "JPEG / PNG / WebP / GIF; avatar ≤2MB, banner ≤5MB.",
+    "zh": "支持 JPEG / PNG / WebP / GIF；头像 ≤2MB，封面 ≤5MB。"
+  },
+  "settings.profile.nameLabel": {
+    "en": "Display name",
+    "zh": "显示名称"
+  },
+  "settings.profile.namePlaceholder": {
+    "en": "Enter your display name",
+    "zh": "输入你的显示名称"
+  },
+  "settings.profile.nameTooLong": {
+    "en": "Name must be 120 characters or fewer.",
+    "zh": "姓名长度不能超过 120 个字符。"
+  },
+  "settings.profile.notAuthenticated": {
+    "en": "Please sign in first.",
+    "zh": "请先登录。"
+  },
+  "settings.profile.removeMediaAction": {
+    "en": "Remove",
+    "zh": "移除"
+  },
+  "settings.profile.saveAction": {
+    "en": "Save profile",
+    "zh": "保存资料"
+  },
+  "settings.profile.sectionSubtitle": {
+    "en": "Shown on shared pages as your Owner card: name, bio, avatar, banner, and contact link.",
+    "zh": "展示在分享页的个人名片：显示名、简介、头像、封面与联系链接。"
+  },
+  "settings.profile.sectionTitle": {
+    "en": "Profile",
+    "zh": "个人资料"
+  },
+  "settings.profile.uploadAction": {
+    "en": "Upload",
+    "zh": "上传"
+  },
+  "settings.profileSaved": {
+    "en": "Profile saved on this device",
+    "zh": "资料已保存到本机会话"
+  },
+  "settings.saveError": {
+    "en": "Failed to save settings.",
+    "zh": "保存设置失败。"
+  },
+  "settings.savePrefs": {
+    "en": "Save preferences",
+    "zh": "保存偏好"
+  },
+  "settings.saveSuccess": {
+    "en": "Settings saved.",
+    "zh": "设置已保存。"
+  },
+  "settings.security.changePasswordAction": {
+    "en": "Change password",
+    "zh": "修改密码"
+  },
+  "settings.security.currentPasswordLabel": {
+    "en": "Current password",
+    "zh": "当前密码"
+  },
+  "settings.security.currentSessionTitle": {
+    "en": "Current session",
+    "zh": "当前会话"
+  },
+  "settings.security.failed": {
+    "en": "Failed to change the password. Try again later.",
+    "zh": "修改密码失败，请稍后再试。"
+  },
+  "settings.security.missingPassword": {
+    "en": "Enter the current password and the new password.",
+    "zh": "请输入当前密码和新密码。"
+  },
+  "settings.security.newPasswordLabel": {
+    "en": "New password",
+    "zh": "新密码"
+  },
+  "settings.security.notAuthenticated": {
+    "en": "Not authenticated.",
+    "zh": "尚未登录。"
+  },
+  "settings.security.resetPasswordAction": {
+    "en": "Reset password",
+    "zh": "重置密码"
+  },
+  "settings.security.sectionSubtitle": {
+    "en": "Update your password and review account access security.",
+    "zh": "更新密码并检查账户访问安全。"
+  },
+  "settings.security.sectionTitle": {
+    "en": "Security",
+    "zh": "安全"
+  },
+  "settings.security.signOutOtherSessionsAction": {
+    "en": "Sign out other sessions",
+    "zh": "退出其他会话"
+  },
+  "settings.security.signedInAs": {
+    "en": "Signed in as",
+    "zh": "当前登录账号"
+  },
+  "settings.security.unknownAccount": {
+    "en": "Unknown account",
+    "zh": "未知账号"
+  },
+  "settings.security.updating": {
+    "en": "Updating...",
+    "zh": "更新中…"
+  },
+  "settings.securityHint": {
+    "en": "Password reset and session security.",
+    "zh": "密码重置与会话安全。"
+  },
+  "settings.tabs.appearance": {
+    "en": "Preferences",
+    "zh": "偏好"
+  },
+  "settings.tabs.billing": {
+    "en": "Usage",
+    "zh": "用量信息"
+  },
+  "settings.tabs.notifications": {
+    "en": "Notifications",
+    "zh": "通知"
+  },
+  "settings.tabs.preferences": {
+    "en": "Preferences",
+    "zh": "偏好"
+  },
+  "settings.tabs.profile": {
+    "en": "Profile",
+    "zh": "个人资料"
+  },
+  "settings.tabs.providers": {
+    "en": "Providers",
+    "zh": "自定义 Provider"
+  },
+  "settings.tabs.security": {
+    "en": "Security",
+    "zh": "安全"
+  },
+  "settings.tabsLabel": {
+    "en": "Settings tabs",
+    "zh": "设置选项"
+  },
+  "settings.usage.blocked": {
+    "en": "Currently blocked",
+    "zh": "当前已触发限流"
+  },
+  "settings.usage.breakdownTitle": {
+    "en": "Breakdown",
+    "zh": "分项消耗"
+  },
+  "settings.usage.empty": {
+    "en": "No usage information.",
+    "zh": "暂无用量信息。"
+  },
+  "settings.usage.estimated": {
+    "en": "Current usage includes estimated values.",
+    "zh": "当前用量包含估算值。"
+  },
+  "settings.usage.loading": {
+    "en": "Loading usage...",
+    "zh": "正在加载用量…"
+  },
+  "settings.usage.nextRelief": {
+    "en": "Next relief",
+    "zh": "下次释放"
+  },
+  "settings.usage.notSet": {
+    "en": "Not set",
+    "zh": "未设置"
+  },
+  "settings.usage.policyDisabled": {
+    "en": "Disabled",
+    "zh": "未启用"
+  },
+  "settings.usage.policyEnabled": {
+    "en": "Enabled",
+    "zh": "已启用"
+  },
+  "settings.usage.policyLabel": {
+    "en": "Policy",
+    "zh": "当前策略"
+  },
+  "settings.usage.quotaScopePlanDefault": {
+    "en": "Plan default · {planId}",
+    "zh": "默认方案 · {planId}"
+  },
+  "settings.usage.quotaScopeUserOverride": {
+    "en": "User override",
+    "zh": "用户覆盖策略"
+  },
+  "settings.usage.remaining": {
+    "en": "Remaining",
+    "zh": "剩余"
+  },
+  "settings.usage.scopeLabel": {
+    "en": "Quota scope",
+    "zh": "配额作用域"
+  },
+  "settings.usage.sectionSubtitle": {
+    "en": "May apply only when balance is empty and no custom provider is set. With balance or a custom provider, chat is no longer subject to these limits.",
+    "zh": "仅在无余额且未配置自定义 Provider 时可能触发。有余额或自定义 Provider 后，对话不再受此限制影响。"
+  },
+  "settings.usage.sectionTitle": {
+    "en": "Platform protective limits (reference)",
+    "zh": "平台保护限速（参考）"
+  },
+  "settings.usage.window5h": {
+    "en": "5-hour window",
+    "zh": "5 小时窗口"
+  },
+  "settings.usage.window7d": {
+    "en": "7-day window",
+    "zh": "7 天窗口"
+  },
+  "settings.usageLink": {
+    "en": "Usage →",
+    "zh": "用量统计 →"
+  },
+  "settingsBillingManage": {
+    "en": "Manage",
+    "zh": "管理"
+  },
+  "settingsProfileEditProfile": {
+    "en": "Edit profile",
+    "zh": "编辑资料"
+  },
+  "settingsProfileNoBio": {
+    "en": "No bio yet",
+    "zh": "还没有简介"
+  },
+  "settingsProfileNoName": {
+    "en": "No display name",
+    "zh": "未设置名称"
+  },
+  "settingsProvider.model.bailian": {
+    "en": "Bailian API · Qwen3.7 Flash",
+    "zh": "百炼 API · Qwen3.7 Flash"
+  },
+  "settingsProvider.model.deepseek": {
+    "en": "DeepSeek API · DeepSeek V4 Flash",
+    "zh": "DeepSeek API · DeepSeek V4 Flash"
+  },
+  "settingsProvider.model.quickChat": {
+    "en": "Bailian API · Qwen3.8 Flash",
+    "zh": "百炼 API · Qwen3.8 Flash"
+  },
+  "settingsProvider.model.siliconflow": {
+    "en": "SiliconFlow · BAAI/bge-m3 · BAAI/bge-reranker-v2-m3",
+    "zh": "SiliconFlow · BAAI/bge-m3 · BAAI/bge-reranker-v2-m3"
+  },
+  "settingsProvider.type.agentLlm": {
+    "en": "Main agent LLM",
+    "zh": "主 Agent LLM"
+  },
+  "settingsProvider.type.embedRerank": {
+    "en": "Embedding / Rerank",
+    "zh": "向量嵌入 / 重排序"
+  },
+  "settingsProvider.type.parseLlm": {
+    "en": "Indexing / retrieval worker",
+    "zh": "文档索引 / 检索子代理"
+  },
+  "settingsProvider.type.quickChat": {
+    "en": "Quick Chat main model (replaces the primary answer only; parsing, retrieval workers, embedding/rerank and web search stay platform-billed)",
+    "zh": "Quick Chat 主模型（仅替代主回答；文件解析、检索子代理、向量/重排与联网仍按平台计费）"
+  },
+  "settingsProviderActionsColumn": {
+    "en": "Actions",
+    "zh": "操作"
+  },
+  "settingsProviderClear": {
+    "en": "Clear",
+    "zh": "清除"
+  },
+  "settingsProviderClearFailed": {
+    "en": "Clear failed",
+    "zh": "清除失败"
+  },
+  "settingsProviderCleared": {
+    "en": "Cleared",
+    "zh": "已清除"
+  },
+  "settingsProviderConfiguredFp": {
+    "en": "Set · {fp} (new key overwrites)",
+    "zh": "已配置 · {fp}（填新 key 覆盖）"
+  },
+  "settingsProviderKeysLabel": {
+    "en": "Provider keys",
+    "zh": "Provider 密钥"
+  },
+  "settingsProviderLoading": {
+    "en": "Loading…",
+    "zh": "加载中…"
+  },
+  "settingsProviderModelColumn": {
+    "en": "Model",
+    "zh": "模型名称"
+  },
+  "settingsProviderOpenSite": {
+    "en": "Open {name} console (new tab)",
+    "zh": "打开 {name} 官网 / 控制台（新标签）"
+  },
+  "settingsProviderPartialFp": {
+    "en": "Partial · {fp} (paste key to complete)",
+    "zh": "部分配置 · {fp}（填 key 补全）"
+  },
+  "settingsProviderPasteKey": {
+    "en": "Paste API key",
+    "zh": "粘贴 API Key"
+  },
+  "settingsProviderSave": {
+    "en": "Save",
+    "zh": "保存"
+  },
+  "settingsProviderSaveFailed": {
+    "en": "Save failed",
+    "zh": "保存失败"
+  },
+  "settingsProviderSaved": {
+    "en": "Saved",
+    "zh": "已保存"
+  },
+  "settingsProviderSubtitle": {
+    "en": "Models are fixed. Qwen3.7 Flash is the fast model for both document indexing and the retrieval worker. One API key per row (SiliconFlow embedding and rerank share one key).",
+    "zh": "型号固定。Qwen3.7 Flash 作为快速模型，同时用于文档索引和检索子代理。每行只填一把 API Key（SiliconFlow 嵌入与重排共用同一把）。"
+  },
+  "settingsProviderTitle": {
+    "en": "Custom providers",
+    "zh": "自定义 Provider"
+  },
+  "settingsProviderTypeColumn": {
+    "en": "Type",
+    "zh": "模型类型"
+  },
+  "settingsQuickModal.moreSettings": {
+    "en": "More settings",
+    "zh": "更多设置"
+  },
+  "settingsQuickModal.notificationsLink": {
+    "en": "Notifications",
+    "zh": "通知"
+  },
+  "settingsQuickModal.openFullPage": {
+    "en": "Open settings page →",
+    "zh": "打开设置页 →"
+  },
+  "settingsQuickModal.securityLink": {
+    "en": "Security",
+    "zh": "安全"
+  },
+  "settingsTabBar.searchLabel": {
+    "en": "Search settings",
+    "zh": "搜索设置"
+  },
+  "settingsTabBar.searchPlaceholder": {
+    "en": "Search settings…",
+    "zh": "搜索设置…"
+  },
+  "settingsUpgradeBackToPlans": {
+    "en": "← Back to plans",
+    "zh": "← 返回档位"
+  },
+  "settingsUpgradeBillingInterval": {
+    "en": "Billing interval",
+    "zh": "计费周期"
+  },
+  "settingsUpgradeSelectedTier": {
+    "en": "Selected {tier} · pick billing cycle, then pay",
+    "zh": "已选 {tier} · 选择计费周期后继续支付"
+  },
+  "shareAnalyze.accessLevel": {
+    "en": "Access level",
+    "zh": "访问级别"
+  },
+  "shareAnalyze.activeDays": {
+    "en": "Active days (30d)",
+    "zh": "活跃天数（30 日）"
+  },
+  "shareAnalyze.allowDownload": {
+    "en": "Allow download",
+    "zh": "允许下载"
+  },
+  "shareAnalyze.backWorkspace": {
+    "en": "Back to workspace",
+    "zh": "返回工作区"
+  },
+  "shareAnalyze.emptySubtitle": {
+    "en": "Enable sharing first, then return here for traffic trends and access logs.",
+    "zh": "先在分享页启用分享，再回到这里查看访问趋势和访问日志。"
+  },
+  "shareAnalyze.emptyTitle": {
+    "en": "No share data yet",
+    "zh": "还没有可分析的分享数据"
+  },
+  "shareAnalyze.expiresAt": {
+    "en": "Expires at",
+    "zh": "过期时间"
+  },
+  "shareAnalyze.goShare": {
+    "en": "Open sharing",
+    "zh": "前往分享"
+  },
+  "shareAnalyze.loadAnalyticsError": {
+    "en": "Failed to load share analytics.",
+    "zh": "加载分享分析失败。"
+  },
+  "shareAnalyze.loadLogsError": {
+    "en": "Failed to load access logs.",
+    "zh": "加载访问日志失败。"
+  },
+  "shareAnalyze.loadSettingsError": {
+    "en": "Failed to load share settings.",
+    "zh": "加载分享设置失败。"
+  },
+  "shareAnalyze.loading": {
+    "en": "Loading share analytics…",
+    "zh": "正在加载分享分析…"
+  },
+  "shareAnalyze.logsEmpty": {
+    "en": "No access logs yet.",
+    "zh": "暂时还没有访问日志。"
+  },
+  "shareAnalyze.logsSubtitle": {
+    "en": "Recent share access actions.",
+    "zh": "展示最近的分享访问动作。"
+  },
+  "shareAnalyze.logsTitle": {
+    "en": "Recent access logs",
+    "zh": "最近访问日志"
+  },
+  "shareAnalyze.metricsSubtitle": {
+    "en": "Activity ≈ days with visits; totals come from share analytics.",
+    "zh": "活跃天数≈有访问的天数；总访问量与独立访客来自分享分析。"
+  },
+  "shareAnalyze.metricsTitle": {
+    "en": "Traffic & activity",
+    "zh": "访问与活跃"
+  },
+  "shareAnalyze.notSet": {
+    "en": "Not set",
+    "zh": "未设置"
+  },
+  "shareAnalyze.off": {
+    "en": "Off",
+    "zh": "未开启"
+  },
+  "shareAnalyze.on": {
+    "en": "On",
+    "zh": "已开启"
+  },
+  "shareAnalyze.questionsProxy": {
+    "en": "Access actions",
+    "zh": "访问动作次数"
+  },
+  "shareAnalyze.statusSubtitle": {
+    "en": "Share-focused analytics only — not a search or token-cost page.",
+    "zh": "仅保留分享相关分析，不扩展为搜索页或 token 成本页。"
+  },
+  "shareAnalyze.statusTitle": {
+    "en": "Share status",
+    "zh": "分享状态"
+  },
+  "shareAnalyze.subtitle": {
+    "en": "Share status, traffic, activity, and recent access for this workspace.",
+    "zh": "当前工作区的分享状态、访问量、活跃与最近访问记录。"
+  },
+  "shareAnalyze.title": {
+    "en": "Analytics",
+    "zh": "数据分析"
+  },
+  "shareAnalyze.totalViews": {
+    "en": "Total views",
+    "zh": "总访问量"
+  },
+  "shareAnalyze.trendEmpty": {
+    "en": "No daily traffic yet.",
+    "zh": "暂无按日访问数据。"
+  },
+  "shareAnalyze.trendSubtitle": {
+    "en": "Daily share views.",
+    "zh": "按日汇总的分享访问量。"
+  },
+  "shareAnalyze.trendTitle": {
+    "en": "Traffic trend",
+    "zh": "访问趋势"
+  },
+  "shareAnalyze.uniqueVisitors": {
+    "en": "Unique visitors",
+    "zh": "独立访客"
+  },
+  "shareAnalyze.visitorPrivacyNote": {
+    "en": "Visitor identity is link-based or anonymous network-level — not personal identity.",
+    "zh": "访客身份来自分享链接或匿名网络信息，并非实名，请勿当作个人身份使用。"
+  },
+  "shareCenter.accessLevel.link": {
+    "en": "Link only",
+    "zh": "仅链接"
+  },
+  "shareCenter.accessLevel.private": {
+    "en": "Private",
+    "zh": "私有"
+  },
+  "shareCenter.accessLevel.public": {
+    "en": "Public",
+    "zh": "公开"
+  },
+  "shareCenter.accessLevelLabel": {
+    "en": "Access level",
+    "zh": "访问级别"
+  },
+  "shareCenter.accessLogs.accessedAtColumn": {
+    "en": "Accessed at",
+    "zh": "访问时间"
+  },
+  "shareCenter.accessLogs.actionColumn": {
+    "en": "Action",
+    "zh": "动作"
+  },
+  "shareCenter.accessLogs.visitorIdColumn": {
+    "en": "Visitor ID",
+    "zh": "访客 ID"
+  },
+  "shareCenter.accessLogsEmptyBody": {
+    "en": "Logs will appear here after public visits occur.",
+    "zh": "公开访问发生后，这里会显示访问记录。"
+  },
+  "shareCenter.accessLogsEmptyTitle": {
+    "en": "No access logs yet",
+    "zh": "暂时还没有访问日志"
+  },
+  "shareCenter.accessLogsLoadError": {
+    "en": "Failed to load recent activity.",
+    "zh": "加载最近活动失败。"
+  },
+  "shareCenter.accessLogsLoading": {
+    "en": "Loading access logs...",
+    "zh": "正在加载访问日志…"
+  },
+  "shareCenter.accessLogsSectionSubtitle": {
+    "en": "Review recent visitors, access times, and actions.",
+    "zh": "查看最近访客、访问时间和访问动作。"
+  },
+  "shareCenter.accessLogsSectionTitle": {
+    "en": "Access logs",
+    "zh": "访问日志"
+  },
+  "shareCenter.activityActionLabel": {
+    "en": "Action",
+    "zh": "动作"
+  },
+  "shareCenter.activityEmptyBody": {
+    "en": "New visits will show up here once people access the shared page.",
+    "zh": "一旦有人访问分享页，这里会出现最新记录。"
+  },
+  "shareCenter.activityEmptyTitle": {
+    "en": "No recent activity",
+    "zh": "还没有最近活动"
+  },
+  "shareCenter.activitySectionSubtitle": {
+    "en": "See the most recent access activity.",
+    "zh": "查看最近发生的访问行为。"
+  },
+  "shareCenter.activitySectionTitle": {
+    "en": "Recent activity",
+    "zh": "最近活动"
+  },
+  "shareCenter.activityTimeLabel": {
+    "en": "Time",
+    "zh": "时间"
+  },
+  "shareCenter.allowDownloadHint": {
+    "en": "When enabled, visitors can download the currently shared sources.",
+    "zh": "启用后，访客可下载当前公开资料。"
+  },
+  "shareCenter.allowDownloadLabel": {
+    "en": "Allow downloads",
+    "zh": "允许下载"
+  },
+  "shareCenter.analytics.dailyViews": {
+    "en": "Daily views",
+    "zh": "按天访问量"
+  },
+  "shareCenter.analytics.totalViews": {
+    "en": "Total views",
+    "zh": "总访问量"
+  },
+  "shareCenter.analytics.uniqueVisitors": {
+    "en": "Unique visitors",
+    "zh": "独立访客"
+  },
+  "shareCenter.analyticsEmptyBody": {
+    "en": "Trends will appear here once visitors start using the share link.",
+    "zh": "当访客开始访问共享链接后，这里会显示趋势数据。"
+  },
+  "shareCenter.analyticsEmptyTitle": {
+    "en": "No sharing analytics yet",
+    "zh": "暂时还没有分享访问数据"
+  },
+  "shareCenter.analyticsLoadError": {
+    "en": "Failed to load analytics.",
+    "zh": "加载访问数据失败。"
+  },
+  "shareCenter.analyticsLoading": {
+    "en": "Loading share analytics...",
+    "zh": "正在加载分享分析…"
+  },
+  "shareCenter.analyticsSectionSubtitle": {
+    "en": "Review total views, unique visitors, and the daily trend.",
+    "zh": "查看总访问量、独立访客和按天访问趋势。"
+  },
+  "shareCenter.analyticsSectionTitle": {
+    "en": "Share analytics",
+    "zh": "分享分析"
+  },
+  "shareCenter.anonLimitLabel": {
+    "en": "Anonymous (per day, 0=unlimited)",
+    "zh": "匿名访客（次/日，0=不限）"
+  },
+  "shareCenter.apiMethodHint": {
+    "en": "API is another way to share: a key is an entry point that opens this workspace's source querying to scripts and agents.",
+    "zh": "API 是另一种分享方法：密钥即入口，把这个工作区的资料查询能力开放给脚本与 agent。"
+  },
+  "shareCenter.backToWorkspace": {
+    "en": "Back to workspace",
+    "zh": "返回工作区"
+  },
+  "shareCenter.confirmRemoveAction": {
+    "en": "Confirm remove",
+    "zh": "确认移除"
+  },
+  "shareCenter.controlBarNoLink": {
+    "en": "No active share link yet",
+    "zh": "当前还没有可用的分享链接"
+  },
+  "shareCenter.controlBarSubtitle": {
+    "en": "Use one control to manage share state and maintain the current link and validity window.",
+    "zh": "用一个开关管理分享状态，并维护当前入口链接和有效期。"
+  },
+  "shareCenter.controlBarTitle": {
+    "en": "Share controls",
+    "zh": "分享控制"
+  },
+  "shareCenter.copyLinkAction": {
+    "en": "Copy link",
+    "zh": "复制链接"
+  },
+  "shareCenter.copyLinkError": {
+    "en": "Failed to copy share link.",
+    "zh": "复制分享链接失败。"
+  },
+  "shareCenter.copyLinkSuccess": {
+    "en": "Share link copied.",
+    "zh": "分享链接已复制。"
+  },
+  "shareCenter.desktopPublishCta": {
+    "en": "Publish to cloud",
+    "zh": "发布到云端"
+  },
+  "shareCenter.desktopPublishHint": {
+    "en": "Not published yet, so sharing stays off. After publish you can create a public link on app.contextlm.top.",
+    "zh": "尚未发布到云端，分享开关不可用。发布完成后即可创建 app.contextlm.top 的公开链接。"
+  },
+  "shareCenter.desktopPublishInProgress": {
+    "en": "Publishing…",
+    "zh": "正在发布…"
+  },
+  "shareCenter.desktopPublishRetryStatus": {
+    "en": "Retry publish status",
+    "zh": "重试读取发布状态"
+  },
+  "shareCenter.desktopPublishStageCommit": {
+    "en": "Writing the cloud replica",
+    "zh": "正在写入云端副本"
+  },
+  "shareCenter.desktopPublishStageDone": {
+    "en": "Done",
+    "zh": "完成"
+  },
+  "shareCenter.desktopPublishStageMetadata": {
+    "en": "Writing the cloud replica",
+    "zh": "正在写入云端副本"
+  },
+  "shareCenter.desktopPublishStagePack": {
+    "en": "Pack",
+    "zh": "打包"
+  },
+  "shareCenter.desktopPublishStageUpload": {
+    "en": "Upload",
+    "zh": "上传"
+  },
+  "shareCenter.desktopPublishStageVectors": {
+    "en": "Writing the cloud replica",
+    "zh": "正在写入云端副本"
+  },
+  "shareCenter.desktopPublishSubtitle": {
+    "en": "Docs and indexes stay on this machine. Public sharing needs a cloud replica — vectors import directly, without re-parsing.",
+    "zh": "本机文档与索引留在本机。对外分享需要一份云端副本；向量直接导入、不重新解析。"
+  },
+  "shareCenter.diagnosticsDisabledBody": {
+    "en": "Enable sharing to start tracking distribution for this knowledge package.",
+    "zh": "开启分享后，这里会开始追踪这份知识的传播情况。"
+  },
+  "shareCenter.diagnosticsDisabledTitle": {
+    "en": "Distribution has not started",
+    "zh": "传播尚未开始"
+  },
+  "shareCenter.diagnosticsExpiredBody": {
+    "en": "The link has expired. Historical activity is still available, but you need to regenerate or update sharing to continue distribution.",
+    "zh": "链接已经失效。历史访问仍然保留，但要继续传播需要重新生成或更新分享。"
+  },
+  "shareCenter.diagnosticsExpiredTitle": {
+    "en": "Share expired",
+    "zh": "分享已过期"
+  },
+  "shareCenter.diagnosticsExpiringBody": {
+    "en": "The current share will expire within 3 days. Update the share settings if you want distribution to continue.",
+    "zh": "当前分享将在 3 天内过期。如果你希望继续传播，需要更新分享设置。"
+  },
+  "shareCenter.diagnosticsExpiringTitle": {
+    "en": "Expiring soon",
+    "zh": "即将过期"
+  },
+  "shareCenter.diagnosticsHealthyBody": {
+    "en": "Recent visits are still coming in, which suggests this knowledge package is still actively spreading.",
+    "zh": "最近仍有访问，当前这份知识处于持续传播状态。"
+  },
+  "shareCenter.diagnosticsHealthyTitle": {
+    "en": "Distribution is ongoing",
+    "zh": "传播仍在继续"
+  },
+  "shareCenter.diagnosticsLoading": {
+    "en": "Building diagnostics...",
+    "zh": "正在生成传播诊断…"
+  },
+  "shareCenter.diagnosticsNotStartedBody": {
+    "en": "This knowledge package is available, but nobody has accessed it yet. You may need to distribute it or make the entry point clearer.",
+    "zh": "这份知识已经可以访问，但还没有产生访问。可能你还没分发出去，或者入口不够明显。"
+  },
+  "shareCenter.diagnosticsNotStartedTitle": {
+    "en": "Distribution not started",
+    "zh": "未启动传播"
+  },
+  "shareCenter.diagnosticsSectionSubtitle": {
+    "en": "Translate raw access data into next actions.",
+    "zh": "把原始访问数据翻译成下一步动作建议。"
+  },
+  "shareCenter.diagnosticsSectionTitle": {
+    "en": "Distribution diagnostics",
+    "zh": "传播诊断"
+  },
+  "shareCenter.diagnosticsSpikeBody": {
+    "en": "Visits are concentrated in only a few days, which looks more like a one-off spike than sustained usage.",
+    "zh": "访问集中在少数几天内，传播更像一次性曝光，而不是持续使用。"
+  },
+  "shareCenter.diagnosticsSpikeTitle": {
+    "en": "Short-lived spike",
+    "zh": "短时爆发"
+  },
+  "shareCenter.diagnosticsStalledBody": {
+    "en": "This knowledge package was accessed before, but there have been no visits in the last 7 days. Consider redistributing it or clarifying the share description.",
+    "zh": "这份知识曾被访问，但近 7 天没有继续传播。可以考虑重新分发，或优化分享说明。"
+  },
+  "shareCenter.diagnosticsStalledTitle": {
+    "en": "Distribution stalled",
+    "zh": "传播停滞"
+  },
+  "shareCenter.disableShareAction": {
+    "en": "Disable sharing",
+    "zh": "关闭分享"
+  },
+  "shareCenter.downloadAllowed": {
+    "en": "Downloads allowed",
+    "zh": "允许下载"
+  },
+  "shareCenter.downloadPolicyTitle": {
+    "en": "Download policy",
+    "zh": "下载策略"
+  },
+  "shareCenter.downloadRestricted": {
+    "en": "Online only",
+    "zh": "仅在线查看"
+  },
+  "shareCenter.expiresAtHint": {
+    "en": "Applied only when generating a new share link, for example 2026-04-30T18:00:00Z.",
+    "zh": "仅在生成新链接时生效，例如 2026-04-30T18:00:00Z。"
+  },
+  "shareCenter.expiresAtLabel": {
+    "en": "Expiration time",
+    "zh": "过期时间"
+  },
+  "shareCenter.expiresAtPlaceholder": {
+    "en": "Leave empty for no expiration",
+    "zh": "留空表示不过期"
+  },
+  "shareCenter.expiresAtReadOnlyHint": {
+    "en": "To change this expiry, revoke the current link and generate a new one.",
+    "zh": "当前链接的过期时间需在撤销后重新生成链接时调整。"
+  },
+  "shareCenter.generateLinkAction": {
+    "en": "Generate link",
+    "zh": "生成链接"
+  },
+  "shareCenter.interactionAccessLabel": {
+    "en": "Interaction",
+    "zh": "互动权限"
+  },
+  "shareCenter.interactionAccessValue": {
+    "en": "Sign in to ask questions",
+    "zh": "登录后可提问"
+  },
+  "shareCenter.interactionRuleHint": {
+    "en": "Anyone with the share link can view this knowledge. To control AI cost, users must sign in before asking questions and interacting.",
+    "zh": "任何拿到分享链接的人都可以查看这份知识内容。为了控制 AI 成本，登录后才能发起提问和互动。"
+  },
+  "shareCenter.inviteAction": {
+    "en": "Send invite",
+    "zh": "发送邀请"
+  },
+  "shareCenter.inviteEmailInvalid": {
+    "en": "Enter a valid email address.",
+    "zh": "请输入有效的邮箱地址。"
+  },
+  "shareCenter.inviteEmailLabel": {
+    "en": "Invite email",
+    "zh": "邀请邮箱"
+  },
+  "shareCenter.inviteEmailPlaceholder": {
+    "en": "name@example.com",
+    "zh": "name@example.com"
+  },
+  "shareCenter.inviteEmailRequired": {
+    "en": "Enter an email address.",
+    "zh": "请输入成员邮箱。"
+  },
+  "shareCenter.inviteError": {
+    "en": "Failed to send invite.",
+    "zh": "发送邀请失败。"
+  },
+  "shareCenter.inviteRole.editor": {
+    "en": "Editor",
+    "zh": "编辑者"
+  },
+  "shareCenter.inviteRole.viewer": {
+    "en": "Viewer",
+    "zh": "查看者"
+  },
+  "shareCenter.inviteRoleLabel": {
+    "en": "Invite role",
+    "zh": "邀请角色"
+  },
+  "shareCenter.inviteSectionSubtitle": {
+    "en": "Invite collaborators to this workspace and manage their access.",
+    "zh": "邀请成员参与当前工作区，并管理他们的访问权限。"
+  },
+  "shareCenter.inviteSectionTitle": {
+    "en": "Members & permissions",
+    "zh": "成员与权限"
+  },
+  "shareCenter.inviteSending": {
+    "en": "Sending...",
+    "zh": "邀请中…"
+  },
+  "shareCenter.loadError": {
+    "en": "Failed to load the share center.",
+    "zh": "加载分享中心失败。"
+  },
+  "shareCenter.loading": {
+    "en": "Loading share data...",
+    "zh": "正在加载分享数据…"
+  },
+  "shareCenter.loginRequired": {
+    "en": "Please sign in first.",
+    "zh": "请先登录。"
+  },
+  "shareCenter.memberInvitedAt": {
+    "en": "Invited at: {value}",
+    "zh": "邀请时间：{value}"
+  },
+  "shareCenter.memberLimitLabel": {
+    "en": "Signed-in visitors (blank=unlimited)",
+    "zh": "登录访客（空=不限）"
+  },
+  "shareCenter.memberLimitWorkspaceNote": {
+    "en": "Signed-in visitor cap is workspace-wide (not per-person).",
+    "zh": "登录访客上限按工作区统一配置（不是按人单独计算）。"
+  },
+  "shareCenter.memberRole.editor": {
+    "en": "Editor",
+    "zh": "编辑者"
+  },
+  "shareCenter.memberRole.owner": {
+    "en": "Owner",
+    "zh": "所有者"
+  },
+  "shareCenter.memberRole.viewer": {
+    "en": "Viewer",
+    "zh": "查看者"
+  },
+  "shareCenter.memberStatus.accepted": {
+    "en": "Accepted",
+    "zh": "已接受"
+  },
+  "shareCenter.memberStatus.pending": {
+    "en": "Pending",
+    "zh": "待接受"
+  },
+  "shareCenter.memberStatus.revoked": {
+    "en": "Revoked",
+    "zh": "已撤销"
+  },
+  "shareCenter.membersEmptyBody": {
+    "en": "Invited members will appear here.",
+    "zh": "发送邀请后，成员会显示在这里。"
+  },
+  "shareCenter.membersEmptyTitle": {
+    "en": "No shared members yet",
+    "zh": "还没有共享成员"
+  },
+  "shareCenter.membersLoadError": {
+    "en": "Failed to load members.",
+    "zh": "加载成员列表失败。"
+  },
+  "shareCenter.membersSectionTitle": {
+    "en": "Members",
+    "zh": "成员列表"
+  },
+  "shareCenter.metricUnavailable": {
+    "en": "--",
+    "zh": "--"
+  },
+  "shareCenter.navAriaLabel": {
+    "en": "Share settings navigation",
+    "zh": "分享设置导航"
+  },
+  "shareCenter.navTraffic": {
+    "en": "Traffic",
+    "zh": "访问数据"
+  },
+  "shareCenter.notSet": {
+    "en": "Not set",
+    "zh": "未设置"
+  },
+  "shareCenter.openShareAction": {
+    "en": "Open share page",
+    "zh": "打开分享页"
+  },
+  "shareCenter.overviewActiveDays": {
+    "en": "Active days in last 30 days",
+    "zh": "近 30 天活跃天数"
+  },
+  "shareCenter.overviewCurrentStatus": {
+    "en": "Current status",
+    "zh": "当前状态"
+  },
+  "shareCenter.overviewLastAccess": {
+    "en": "Last access",
+    "zh": "最近一次访问"
+  },
+  "shareCenter.overviewRecentViews": {
+    "en": "Views in last 7 days",
+    "zh": "近 7 天访问"
+  },
+  "shareCenter.overviewSectionSubtitle": {
+    "en": "Use current telemetry to check whether this knowledge package has started spreading and whether it is still active.",
+    "zh": "根据当前数据，判断这份知识是否开始传播、是否仍在传播。"
+  },
+  "shareCenter.overviewSectionTitle": {
+    "en": "Distribution overview",
+    "zh": "传播概览"
+  },
+  "shareCenter.overviewTotalViews": {
+    "en": "Total views",
+    "zh": "总访问次数"
+  },
+  "shareCenter.ownerCostConfirmAction": {
+    "en": "Confirm enable share",
+    "zh": "确认开启分享"
+  },
+  "shareCenter.ownerCostConfirmBody": {
+    "en": "Model usage and API costs from visitors on this share are billed to you (the workspace owner)—your credits and keys—not the visitor. Review usage and budget after enabling.",
+    "zh": "访客使用分享产生的模型与 API 费用，会从你（工作区所有者）的余额与密钥中扣除，而不是由访客承担。开启后请留意用量与预算。"
+  },
+  "shareCenter.ownerCostConfirmCancel": {
+    "en": "Cancel",
+    "zh": "取消"
+  },
+  "shareCenter.ownerCostConfirmTitle": {
+    "en": "Confirm cost before enabling share",
+    "zh": "开启分享前请确认费用归属"
+  },
+  "shareCenter.ownerPaysHint": {
+    "en": "Share Q&A is billed to the workspace owner (balance or custom provider).",
+    "zh": "分享问答费用由工作区所有者的余额或自定义 Provider 承担。"
+  },
+  "shareCenter.ownerProfileHint": {
+    "en": "When on, visitors can tap your avatar on share pages to see your account info and browse all your publicly shared workspaces; when off, these entry points are hidden.",
+    "zh": "开启后，访客可以在分享页点击你的头像查看账号信息，并浏览你所有公开分享的工作区；关闭后这些入口会隐藏。"
+  },
+  "shareCenter.ownerProfileTitle": {
+    "en": "Sharer profile",
+    "zh": "分享者主页"
+  },
+  "shareCenter.ownerProfileView": {
+    "en": "View my public profile",
+    "zh": "查看我的公开主页"
+  },
+  "shareCenter.pageSubtitle": {
+    "en": "Publish this workspace as a knowledge package and track how it spreads.",
+    "zh": "发布当前工作区的知识组合，并追踪它的传播情况。"
+  },
+  "shareCenter.pageTitle": {
+    "en": "Share & track",
+    "zh": "分享与追踪"
+  },
+  "shareCenter.questionLimitsLabel": {
+    "en": "Daily question caps",
+    "zh": "访客提问日上限"
+  },
+  "shareCenter.questionLimitsSave": {
+    "en": "Save caps",
+    "zh": "保存上限"
+  },
+  "shareCenter.quotaExceeded": {
+    "en": "You have reached the shareable workspace limit. Disable sharing on another workspace or upgrade your plan.",
+    "zh": "可分享工作区名额已用尽。请关闭其他工作区的分享，或升级套餐后再试。"
+  },
+  "shareCenter.quotaLabel": {
+    "en": "Shareable workspaces",
+    "zh": "可分享工作区名额"
+  },
+  "shareCenter.quotaValue": {
+    "en": "{used} used / {max} max ({plan})",
+    "zh": "已用 {used} / 上限 {max}（{plan}）"
+  },
+  "shareCenter.readAccessLabel": {
+    "en": "Read access",
+    "zh": "访问方式"
+  },
+  "shareCenter.readAccessValue": {
+    "en": "Anyone with the link can view",
+    "zh": "任何人可查看"
+  },
+  "shareCenter.removeAction": {
+    "en": "Remove",
+    "zh": "移除"
+  },
+  "shareCenter.removeError": {
+    "en": "Failed to remove member.",
+    "zh": "移除成员失败。"
+  },
+  "shareCenter.removePendingHint": {
+    "en": "Remove {name} from this workspace?",
+    "zh": "确认从当前工作区移除 {name} 吗？"
+  },
+  "shareCenter.saveAction": {
+    "en": "Save changes",
+    "zh": "保存更改"
+  },
+  "shareCenter.saveError": {
+    "en": "Failed to save share settings.",
+    "zh": "保存分享设置失败。"
+  },
+  "shareCenter.saving": {
+    "en": "Saving...",
+    "zh": "保存中…"
+  },
+  "shareCenter.settingsLoadError": {
+    "en": "Failed to load share settings.",
+    "zh": "加载分享设置失败。"
+  },
+  "shareCenter.settingsSectionSubtitle": {
+    "en": "Control the share link, interaction rules, download policy, and expiry.",
+    "zh": "控制分享入口、互动规则、下载权限和链接有效期。"
+  },
+  "shareCenter.settingsSectionTitle": {
+    "en": "Share settings",
+    "zh": "分享设置"
+  },
+  "shareCenter.shareLinkUnavailable": {
+    "en": "There is no active share link right now.",
+    "zh": "当前没有可用的分享链接。"
+  },
+  "shareCenter.shareSwitchLabel": {
+    "en": "Share switch",
+    "zh": "分享开关"
+  },
+  "shareCenter.shareUrlLabel": {
+    "en": "Share link",
+    "zh": "分享链接"
+  },
+  "shareCenter.shareUrlPlaceholder": {
+    "en": "The share link will appear here after it is generated",
+    "zh": "生成链接后会显示在这里"
+  },
+  "shareCenter.statusActive": {
+    "en": "Live",
+    "zh": "分享中"
+  },
+  "shareCenter.statusCardTitle": {
+    "en": "Current status",
+    "zh": "当前状态"
+  },
+  "shareCenter.statusDisabled": {
+    "en": "Sharing disabled",
+    "zh": "未启用分享"
+  },
+  "shareCenter.statusEnabled": {
+    "en": "Sharing enabled",
+    "zh": "已启用分享"
+  },
+  "shareCenter.statusExpired": {
+    "en": "Expired",
+    "zh": "已过期"
+  },
+  "shareCenter.statusInactive": {
+    "en": "Inactive",
+    "zh": "未开启"
+  },
+  "shareCenter.tabs.accessLogs": {
+    "en": "Access logs",
+    "zh": "访问日志"
+  },
+  "shareCenter.tabs.analytics": {
+    "en": "Analytics",
+    "zh": "分析"
+  },
+  "shareCenter.tabs.settings": {
+    "en": "Settings",
+    "zh": "设置"
+  },
+  "shareCenter.tabsLabel": {
+    "en": "Share center tabs",
+    "zh": "分享中心选项卡"
+  },
+  "shareCenter.trendEmptyBody": {
+    "en": "Once sharing is enabled and people start visiting, the recent trend will appear here.",
+    "zh": "开启分享后，这里会显示最近的访问趋势。"
+  },
+  "shareCenter.trendEmptyTitle": {
+    "en": "No access data yet",
+    "zh": "还没有访问数据"
+  },
+  "shareCenter.trendRange30": {
+    "en": "30 days",
+    "zh": "30 天"
+  },
+  "shareCenter.trendRange7": {
+    "en": "7 days",
+    "zh": "7 天"
+  },
+  "shareCenter.trendSectionSubtitle": {
+    "en": "Review the recent rhythm of distribution.",
+    "zh": "查看这份知识最近的传播节奏。"
+  },
+  "shareCenter.trendSectionTitle": {
+    "en": "Access trend",
+    "zh": "访问趋势"
+  },
+  "shareCenter.updateShareAction": {
+    "en": "Update share",
+    "zh": "更新分享"
+  },
+  "shareCenter.updateShareSuccess": {
+    "en": "Share link updated.",
+    "zh": "分享链接已更新。"
+  },
+  "shareCenter.validityHint": {
+    "en": "Change the validity window, then click \"Update share\" to generate a new link.",
+    "zh": "修改有效期后，点击“更新分享”生成新链接即可生效。"
+  },
+  "shareCenter.validityLabel": {
+    "en": "Validity",
+    "zh": "有效期"
+  },
+  "shareCenter.validityOption30d": {
+    "en": "30 days",
+    "zh": "30 天"
+  },
+  "shareCenter.validityOption7d": {
+    "en": "7 days",
+    "zh": "7 天"
+  },
+  "shareCenter.validityOption90d": {
+    "en": "90 days",
+    "zh": "90 天"
+  },
+  "shareCenter.validityOptionNever": {
+    "en": "No expiry",
+    "zh": "长期有效"
+  },
+  "shareCenter.visitorMode.anonymous": {
+    "en": "Anonymous link",
+    "zh": "匿名链接"
+  },
+  "shareCenter.visitorMode.requireRegister": {
+    "en": "Invite / sign-in required",
+    "zh": "定向邀请 / 须登录"
+  },
+  "shareCenter.visitorModeHint": {
+    "en": "Anonymous link: guests can ask without signing in (capped). Invite / sign-in: only signed-in guests can ask. Model cost is billed to the workspace owner (balance or custom provider).",
+    "zh": "「匿名链接」：未登录也可提问（按访客限次）。「定向邀请 / 须登录」：仅登录访客可提问。模型费用由工作区所有者的余额或自定义 Provider 承担。"
+  },
+  "shareCenter.visitorModeLabel": {
+    "en": "Visitor mode",
+    "zh": "访客模式"
+  },
+  "shareConversion.body": {
+    "en": "Plan {plan}: {used}/{max} shared workspaces. Upgrade Plus/Pro for more slots. Guest Q&A on platform models bills the workspace owner; a custom provider skips chat debit, while indexing and the retrieval worker still bill the wallet and count toward usage.",
+    "zh": "当前 {plan}：已开分享 {used}/{max}。升级 Plus/Pro 可提高可分享工作区数；访客问答若走平台模型，由工作区所有者余额支付（自定义 Provider 不扣对话费；文档索引与检索子代理仍扣余额，并计入用量）。"
+  },
+  "shareConversion.byokHint": {
+    "en": "Tip: use a custom provider for shared answers (no chat debit; indexing and the retrieval worker still use Qwen3.7 Flash), or keep wallet funded for platform models.",
+    "zh": "建议：分享场景可先配自定义 Provider（不扣对话费；文档索引与检索子代理仍走 Qwen3.7 Flash），或保持平台模型所需余额。"
+  },
+  "shareConversion.pricingLink": {
+    "en": "Full pricing",
+    "zh": "查看完整定价"
+  },
+  "shareConversion.titleAtCap": {
+    "en": "Share slots full · upgrade or free a slot",
+    "zh": "分享名额已满 · 升级或腾出名额"
+  },
+  "shareConversion.titleDefault": {
+    "en": "More share slots unlock with higher plans",
+    "zh": "多分享一个库，需要更高档位"
+  },
+  "shareConversion.titleNearCap": {
+    "en": "Share slots almost full",
+    "zh": "分享名额快用完了"
+  },
+  "shareConversion.topupCta": {
+    "en": "Top up wallet",
+    "zh": "充值余额"
+  },
+  "shareConversion.upgradeCta": {
+    "en": "Upgrade · more share slots",
+    "zh": "升级会员 · 更多分享名额"
+  },
+  "shareInvalidWorkspaceId": {
+    "en": "Invalid workspace identifier.",
+    "zh": "当前工作区标识无效。"
+  },
+  "shareInviteEmail": {
+    "en": "Invite email",
+    "zh": "邀请邮箱"
+  },
+  "shareInviteNoMembers": {
+    "en": "No members yet.",
+    "zh": "暂无成员。"
+  },
+  "shareInviteRole": {
+    "en": "Invite role",
+    "zh": "邀请角色"
+  },
+  "shareInviteSend": {
+    "en": "Send invite",
+    "zh": "发送邀请"
+  },
+  "shareInviteSendHint": {
+    "en": "We'll try email (SMTP required); you can also copy the share page link.",
+    "zh": "将尝试发送邀请邮件（需配置 SMTP）；也可手动转发分享页链接。"
+  },
+  "shareMenu.access": {
+    "en": "Access",
+    "zh": "访问"
+  },
+  "shareMenu.trigger": {
+    "en": "Share ▾",
+    "zh": "分享 ▾"
+  },
+  "shareQuickModal.loading": {
+    "en": "Loading share settings...",
+    "zh": "正在加载分享设置…"
+  },
+  "shareQuickModal.openFullPage": {
+    "en": "View share analytics →",
+    "zh": "查看分享数据 →"
+  },
+  "shareQuickModal.title": {
+    "en": "Share workspace",
+    "zh": "分享工作区"
+  },
+  "sharedPublic.acceptInviteAction": {
+    "en": "Accept invite",
+    "zh": "接受邀请"
+  },
+  "sharedPublic.accessLevel.full": {
+    "en": "Full access",
+    "zh": "可编辑"
+  },
+  "sharedPublic.accessLevel.partial": {
+    "en": "Read-only",
+    "zh": "只读"
+  },
+  "sharedPublic.answerTitle": {
+    "en": "Answer",
+    "zh": "回答"
+  },
+  "sharedPublic.backHomeAction": {
+    "en": "Back home",
+    "zh": "返回首页"
+  },
+  "sharedPublic.browseOnlyBody": {
+    "en": "Workspace-like layout: sessions, chat, and sources. Capabilities locked to RAG (no plain chat mode, no web search). Sources and notes cannot be added.",
+    "zh": "布局与工作区一致：左侧会话、中间对话、右侧资料。能力固定为 RAG（无 chat 模式、无联网检索）；不可添加内容源与笔记。"
+  },
+  "sharedPublic.browseOnlyTitle": {
+    "en": "Shared knowledge base",
+    "zh": "共享知识库"
+  },
+  "sharedPublic.chartViews": {
+    "en": "Views {n}",
+    "zh": "访问 {n}"
+  },
+  "sharedPublic.chatSectionSubtitle": {
+    "en": "Viewing does not require sign-in. Asking questions does.",
+    "zh": "查看内容无需登录，登录后才能发起问答。"
+  },
+  "sharedPublic.chatSectionTitle": {
+    "en": "Shared Q&A",
+    "zh": "共享问答"
+  },
+  "sharedPublic.citationsTitle": {
+    "en": "Citations",
+    "zh": "引用资料"
+  },
+  "sharedPublic.declineInviteAction": {
+    "en": "Decline invite",
+    "zh": "拒绝邀请"
+  },
+  "sharedPublic.degradedBanner": {
+    "en": "This answer was simplified.",
+    "zh": "本回答为简化结果。"
+  },
+  "sharedPublic.downloadAllowed": {
+    "en": "Downloads allowed",
+    "zh": "允许下载"
+  },
+  "sharedPublic.downloadOnlineOnly": {
+    "en": "View online only",
+    "zh": "仅在线查看"
+  },
+  "sharedPublic.downloadPolicyLabel": {
+    "en": "Download policy",
+    "zh": "下载策略"
+  },
+  "sharedPublic.expiresAtLabel": {
+    "en": "Expires at",
+    "zh": "过期时间"
+  },
+  "sharedPublic.interactionAccessLabel": {
+    "en": "Interaction",
+    "zh": "互动权限"
+  },
+  "sharedPublic.interactionAccessValue": {
+    "en": "Chat enabled (RAG)",
+    "zh": "可对话（RAG）"
+  },
+  "sharedPublic.invalidLinkBody": {
+    "en": "This share link is invalid, revoked, or expired.",
+    "zh": "这个共享链接无效、已撤销，或已经过期。"
+  },
+  "sharedPublic.invalidLinkTitle": {
+    "en": "Share link unavailable",
+    "zh": "共享链接不可用"
+  },
+  "sharedPublic.inviteAcceptFailed": {
+    "en": "Could not accept the invite.",
+    "zh": "接受邀请失败。"
+  },
+  "sharedPublic.inviteAcceptedBody": {
+    "en": "You can now open “{title}”.",
+    "zh": "你现在可以访问「{title}」。"
+  },
+  "sharedPublic.inviteAcceptedTitle": {
+    "en": "Invite accepted",
+    "zh": "已接受邀请"
+  },
+  "sharedPublic.inviteAuthHint": {
+    "en": "Sign in or register before handling this invite.",
+    "zh": "需要先登录或注册，才能处理这条邀请。"
+  },
+  "sharedPublic.inviteDeclineFailed": {
+    "en": "Could not decline the invite.",
+    "zh": "拒绝邀请失败。"
+  },
+  "sharedPublic.inviteDeclinedBody": {
+    "en": "You declined to join “{title}”.",
+    "zh": "你已拒绝加入「{title}」。"
+  },
+  "sharedPublic.inviteDeclinedTitle": {
+    "en": "Invite declined",
+    "zh": "已拒绝邀请"
+  },
+  "sharedPublic.inviteErrorTitle": {
+    "en": "Invite problem",
+    "zh": "邀请异常"
+  },
+  "sharedPublic.inviteGenericBody": {
+    "en": "You are invited to a workspace. Sign in to accept or decline.",
+    "zh": "你被邀请加入一个工作区。登录后可接受或拒绝。"
+  },
+  "sharedPublic.inviteInvalidLink": {
+    "en": "This invite link is invalid.",
+    "zh": "邀请链接无效。"
+  },
+  "sharedPublic.inviteLoading": {
+    "en": "Loading invite…",
+    "zh": "正在加载邀请…"
+  },
+  "sharedPublic.inviteNamedBody": {
+    "en": "You are invited to join “{title}”.",
+    "zh": "你被邀请加入「{title}」。"
+  },
+  "sharedPublic.inviteProcessing": {
+    "en": "Working…",
+    "zh": "处理中…"
+  },
+  "sharedPublic.inviteSubtitle": {
+    "en": "Sign in to accept or decline this workspace invite.",
+    "zh": "登录后可接受或拒绝这条工作区邀请。"
+  },
+  "sharedPublic.inviteTitle": {
+    "en": "Workspace invite",
+    "zh": "工作区邀请"
+  },
+  "sharedPublic.inviteWorkspaceFallback": {
+    "en": "this workspace",
+    "zh": "这个工作区"
+  },
+  "sharedPublic.loading": {
+    "en": "Loading shared content...",
+    "zh": "正在加载共享内容…"
+  },
+  "sharedPublic.modeRagChip": {
+    "en": "Knowledge chat",
+    "zh": "知识库对话"
+  },
+  "sharedPublic.moreSharesEmpty": {
+    "en": "This sharer has no other public shared workspaces yet.",
+    "zh": "这位分享者暂时没有其他公开共享的工作区。"
+  },
+  "sharedPublic.moreSharesLoading": {
+    "en": "Loading the sharer's other workspaces...",
+    "zh": "正在加载分享者的其他共享…"
+  },
+  "sharedPublic.openOwnerProfile": {
+    "en": "View sharer profile and all shared workspaces",
+    "zh": "查看分享者主页与全部共享库"
+  },
+  "sharedPublic.openWorkspaceAction": {
+    "en": "Open workspace",
+    "zh": "打开工作区"
+  },
+  "sharedPublic.ownerBannerLabel": {
+    "en": "Sharer cover image",
+    "zh": "分享者封面"
+  },
+  "sharedPublic.ownerCardLabel": {
+    "en": "Workspace owner",
+    "zh": "工作区所有者"
+  },
+  "sharedPublic.ownerContactAction": {
+    "en": "Contact",
+    "zh": "联系"
+  },
+  "sharedPublic.ownerFallbackName": {
+    "en": "Sharer",
+    "zh": "分享者"
+  },
+  "sharedPublic.ownerRolePill": {
+    "en": "Owner",
+    "zh": "所有者"
+  },
+  "sharedPublic.pageSubtitle": {
+    "en": "Shared knowledge base: chat in RAG mode with sessions. No adding sources, notes, or web search.",
+    "zh": "共享知识库：可对话（默认 RAG）、可管理会话。不可添加资料、笔记或联网检索。"
+  },
+  "sharedPublic.pageTitle": {
+    "en": "Shared workspace",
+    "zh": "共享工作区"
+  },
+  "sharedPublic.permissionLabel": {
+    "en": "Permission",
+    "zh": "权限"
+  },
+  "sharedPublic.profileBackToHome": {
+    "en": "Back home",
+    "zh": "返回首页"
+  },
+  "sharedPublic.profileHint": {
+    "en": "Tap avatar for all shares",
+    "zh": "点击头像查看全部共享"
+  },
+  "sharedPublic.profileLoading": {
+    "en": "Loading profile...",
+    "zh": "正在加载主页…"
+  },
+  "sharedPublic.profileNotFound": {
+    "en": "This sharer profile was not found.",
+    "zh": "找不到该分享者主页。"
+  },
+  "sharedPublic.profileOpenWorkspace": {
+    "en": "Open",
+    "zh": "打开"
+  },
+  "sharedPublic.profilePageTitle": {
+    "en": "Sharer profile",
+    "zh": "分享者主页"
+  },
+  "sharedPublic.profileSharesEmpty": {
+    "en": "No open shared workspaces yet.",
+    "zh": "暂时没有可打开的共享工作区。"
+  },
+  "sharedPublic.profileSharesTitle": {
+    "en": "Public shared workspaces",
+    "zh": "公开共享的工作区"
+  },
+  "sharedPublic.profileSourcesMeta": {
+    "en": "{count} sources",
+    "zh": "{count} 份资料"
+  },
+  "sharedPublic.questionLabel": {
+    "en": "Question",
+    "zh": "提问"
+  },
+  "sharedPublic.questionPlaceholder": {
+    "en": "Ask a question",
+    "zh": "输入你的问题"
+  },
+  "sharedPublic.ragLockedHint": {
+    "en": "Share page is locked to knowledge-base RAG — no plain chat or web search.",
+    "zh": "分享页固定为知识库 RAG，不可切换到 chat 或联网检索。"
+  },
+  "sharedPublic.readAccessLabel": {
+    "en": "Read access",
+    "zh": "访问方式"
+  },
+  "sharedPublic.readAccessValue": {
+    "en": "Anyone with the link can view",
+    "zh": "任何人可查看"
+  },
+  "sharedPublic.scopeLabel": {
+    "en": "Scope",
+    "zh": "范围"
+  },
+  "sharedPublic.sharingWorkspaceLabel": {
+    "en": "Sharing",
+    "zh": "正在分享"
+  },
+  "sharedPublic.signInRequiredBody": {
+    "en": "Viewing does not require sign-in. To control AI cost, only signed-in users can ask questions and interact.",
+    "zh": "查看内容无需登录。为了控制 AI 成本，只有登录用户才能发起提问和互动。"
+  },
+  "sharedPublic.signInRequiredTitle": {
+    "en": "Sign in to ask questions",
+    "zh": "登录后可提问"
+  },
+  "sharedPublic.signInToContinueAction": {
+    "en": "Sign in to continue",
+    "zh": "登录后继续"
+  },
+  "sharedPublic.signUpToContinueAction": {
+    "en": "Sign up to continue",
+    "zh": "注册后继续"
+  },
+  "sharedPublic.sourceAskAction": {
+    "en": "Ask about this source",
+    "zh": "就这份资料提问"
+  },
+  "sharedPublic.sourceAskTemplate": {
+    "en": "Summarize the key points of \"{name}\".",
+    "zh": "请总结一下《{name}》的主要内容。"
+  },
+  "sharedPublic.sourceDetailBody": {
+    "en": "Visitor share pages list sources and status. Full body preview and download still follow the share policy set by the owner.",
+    "zh": "访客分享页仅展示资料清单与状态。正文预览与下载仍受分享策略与所有者配置限制。"
+  },
+  "sharedPublic.sourceDetailStatus": {
+    "en": "Status",
+    "zh": "状态"
+  },
+  "sharedPublic.sourceDetailTitle": {
+    "en": "Source detail",
+    "zh": "资料详情"
+  },
+  "sharedPublic.sourcesCountChip": {
+    "en": "{count} sources",
+    "zh": "{count} 份资料"
+  },
+  "sharedPublic.sourcesEmptyBody": {
+    "en": "Sharing is enabled, but there are no publicly visible sources yet.",
+    "zh": "共享已开启，但当前没有可公开浏览的资料。"
+  },
+  "sharedPublic.sourcesEmptyTitle": {
+    "en": "No visible sources yet",
+    "zh": "暂时没有可见资料"
+  },
+  "sharedPublic.sourcesSectionSubtitle": {
+    "en": "The list of publicly visible sources and their current status.",
+    "zh": "当前公开可见的资料列表和状态。"
+  },
+  "sharedPublic.sourcesSectionTitle": {
+    "en": "Shared sources",
+    "zh": "共享资料"
+  },
+  "sharedPublic.sourcesTabEmpty": {
+    "en": "This shared workspace has no sources yet.",
+    "zh": "这个共享工作区暂时没有资料。"
+  },
+  "sharedPublic.submitAction": {
+    "en": "Ask question",
+    "zh": "开始提问"
+  },
+  "sharedPublic.submitting": {
+    "en": "Answering...",
+    "zh": "回答中…"
+  },
+  "sharedPublic.tabBarLabel": {
+    "en": "Shared workspace content",
+    "zh": "共享工作区内容"
+  },
+  "sharedPublic.tabChat": {
+    "en": "Chat",
+    "zh": "对话"
+  },
+  "sharedPublic.tabMoreShares": {
+    "en": "More shares",
+    "zh": "更多分享"
+  },
+  "sharedPublic.tabSources": {
+    "en": "Sources",
+    "zh": "资料"
+  },
+  "sharedPublic.turnstileRequired": {
+    "en": "Complete the human verification before asking.",
+    "zh": "请先完成人机验证再提问。"
+  },
+  "sharedPublicVerifyHint": {
+    "en": "Complete the human verification challenge before asking.",
+    "zh": "请先完成人机验证后再提问。"
+  },
+  "toastClose": {
+    "en": "Close",
+    "zh": "关闭"
+  },
+  "toastResetsIn": {
+    "en": "{time} left",
+    "zh": "还有 {time}"
+  },
+  "toastUpgradeCta": {
+    "en": "Upgrade plan or top up balance →",
+    "zh": "升级方案或充值余额 →"
+  },
+  "toastUsageAt": {
+    "en": "{window} usage at {pct}%",
+    "zh": "{window} 用量已用 {pct}%"
+  },
+  "upgradeButton": {
+    "en": "Upgrade Plus",
+    "zh": "升级 Plus"
+  },
+  "upgradeContinueFree": {
+    "en": "Continue Free",
+    "zh": "继续 Free"
+  },
+  "upgradeModal.memberBody": {
+    "en": "Membership unlocks shareable workspace slots (Free 3 / Plus 10 / Pro 100). Client and private workspaces stay free.",
+    "zh": "会员解锁可分享工作区名额（Free 3 / Plus 10 / Pro 100）。客户端与仅自己使用的工作区始终免费。"
+  },
+  "upgradeModal.memberTitle": {
+    "en": "What is membership for?",
+    "zh": "会员档位是干什么的？"
+  },
+  "upgradeModal.openFullPage": {
+    "en": "Open full pricing page →",
+    "zh": "打开定价详情页 →"
+  },
+  "upgradeModal.pricingCta": {
+    "en": "Pricing & checkout",
+    "zh": "定价与支付详情"
+  },
+  "upgradeModal.subtitle": {
+    "en": "This dialog explains the product. Complete payment or top-up on the pricing or billing page.",
+    "zh": "本页是产品说明。正式支付与充值请进入定价页或账单页完成。"
+  },
+  "upgradeModal.title": {
+    "en": "Membership & top-up",
+    "zh": "会员与充值"
+  },
+  "upgradeModal.topupBody": {
+    "en": "Wallet pays platform model calls and retrieval. Independent of plan — top up only, upgrade only, or both.",
+    "zh": "余额支付平台模型调用与向量检索。与会员独立：可以只充值不升级，也可以两者都要。"
+  },
+  "upgradeModal.topupCta": {
+    "en": "Top up on pricing",
+    "zh": "去定价页充值"
+  },
+  "upgradeModal.topupStrip": {
+    "en": "Ready to pay? Open pricing for tiers or wallet top-up packs.",
+    "zh": "需要立刻支付？请到定价页选档或直接充值余额。"
+  },
+  "upgradeModal.topupTitle": {
+    "en": "What is top-up for?",
+    "zh": "充值是干什么的？"
+  },
+  "upgradeSuccess.chatCta": {
+    "en": "Start chatting",
+    "zh": "开始使用对话"
+  },
+  "upgradeSuccess.dashboardCta": {
+    "en": "Open dashboard",
+    "zh": "进入工作台"
+  },
+  "upgradeSuccess.order": {
+    "en": "Order {id}",
+    "zh": "订单号：{id}"
+  },
+  "upgradeSuccess.subtitle": {
+    "en": "Thanks — your plan or wallet credit is now active.",
+    "zh": "感谢您对 Context-OS 的支持，您的会员权益或充值金额已到账。"
+  },
+  "upgradeSuccess.title": {
+    "en": "Payment successful",
+    "zh": "支付成功！"
+  },
+  "upgradeSuccessBack": {
+    "en": "Back to workspace",
+    "zh": "返回工作区"
+  },
+  "upgradeSuccessSubtitle": {
+    "en": "Your new plan is active. Enjoy!",
+    "zh": "新档位已立即生效，祝你用得开心。"
+  },
+  "upgradeSuccessTitle": {
+    "en": "Upgrade successful",
+    "zh": "升级成功"
+  },
+  "upgradeSuccessViewUsage": {
+    "en": "View usage",
+    "zh": "查看用量"
+  },
+  "usage.back": {
+    "en": "← Back to settings",
+    "zh": "← 返回设置"
+  },
+  "usage.empty": {
+    "en": "No usage data yet.",
+    "zh": "暂无用量数据。"
+  },
+  "usage.loadFailed": {
+    "en": "Failed to load usage: {error}",
+    "zh": "加载用量失败：{error}"
+  },
+  "usage.loginRequired": {
+    "en": "Sign in to view usage.",
+    "zh": "请先登录后查看用量。"
+  },
+  "usage.overviewTitle": {
+    "en": "Usage overview",
+    "zh": "用量总览"
+  },
+  "usage.planLine": {
+    "en": "Current plan: {plan}",
+    "zh": "当前套餐：{plan}"
+  },
+  "usage.tokens5h": {
+    "en": "Tokens · last 5 hours",
+    "zh": "近 5 小时 Token"
+  },
+  "usage.tokens7d": {
+    "en": "Tokens · last 7 days",
+    "zh": "近 7 天 Token"
+  },
+  "usage.trendAria": {
+    "en": "Usage trend",
+    "zh": "用量趋势"
+  },
+  "usage.trendEmpty": {
+    "en": "No trend data yet.",
+    "zh": "暂无趋势数据。"
+  },
+  "usageApproxTokensLabel": {
+    "en": "≈ {used} / {limit} tokens",
+    "zh": "约 {used} / {limit} tokens"
+  },
+  "usageCurrentPlanLabel": {
+    "en": "Current plan:",
+    "zh": "当前方案:"
+  },
+  "usageErrorBackDashboard": {
+    "en": "Back to dashboard",
+    "zh": "返回工作台"
+  },
+  "usageErrorLoad": {
+    "en": "Failed to load usage data. Please try again later.",
+    "zh": "消费数据加载失败，请稍后重试。"
+  },
+  "usageEstimatedReset": {
+    "en": "Eases in {time}",
+    "zh": "预计 {time} 后缓解"
+  },
+  "usageForecastDetail": {
+    "en": "Projected 30-day usage {projected} (reference)",
+    "zh": "预计 30 天用量 {projected}（参考）"
+  },
+  "usageFreeUpgradeHint": {
+    "en": "→ Upgrade Plus/Pro for more shareable workspaces",
+    "zh": "→ 升级 Plus/Pro 增加可分享工作区名额"
+  },
+  "usageLoading": {
+    "en": "Loading...",
+    "zh": "加载中…"
+  },
+  "usageMarginNote": {
+    "en": "Reference multiplier M={m}; with a custom provider, chat can skip platform balance.",
+    "zh": "参考计费乘数 M={m}；配置自定义 Provider 后，对话可不消耗平台余额。"
+  },
+  "usageSoftLimitWarning": {
+    "en": "Approaching protective throttle — check balance or custom provider",
+    "zh": "接近平台保护限速，建议检查余额或自定义 Provider。"
+  },
+  "usageTitle": {
+    "en": "Usage details",
+    "zh": "消费明细"
+  },
+  "usageTrendAriaLabel": {
+    "en": "Recent usage trend",
+    "zh": "近期用量趋势"
+  },
+  "usageTrendEmpty": {
+    "en": "No usage data yet",
+    "zh": "暂无用量数据"
+  },
+  "usageTrendTitle": {
+    "en": "Last 7-day usage trend",
+    "zh": "近 7 日消费趋势"
+  },
+  "usageUnlimited": {
+    "en": "Unlimited",
+    "zh": "无限制"
+  },
+  "usageWindow5h": {
+    "en": "Last 5 hours",
+    "zh": "近 5 小时"
+  },
+  "usageWindow7d": {
+    "en": "Last 7 days",
+    "zh": "近 7 天"
+  },
+  "workbench.addLink": {
+    "en": "Add link",
+    "zh": "添加链接"
+  },
+  "workbench.addText": {
+    "en": "Add text",
+    "zh": "添加文本"
+  },
+  "workbench.backAll": {
+    "en": "← All workspaces",
+    "zh": "← 全部工作区"
+  },
+  "workbench.docCount": {
+    "en": "{count}",
+    "zh": "{count} 篇"
+  },
+  "workbench.fileList": {
+    "en": "Files",
+    "zh": "持久文件列表"
+  },
+  "workbench.linkSubmitted": {
+    "en": "Link submitted",
+    "zh": "已提交链接"
+  },
+  "workbench.newNote": {
+    "en": "+ New note",
+    "zh": "+ 新笔记"
+  },
+  "workbench.noteTitlePlaceholder": {
+    "en": "Note title",
+    "zh": "笔记标题"
+  },
+  "workbench.notesTab": {
+    "en": "Notes",
+    "zh": "工作区笔记"
+  },
+  "workbench.saveNote": {
+    "en": "Save note",
+    "zh": "保存笔记"
+  },
+  "workbench.sessions": {
+    "en": "Sessions",
+    "zh": "会话"
+  },
+  "workbench.sessionsEmpty": {
+    "en": "No workspace sessions yet.",
+    "zh": "还没有工作区会话。"
+  },
+  "workbench.shareCenter": {
+    "en": "Share center →",
+    "zh": "分享中心 →"
+  },
+  "workbench.sourcesEmpty": {
+    "en": "No sources yet. Upload a file, paste a link, or paste text.",
+    "zh": "还没有资料。可上传文件、粘贴链接或文本。"
+  },
+  "workbench.sourcesTab": {
+    "en": "Sources",
+    "zh": "持久资料库"
+  },
+  "workbench.startUpload": {
+    "en": "Start upload",
+    "zh": "开始上传"
+  },
+  "workbench.textSubmitted": {
+    "en": "Text submitted",
+    "zh": "已提交文本"
+  },
+  "workbench.upload": {
+    "en": "Upload",
+    "zh": "上传"
+  },
+  "workbench.uploadFailed": {
+    "en": "Upload failed: {error}",
+    "zh": "上传失败：{error}"
+  },
+  "workbench.uploadFile": {
+    "en": "Upload file",
+    "zh": "上传文件"
+  },
+  "workbench.uploadPaste": {
+    "en": "Paste",
+    "zh": "粘贴"
+  },
+  "workbench.uploadTitle": {
+    "en": "Upload sources",
+    "zh": "上传资料"
+  },
+  "workbench.uploadUrl": {
+    "en": "Link",
+    "zh": "链接"
+  },
+  "workbench.uploaded": {
+    "en": "Source uploaded",
+    "zh": "资料已上传"
+  },
+  "workbench.workspaceFallback": {
+    "en": "Workspace: {id}",
+    "zh": "工作区：{id}"
+  },
+  "workspaceApi": {
+    "en": "API",
+    "zh": "API"
+  },
+  "workspaceChatActionAddToNote": {
+    "en": "Add to note",
+    "zh": "加入笔记"
+  },
+  "workspaceChatActionCopied": {
+    "en": "Copied",
+    "zh": "已复制"
+  },
+  "workspaceChatActionCopy": {
+    "en": "Copy",
+    "zh": "复制"
+  },
+  "workspaceChatActionEdit": {
+    "en": "Edit",
+    "zh": "编辑"
+  },
+  "workspaceChatActionRegenerate": {
+    "en": "Regenerate",
+    "zh": "重新生成"
+  },
+  "workspaceChatActionThumbDown": {
+    "en": "Not helpful",
+    "zh": "无用"
+  },
+  "workspaceChatActionThumbUp": {
+    "en": "Helpful",
+    "zh": "有用"
+  },
+  "workspaceChatBackToBottom": {
+    "en": "Back to bottom",
+    "zh": "回到底部"
+  },
+  "workspaceChatCapRag": {
+    "en": "Knowledge base",
+    "zh": "知识库"
+  },
+  "workspaceChatCapSearch": {
+    "en": "Web search",
+    "zh": "网络搜索"
+  },
+  "workspaceChatCapabilityLabel": {
+    "en": "Capabilities",
+    "zh": "能力标签"
+  },
+  "workspaceChatCodeCopied": {
+    "en": "Copied",
+    "zh": "已复制"
+  },
+  "workspaceChatCodeCopy": {
+    "en": "Copy",
+    "zh": "复制"
+  },
+  "workspaceChatComposerLabel": {
+    "en": "Workspace chat composer",
+    "zh": "工作区对话输入框"
+  },
+  "workspaceChatComposerPlaceholder": {
+    "en": "Ask anything…",
+    "zh": "输入问题…"
+  },
+  "workspaceChatComposerResize": {
+    "en": "Resize composer",
+    "zh": "调整输入框高度"
+  },
+  "workspaceChatHeroSubtitle": {
+    "en": "Ask directly — select documents on the right and answers will search them.",
+    "zh": "直接提问；选中右侧文档后，回答会检索这些文档。"
+  },
+  "workspaceChatHeroTitle": {
+    "en": "What would you like to ask?",
+    "zh": "有什么想问的？"
+  },
+  "workspaceChatLoadError": {
+    "en": "Failed to load workspace transcript.",
+    "zh": "加载工作区对话记录失败。"
+  },
+  "workspaceChatModeChat": {
+    "en": "Chat",
+    "zh": "聊天"
+  },
+  "workspaceChatModeLineBoth": {
+    "en": "Knowledge base + Web search: answers search selected documents and the web.",
+    "zh": "知识库 + 网络搜索：回答检索已选文档与网页。"
+  },
+  "workspaceChatModeLineChat": {
+    "en": "Chat: answers do not search documents or the web.",
+    "zh": "聊天：回答不检索文档与网络。"
+  },
+  "workspaceChatModeLineNoSelection": {
+    "en": "No documents selected — select documents on the right to enable knowledge retrieval.",
+    "zh": "未选择文档：可选择右侧文档后开启知识库检索。"
+  },
+  "workspaceChatModeLineRag": {
+    "en": "Knowledge base: answers search the selected documents.",
+    "zh": "知识库：回答检索已选文档。"
+  },
+  "workspaceChatModeLineSearch": {
+    "en": "Web search: answers search the web.",
+    "zh": "网络搜索：回答会检索网页。"
+  },
+  "workspaceChatRegionLabel": {
+    "en": "Workspace chat",
+    "zh": "工作区对话"
+  },
+  "workspaceChatStop": {
+    "en": "Stop",
+    "zh": "停止"
+  },
+  "workspaceCitation.chunkTitle": {
+    "en": "Chunk content",
+    "zh": "片段内容"
+  },
+  "workspaceCitation.dialogLabel": {
+    "en": "Citation chunk",
+    "zh": "引用片段"
+  },
+  "workspaceCitation.empty": {
+    "en": "This citation does not include displayable text.",
+    "zh": "当前引用没有可展示的文本内容。"
+  },
+  "workspaceCitation.error": {
+    "en": "Failed to load citation chunk.",
+    "zh": "加载引用片段失败。"
+  },
+  "workspaceCitation.loading": {
+    "en": "Loading citation chunk...",
+    "zh": "正在加载引用片段…"
+  },
+  "workspaceCitation.openSource": {
+    "en": "Open source",
+    "zh": "跳转来源"
+  },
+  "workspaceCitationAriaLabel": {
+    "en": "Citation {displayId}: {label}",
+    "zh": "引用 {displayId}：{label}"
+  },
+  "workspaceCitationAriaLabelWithPage": {
+    "en": "Citation {displayId}: {label}, {pageLabel}",
+    "zh": "引用 {displayId}：{label}，{pageLabel}"
+  },
+  "workspaceCitationImageUnavailable": {
+    "en": "Image unavailable",
+    "zh": "图片暂不可用"
+  },
+  "workspaceCreateAction": {
+    "en": "Create workspace",
+    "zh": "创建工作区"
+  },
+  "workspaceCreateDialogLabel": {
+    "en": "Create workspace",
+    "zh": "新建工作区"
+  },
+  "workspaceDegradeReasons": {
+    "en": "About this answer: {reasons}",
+    "zh": "回答说明：{reasons}"
+  },
+  "workspaceDeleteSessionAction": {
+    "en": "Delete",
+    "zh": "删除"
+  },
+  "workspaceDeleteSessionDialogBody": {
+    "en": "Delete \"{title}\"? This cannot be undone.",
+    "zh": "确定删除会话「{title}」吗？此操作无法撤销。"
+  },
+  "workspaceDeleteSessionDialogTitle": {
+    "en": "Delete session",
+    "zh": "删除会话"
+  },
+  "workspaceDeleteSessionFailed": {
+    "en": "Failed to delete the session. Please try again.",
+    "zh": "删除会话失败，请重试。"
+  },
+  "workspaceDistribute": {
+    "en": "Share",
+    "zh": "分享"
+  },
+  "workspaceEmptyStateModeHint": {
+    "en": "Active: {mode}",
+    "zh": "当前：{mode}"
+  },
+  "workspaceGuardIntervened": {
+    "en": "Safety checks adjusted this answer.",
+    "zh": "安全护栏已介入当前回答。"
+  },
+  "workspaceHistoryGroupEarlier": {
+    "en": "Earlier",
+    "zh": "更早"
+  },
+  "workspaceHistoryGroupToday": {
+    "en": "Today",
+    "zh": "今天"
+  },
+  "workspaceHistoryLabel": {
+    "en": "Workspace history",
+    "zh": "工作区历史"
+  },
+  "workspaceHistorySearch": {
+    "en": "Search sessions",
+    "zh": "搜索会话"
+  },
+  "workspaceLanguageChinese": {
+    "en": "Chinese",
+    "zh": "中文"
+  },
+  "workspaceLanguageEnglish": {
+    "en": "English",
+    "zh": "English"
+  },
+  "workspaceLogout": {
+    "en": "Log out",
+    "zh": "退出登录"
+  },
+  "workspaceNewThread": {
+    "en": "New session",
+    "zh": "新建会话"
+  },
+  "workspaceNoSessionsMatch": {
+    "en": "No sessions yet.",
+    "zh": "暂无会话。"
+  },
+  "workspaceNoteApply": {
+    "en": "Apply",
+    "zh": "应用"
+  },
+  "workspaceNoteBold": {
+    "en": "Bold",
+    "zh": "粗体"
+  },
+  "workspaceNoteBulletedList": {
+    "en": "Bulleted list",
+    "zh": "无序列表"
+  },
+  "workspaceNoteClearFormatting": {
+    "en": "Clear formatting",
+    "zh": "清除格式"
+  },
+  "workspaceNoteHeading1": {
+    "en": "Heading 1",
+    "zh": "标题 1"
+  },
+  "workspaceNoteHeading2": {
+    "en": "Heading 2",
+    "zh": "标题 2"
+  },
+  "workspaceNoteItalic": {
+    "en": "Italic",
+    "zh": "斜体"
+  },
+  "workspaceNoteLink": {
+    "en": "Link",
+    "zh": "链接"
+  },
+  "workspaceNoteLinkPlaceholder": {
+    "en": "Paste or enter a link URL",
+    "zh": "粘贴或输入链接地址"
+  },
+  "workspaceNoteOrderedList": {
+    "en": "Ordered list",
+    "zh": "有序列表"
+  },
+  "workspaceNoteParagraph": {
+    "en": "Normal",
+    "zh": "正文"
+  },
+  "workspaceNoteRedo": {
+    "en": "Redo",
+    "zh": "重做"
+  },
+  "workspaceNoteRemove": {
+    "en": "Remove",
+    "zh": "移除"
+  },
+  "workspaceNoteTextStyle": {
+    "en": "Text style",
+    "zh": "正文样式"
+  },
+  "workspaceNoteUndo": {
+    "en": "Undo",
+    "zh": "撤销"
+  },
+  "workspaceNotesPlaceholder": {
+    "en": "Start writing notes…",
+    "zh": "开始记录笔记…"
+  },
+  "workspaceNotesSaved": {
+    "en": "Saved notes",
+    "zh": "已保存笔记"
+  },
+  "workspaceOpenSessionInNewTabAction": {
+    "en": "Open in new tab",
+    "zh": "在新标签页打开"
+  },
+  "workspacePinSessionAction": {
+    "en": "Pin",
+    "zh": "置顶"
+  },
+  "workspacePinnedSession": {
+    "en": "Pinned",
+    "zh": "已置顶"
+  },
+  "workspaceProgressCompletedRag": {
+    "en": "Knowledge retrieval",
+    "zh": "知识库检索"
+  },
+  "workspaceProgressCompletedSearch": {
+    "en": "Web search",
+    "zh": "网络搜索"
+  },
+  "workspaceProgressCompletedThinking": {
+    "en": "Thinking complete",
+    "zh": "思考完成"
+  },
+  "workspaceProgressCountChunks": {
+    "en": "chunks",
+    "zh": "片段"
+  },
+  "workspaceProgressCountDocuments": {
+    "en": "documents",
+    "zh": "文档"
+  },
+  "workspaceProgressCountQueries": {
+    "en": "queries",
+    "zh": "查询"
+  },
+  "workspaceProgressCountResults": {
+    "en": "results",
+    "zh": "结果"
+  },
+  "workspaceProgressCountSources": {
+    "en": "sources",
+    "zh": "来源"
+  },
+  "workspaceProgressHeadingRag": {
+    "en": "Knowledge retrieval",
+    "zh": "知识库检索中"
+  },
+  "workspaceProgressHeadingSearch": {
+    "en": "Web search",
+    "zh": "网络搜索中"
+  },
+  "workspaceProgressStepCollapse": {
+    "en": "Collapse step: {title}",
+    "zh": "收起步骤：{title}"
+  },
+  "workspaceProgressStepExpand": {
+    "en": "Expand step: {title}",
+    "zh": "展开步骤：{title}"
+  },
+  "workspaceProgressThinking": {
+    "en": "Thinking",
+    "zh": "正在思考"
+  },
+  "workspaceProgressToggleCollapse": {
+    "en": "Collapse progress",
+    "zh": "收起过程"
+  },
+  "workspaceProgressToggleExpand": {
+    "en": "Expand progress",
+    "zh": "展开过程"
+  },
+  "workspaceRenameSessionAction": {
+    "en": "Rename",
+    "zh": "重命名"
+  },
+  "workspaceRenameSessionDialogLabel": {
+    "en": "Rename session",
+    "zh": "重命名会话"
+  },
+  "workspaceRenameSessionFailed": {
+    "en": "Failed to rename the session. Please try again.",
+    "zh": "重命名会话失败，请重试。"
+  },
+  "workspaceRenameSessionSubmit": {
+    "en": "Save session",
+    "zh": "保存会话"
+  },
+  "workspaceResizeHistoryRailLabel": {
+    "en": "Resize history rail",
+    "zh": "调整历史栏宽度"
+  },
+  "workspaceResizeRightRailLabel": {
+    "en": "Resize right rail",
+    "zh": "调整右侧栏宽度"
+  },
+  "workspaceRightRail.addLinkAction": {
+    "en": "Add link",
+    "zh": "添加链接"
+  },
+  "workspaceRightRail.addSourceSubtitle": {
+    "en": "Add a file, web link, or pasted content to this workspace.",
+    "zh": "选择文件、网页链接或粘贴内容来扩展当前工作区。"
+  },
+  "workspaceRightRail.addSourceTitle": {
+    "en": "Add new source",
+    "zh": "添加新资料"
+  },
+  "workspaceRightRail.addUrlAction": {
+    "en": "Add URL",
+    "zh": "添加链接"
+  },
+  "workspaceRightRail.browseFilesAction": {
+    "en": "Browse files",
+    "zh": "浏览文件"
+  },
+  "workspaceRightRail.citationFallbackTitle": {
+    "en": "Citation",
+    "zh": "引用"
+  },
+  "workspaceRightRail.clearSelectionAction": {
+    "en": "Clear selection",
+    "zh": "清除选择"
+  },
+  "workspaceRightRail.closeViewerAction": {
+    "en": "Close",
+    "zh": "关闭"
+  },
+  "workspaceRightRail.deleteNoteAction": {
+    "en": "Delete note",
+    "zh": "删除笔记"
+  },
+  "workspaceRightRail.deleteSourceAction": {
+    "en": "Delete",
+    "zh": "删除"
+  },
+  "workspaceRightRail.emptyNotePreview": {
+    "en": "No content yet.",
+    "zh": "还没有内容。"
+  },
+  "workspaceRightRail.emptyNotesBody": {
+    "en": "Capture key conclusions, decisions, and action items here.",
+    "zh": "把关键结论、决策和行动项记录到这里。"
+  },
+  "workspaceRightRail.emptyNotesTitle": {
+    "en": "No notes yet",
+    "zh": "还没有笔记"
+  },
+  "workspaceRightRail.emptySourcesBody": {
+    "en": "Uploaded files and imported URLs will appear here.",
+    "zh": "上传文件或添加 URL 后，资料会出现在这里。"
+  },
+  "workspaceRightRail.emptySourcesTitle": {
+    "en": "No sources yet",
+    "zh": "还没有资料"
+  },
+  "workspaceRightRail.hidePreviewAction": {
+    "en": "Hide preview",
+    "zh": "收起预览"
+  },
+  "workspaceRightRail.idleState": {
+    "en": "Idle",
+    "zh": "空闲"
+  },
+  "workspaceRightRail.label": {
+    "en": "Workspace right rail",
+    "zh": "工作区右侧栏"
+  },
+  "workspaceRightRail.loading": {
+    "en": "Loading...",
+    "zh": "加载中…"
+  },
+  "workspaceRightRail.loadingSourcePreview": {
+    "en": "Loading source preview...",
+    "zh": "正在加载资料预览…"
+  },
+  "workspaceRightRail.newNoteAction": {
+    "en": "New note",
+    "zh": "新建笔记"
+  },
+  "workspaceRightRail.newSourceAction": {
+    "en": "New source",
+    "zh": "添加资料"
+  },
+  "workspaceRightRail.noteContentLabel": {
+    "en": "Content",
+    "zh": "内容"
+  },
+  "workspaceRightRail.noteEditorToolbar": {
+    "en": "Note editor toolbar",
+    "zh": "笔记编辑工具栏"
+  },
+  "workspaceRightRail.noteTitleLabel": {
+    "en": "Title",
+    "zh": "标题"
+  },
+  "workspaceRightRail.notesError": {
+    "en": "Failed to load notes.",
+    "zh": "加载笔记失败。"
+  },
+  "workspaceRightRail.notesErrorBanner": {
+    "en": "Failed to sync notes.",
+    "zh": "同步笔记失败。"
+  },
+  "workspaceRightRail.notesListLabel": {
+    "en": "Notes list",
+    "zh": "笔记列表"
+  },
+  "workspaceRightRail.notesSavedBanner": {
+    "en": "Notes synced.",
+    "zh": "笔记已同步。"
+  },
+  "workspaceRightRail.notesSavingBanner": {
+    "en": "Syncing notes...",
+    "zh": "正在同步笔记…"
+  },
+  "workspaceRightRail.notesSectionSubtitle": {
+    "en": "Capture conclusions, drafts, and next actions for the workspace.",
+    "zh": "记录工作区结论、草稿和后续行动。"
+  },
+  "workspaceRightRail.notesSectionTitle": {
+    "en": "Notes",
+    "zh": "笔记"
+  },
+  "workspaceRightRail.openSourceAction": {
+    "en": "Open preview",
+    "zh": "打开预览"
+  },
+  "workspaceRightRail.pasteContentLabel": {
+    "en": "Text",
+    "zh": "文本内容"
+  },
+  "workspaceRightRail.pasteTextTab": {
+    "en": "Paste text",
+    "zh": "粘贴文本"
+  },
+  "workspaceRightRail.pasteTitleLabel": {
+    "en": "Title",
+    "zh": "标题"
+  },
+  "workspaceRightRail.promoteNoteAction": {
+    "en": "Convert to source",
+    "zh": "转换为来源"
+  },
+  "workspaceRightRail.promoteNoteEmptyError": {
+    "en": "Cannot convert an empty note into a source.",
+    "zh": "笔记为空，无法转换为来源。"
+  },
+  "workspaceRightRail.promoteNoteError": {
+    "en": "Failed to convert note to source.",
+    "zh": "转换为来源失败。"
+  },
+  "workspaceRightRail.promotedNoteBadge": {
+    "en": "Converted to source",
+    "zh": "已转换为来源"
+  },
+  "workspaceRightRail.refreshAction": {
+    "en": "Refresh",
+    "zh": "刷新"
+  },
+  "workspaceRightRail.reindexAction": {
+    "en": "Reindex",
+    "zh": "重建索引"
+  },
+  "workspaceRightRail.resizePanelsLabel": {
+    "en": "Resize right rail panels",
+    "zh": "调整右侧面板大小"
+  },
+  "workspaceRightRail.saveAsSourceAction": {
+    "en": "Save as source",
+    "zh": "保存为资料"
+  },
+  "workspaceRightRail.saveNoteAction": {
+    "en": "Save note",
+    "zh": "保存笔记"
+  },
+  "workspaceRightRail.saveNoteError": {
+    "en": "Failed to save note.",
+    "zh": "保存笔记失败。"
+  },
+  "workspaceRightRail.selectAllAction": {
+    "en": "Select all",
+    "zh": "全选"
+  },
+  "workspaceRightRail.selectNoteToEdit": {
+    "en": "Select a note to edit it in place.",
+    "zh": "选择一条笔记后可在此直接编辑。"
+  },
+  "workspaceRightRail.sessionActionsLabel": {
+    "en": "{title} actions",
+    "zh": "{title} 操作"
+  },
+  "workspaceRightRail.sourceActionsLabel": {
+    "en": "Source actions",
+    "zh": "资料操作"
+  },
+  "workspaceRightRail.sourceStatus.completed": {
+    "en": "Completed",
+    "zh": "已完成"
+  },
+  "workspaceRightRail.sourceStatus.enqueueing": {
+    "en": "Enqueueing",
+    "zh": "入队中"
+  },
+  "workspaceRightRail.sourceStatus.error": {
+    "en": "Error",
+    "zh": "异常"
+  },
+  "workspaceRightRail.sourceStatus.failed": {
+    "en": "Failed",
+    "zh": "失败"
+  },
+  "workspaceRightRail.sourceStatus.indexing": {
+    "en": "Indexing",
+    "zh": "索引中"
+  },
+  "workspaceRightRail.sourceStatus.pending": {
+    "en": "Pending",
+    "zh": "等待中"
+  },
+  "workspaceRightRail.sourceStatus.processing": {
+    "en": "Processing",
+    "zh": "处理中"
+  },
+  "workspaceRightRail.sourceStatus.queued": {
+    "en": "Queued",
+    "zh": "排队中"
+  },
+  "workspaceRightRail.sourceStatus.ready": {
+    "en": "Ready",
+    "zh": "就绪"
+  },
+  "workspaceRightRail.sourceUrlLabel": {
+    "en": "Source URLs",
+    "zh": "资料链接"
+  },
+  "workspaceRightRail.sourceUrlPlaceholder": {
+    "en": "Paste one URL per line",
+    "zh": "每行输入一个 URL，支持直接粘贴多行链接"
+  },
+  "workspaceRightRail.sourcesError": {
+    "en": "Failed to load sources.",
+    "zh": "加载资料失败。"
+  },
+  "workspaceRightRail.sourcesListLabel": {
+    "en": "Sources list",
+    "zh": "资料列表"
+  },
+  "workspaceRightRail.sourcesSectionSubtitle": {
+    "en": "Manage retrievable sources, URL imports, and document status.",
+    "zh": "管理可检索资料、URL 导入和文档状态。"
+  },
+  "workspaceRightRail.sourcesSectionTitle": {
+    "en": "Sources",
+    "zh": "资料"
+  },
+  "workspaceRightRail.totalCount": {
+    "en": "{count} total",
+    "zh": "共 {count} 项"
+  },
+  "workspaceRightRail.untitledNote": {
+    "en": "Untitled note",
+    "zh": "未命名笔记"
+  },
+  "workspaceRightRail.updating": {
+    "en": "Updating...",
+    "zh": "更新中…"
+  },
+  "workspaceRightRail.uploadDropBody": {
+    "en": "Supported upload formats: {formats}.",
+    "zh": "支持上传 {formats} 格式。"
+  },
+  "workspaceRightRail.uploadDropTitle": {
+    "en": "Drop files here",
+    "zh": "拖拽文件到这里"
+  },
+  "workspaceRightRail.uploadFileTab": {
+    "en": "Upload file",
+    "zh": "上传文件"
+  },
+  "workspaceRightRail.uploadTooLarge": {
+    "en": "File exceeds the 100MB upload limit.",
+    "zh": "文件超过 100MB 上限。"
+  },
+  "workspaceRightRail.viewerEmptyBody": {
+    "en": "Choose a source from the list or a citation card to preview it here.",
+    "zh": "从资料列表或引用卡片中选中一个条目后，这里会显示预览。"
+  },
+  "workspaceRightRail.viewerEmptyTitle": {
+    "en": "Select a source to preview",
+    "zh": "选择资料以查看内容"
+  },
+  "workspaceRightRail.viewerError": {
+    "en": "Failed to load source preview.",
+    "zh": "加载资料预览失败。"
+  },
+  "workspaceRightRail.viewerLoadMoreAction": {
+    "en": "Load more",
+    "zh": "加载更多"
+  },
+  "workspaceRightRail.viewerLocation": {
+    "en": "Page {page} · Position {cursor}",
+    "zh": "第 {page} 页 · 位置 {cursor}"
+  },
+  "workspaceRightRail.viewerPage": {
+    "en": "Page {page}",
+    "zh": "第 {page} 页"
+  },
+  "workspaceRightRail.viewerScore": {
+    "en": "Score {score}",
+    "zh": "分数 {score}"
+  },
+  "workspaceRightRail.viewerSectionLabel": {
+    "en": "Source viewer",
+    "zh": "资料预览"
+  },
+  "workspaceRightRail.viewerSectionSubtitle": {
+    "en": "Inspect source excerpts, citations, and raw content.",
+    "zh": "查看资料片段、引用内容和原始文本。"
+  },
+  "workspaceRightRail.viewerSectionTitle": {
+    "en": "Preview",
+    "zh": "预览"
+  },
+  "workspaceRightRail.viewerSummaryHeading": {
+    "en": "Document summary",
+    "zh": "文档摘要"
+  },
+  "workspaceRightRail.webLinkTab": {
+    "en": "Web link",
+    "zh": "网页链接"
+  },
+  "workspaceSearchDialogLabel": {
+    "en": "Search sessions",
+    "zh": "搜索会话"
+  },
+  "workspaceSearchEmptyIdle": {
+    "en": "Type a keyword to search sessions and chat content.",
+    "zh": "输入关键词后即可搜索会话和聊天正文。"
+  },
+  "workspaceSearchEmptyNoMatch": {
+    "en": "No matching sessions found.",
+    "zh": "没有找到匹配的会话。"
+  },
+  "workspaceSearchLoadError": {
+    "en": "Some session content could not be loaded, so results may be incomplete.",
+    "zh": "部分会话内容加载失败，搜索结果可能不完整。"
+  },
+  "workspaceSearchLoading": {
+    "en": "Loading session content...",
+    "zh": "正在加载会话内容…"
+  },
+  "workspaceSearchPlaceholder": {
+    "en": "Search chat content by keyword",
+    "zh": "输入关键词搜索聊天正文"
+  },
+  "workspaceSearchResultsLabel": {
+    "en": "Session search results",
+    "zh": "会话搜索结果"
+  },
+  "workspaceSend": {
+    "en": "Send",
+    "zh": "发送"
+  },
+  "workspaceSessionTitleField": {
+    "en": "Workspace title",
+    "zh": "工作区标题"
+  },
+  "workspaceSourcesCountMany": {
+    "en": "{count} sources",
+    "zh": "{count} 个来源"
+  },
+  "workspaceSourcesCountOne": {
+    "en": "1 source",
+    "zh": "1 个来源"
+  },
+  "workspaceStreamError": {
+    "en": "Failed to stream workspace chat.",
+    "zh": "发送工作区对话失败。"
+  },
+  "workspaceThreadTitleField": {
+    "en": "Session title",
+    "zh": "会话标题"
+  },
+  "workspaceToolCalculator": {
+    "en": "Calculator",
+    "zh": "计算器"
+  },
+  "workspaceToolCodeExecution": {
+    "en": "Code Execution",
+    "zh": "代码执行"
+  },
+  "workspaceToolExitCode": {
+    "en": "Exit Code",
+    "zh": "退出码"
+  },
+  "workspaceToolExpression": {
+    "en": "Expression",
+    "zh": "表达式"
+  },
+  "workspaceToolFeelsLike": {
+    "en": "Feels Like",
+    "zh": "体感"
+  },
+  "workspaceToolForecast": {
+    "en": "Forecast",
+    "zh": "预报"
+  },
+  "workspaceToolHumidity": {
+    "en": "Humidity",
+    "zh": "湿度"
+  },
+  "workspaceToolResult": {
+    "en": "Result",
+    "zh": "返回值"
+  },
+  "workspaceToolSearchResults": {
+    "en": "Search Results",
+    "zh": "搜索结果"
+  },
+  "workspaceToolStatusError": {
+    "en": "Error",
+    "zh": "错误"
+  },
+  "workspaceToolStatusNotFound": {
+    "en": "Not Found",
+    "zh": "未找到"
+  },
+  "workspaceToolStatusNotImplemented": {
+    "en": "Not Implemented",
+    "zh": "未实现"
+  },
+  "workspaceToolStatusTimeout": {
+    "en": "Timeout",
+    "zh": "超时"
+  },
+  "workspaceToolSummary": {
+    "en": "Summary",
+    "zh": "摘要"
+  },
+  "workspaceToolTemperature": {
+    "en": "Temperature",
+    "zh": "温度"
+  },
+  "workspaceToolWeather": {
+    "en": "Weather",
+    "zh": "天气查询"
+  },
+  "workspaceToolWebSearch": {
+    "en": "Web Search",
+    "zh": "网页搜索"
+  },
+  "workspaceToolWindSpeed": {
+    "en": "Wind Speed",
+    "zh": "风速"
+  },
+  "workspaceTranscriptLabel": {
+    "en": "Workspace transcript",
+    "zh": "工作区记录"
+  },
+  "workspaceUnavailable": {
+    "en": "Workspace unavailable",
+    "zh": "当前工作区不可用"
+  },
+  "workspaceUnavailableBody": {
+    "en": "This workspace id is not present in the current backend database. Sending messages here will only fail. Check that you are connected to the expected API/database, or create a new workspace.",
+    "zh": "这个页面的 workspace id 当前不在后端数据库里，继续发送消息只会返回错误。请确认你连接的是正确的 API/数据库，或者重新创建一个工作区。"
+  },
+  "workspaceUnpinSessionAction": {
+    "en": "Unpin",
+    "zh": "取消置顶"
+  },
+  "workspaceUntitledSession": {
+    "en": "New chat",
+    "zh": "新对话"
+  }
+}

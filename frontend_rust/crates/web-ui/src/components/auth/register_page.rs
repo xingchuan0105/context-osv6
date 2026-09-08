@@ -1,4 +1,5 @@
 use crate::api_base::poc_api_base;
+use crate::i18n::{tf_now, t_now, use_i18n};
 use leptos::prelude::*;
 use leptos_router::hooks::use_navigate;
 use leptos_router::NavigateOptions;
@@ -7,6 +8,7 @@ use web_sdk::{auth_register, write_browser_auth, AuthUser, PersistedAuth};
 #[component]
 pub fn RegisterPage() -> impl IntoView {
     let token = expect_context::<RwSignal<String>>();
+    let i18n = use_i18n();
     let navigate = use_navigate();
 
     let full_name = RwSignal::new(String::new());
@@ -34,19 +36,19 @@ pub fn RegisterPage() -> impl IntoView {
             let name_val = full_name.get().trim().to_string();
 
             if email_val.is_empty() || pass_val.is_empty() {
-                error.set(Some("请输入邮箱与密码".to_string()));
+                error.set(Some(t_now("auth.registerNeedFields")));
                 return;
             }
             if pass_val.len() < 8 {
-                error.set(Some("密码至少需 8 位".to_string()));
+                error.set(Some(t_now("auth.resetNeedPassword")));
                 return;
             }
             if pass_val != confirm_val {
-                error.set(Some("两次输入的密码不一致".to_string()));
+                error.set(Some(t_now("authPasswordMismatch")));
                 return;
             }
             if !consent.get() {
-                error.set(Some("请阅读并同意用户协议与隐私政策".to_string()));
+                error.set(Some(t_now("authErrorConsentRequired")));
                 return;
             }
             if loading.get() {
@@ -80,7 +82,7 @@ pub fn RegisterPage() -> impl IntoView {
                         navigate("/chat", NavigateOptions::default());
                     }
                     Err(err) => {
-                        error.set(Some(format!("注册失败：{err}")));
+                        error.set(Some(tf_now("auth.registerFailedDetail", &[("error", &err.to_string())])));
                     }
                 }
                 loading.set(false);
@@ -90,25 +92,25 @@ pub fn RegisterPage() -> impl IntoView {
 
     view! {
         <div class="auth-page-container">
-            <main class="auth-card" aria-label="注册">
+            <main class="auth-card" aria-label=move || i18n.t("auth.registerAria")>
                 <header class="auth-header">
-                    <h1 class="auth-title">"注册 Context-OS"</h1>
-                    <p class="auth-subtitle">"创建新账号以开始使用"</p>
+                    <h1 class="auth-title">{move || i18n.t("auth.registerHeading")}</h1>
+                    <p class="auth-subtitle">{move || i18n.t("auth.registerLead")}</p>
                 </header>
                 <form class="auth-form" on:submit=on_submit>
                     <div class="auth-field">
-                        <label for="reg-name">"姓名 / 昵称"</label>
+                        <label for="reg-name">{move || i18n.t("auth.nameNickname")}</label>
                         <input
                             id="reg-name"
                             type="text"
                             data-testid="register-name"
-                            placeholder="可选"
+                            placeholder=move || i18n.t("authOptional")
                             prop:value=move || full_name.get()
                             on:input=move |ev| full_name.set(event_target_value(&ev))
                         />
                     </div>
                     <div class="auth-field">
-                        <label for="reg-email">"邮箱"</label>
+                        <label for="reg-email">{move || i18n.t("authEmailLabel")}</label>
                         <input
                             id="reg-email"
                             type="email"
@@ -120,7 +122,7 @@ pub fn RegisterPage() -> impl IntoView {
                         />
                     </div>
                     <div class="auth-field">
-                        <label for="reg-password">"密码 (至少 8 位)"</label>
+                        <label for="reg-password">{move || i18n.t("auth.passwordMinField")}</label>
                         <input
                             id="reg-password"
                             type="password"
@@ -132,7 +134,7 @@ pub fn RegisterPage() -> impl IntoView {
                         />
                     </div>
                     <div class="auth-field">
-                        <label for="reg-confirm">"确认密码"</label>
+                        <label for="reg-confirm">{move || i18n.t("authConfirmPasswordLabel")}</label>
                         <input
                             id="reg-confirm"
                             type="password"
@@ -151,10 +153,10 @@ pub fn RegisterPage() -> impl IntoView {
                                 prop:checked=move || consent.get()
                                 on:change=move |ev| consent.set(event_target_checked(&ev))
                             />
-                            " 我已阅读并同意 "
-                            <a href="/legal/terms" target="_blank" rel="noreferrer">"用户协议"</a>
-                            " 与 "
-                            <a href="/legal/privacy" target="_blank" rel="noreferrer">"隐私政策"</a>
+                            {move || i18n.t("auth.consentPrefix")}
+                            <a href="/legal/terms" target="_blank" rel="noreferrer">{move || i18n.t("productChrome.terms")}</a>
+                            {move || i18n.t("auth.consentAnd")}
+                            <a href="/legal/privacy" target="_blank" rel="noreferrer">{move || i18n.t("productChrome.privacy")}</a>
                         </label>
                     </div>
                     {move || {
@@ -172,11 +174,11 @@ pub fn RegisterPage() -> impl IntoView {
                         data-testid="register-submit"
                         disabled=move || loading.get()
                     >
-                        {move || if loading.get() { "注册中…" } else { "注册账号" }}
+                        {move || if loading.get() { i18n.t("authCreatingAccount") } else { i18n.t("auth.registerSubmit") }}
                     </button>
                 </form>
                 <footer class="auth-footer-links">
-                    <a href="/login" class="auth-link" data-testid="goto-login">"已有账号？立即登录"</a>
+                    <a href="/login" class="auth-link" data-testid="goto-login">{move || i18n.t("auth.hasAccountCta")}</a>
                 </footer>
             </main>
         </div>

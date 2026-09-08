@@ -1,0 +1,88 @@
+/* Breakpoints aligned with Next baseline 5f9dedda:
+   640px desktop/referral compact, 720px settings/modal,
+   767px chat/workspace drawer, 768px tablet, 840px desktop product. */
+
+@media (max-width: 840px) {
+    .mkt-chrome-inner {
+        align-items: flex-start;
+        flex-wrap: wrap;
+    }
+
+    .dashboard-header-actions {
+        flex-wrap: wrap;
+    }
+
+    .workbench-top-bar {
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .pricing-plans-grid,
+    .dashboard-workspace-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .dashboard-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .workbench-main-body {
+        flex-direction: column;
+    }
+
+    .workbench-side-rail {
+        width: 100%;
+        border-left: 0;
+        border-top: 1px solid var(--cos-border);
+    }
+
+    .pub-desktop-columns {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 767px) {
+    .app-top-bar-wordmark {
+        display: none;
+    }
+
+    .chat-embed > .chat-shell,
+    .app-frame > .chat-shell {
+        min-height: 70vh;
+    }
+}
+
+@media (max-width: 720px) {
+    .settings-header,
+    .settings-nav {
+        flex-wrap: wrap;
+    }
+
+    .settings-shell,
+    .dashboard-shell,
+    .pricing-shell {
+        padding: 1.25rem 0.75rem 3rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .app-top-bar {
+        padding: 0.5rem 0.75rem;
+    }
+
+    .mkt-chrome-nav {
+        width: 100%;
+        justify-content: flex-start;
+    }
+
+    .dashboard-workspace-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .app-notify-panel {
+        min-width: min(20rem, 92vw);
+    }
+}

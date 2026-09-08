@@ -37,6 +37,7 @@ use crate::components::share::{
     WorkspaceShareLogsPage, WorkspaceSharePage,
 };
 use crate::components::ui::{ToastHost, provide_toaster};
+use crate::i18n::{Tx, provide_i18n};
 use leptos::prelude::*;
 use leptos_config::LeptosOptions;
 use leptos_meta::{HashedStylesheet, MetaTags, provide_meta_context};
@@ -46,6 +47,7 @@ use leptos_router::path;
 #[component]
 pub fn App() -> impl IntoView {
     provide_meta_context();
+    provide_i18n();
     provide_context(RwSignal::new(ChatCanvasModel::new()));
     provide_context(RwSignal::new(String::new()));
     provide_toaster();
@@ -57,8 +59,8 @@ pub fn App() -> impl IntoView {
             <Routes fallback=|| {
                 view! {
                     <main class="chat-not-found">
-                        <p>"页面不存在。"</p>
-                        <a href="/chat">"返回对话"</a>
+                        <p><Tx k="notFound.title"/></p>
+                        <a href="/chat"><Tx k="notFound.backToChat"/></a>
                     </main>
                 }
             }>

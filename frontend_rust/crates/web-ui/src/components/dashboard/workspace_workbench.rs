@@ -3,6 +3,9 @@ use crate::components::chat::chat_page::ChatPage;
 use crate::components::notes::NoteEditor;
 use crate::components::shell::ProductChrome;
 use crate::components::ui::{AppDialog, Toaster};
+use crate::i18n::{t_now, use_i18n};
+#[cfg(target_arch = "wasm32")]
+use crate::i18n::tf_now;
 use contracts::documents::Document;
 use contracts::workspaces::{ChatSession, Workspace, WorkspaceNote};
 use leptos::prelude::*;
@@ -45,6 +48,7 @@ pub fn WorkspaceWorkbenchPage() -> impl IntoView {
     let paste_body = RwSignal::new(String::new());
     let selected_docs = RwSignal::new(std::collections::HashSet::<String>::new());
     let toaster = expect_context::<Toaster>();
+    let i18n = use_i18n();
     let navigate = use_navigate();
     let (_session_query, set_session_query) = query_signal::<String>("session");
     let file_input = NodeRef::<leptos::html::Input>::new();
@@ -158,13 +162,16 @@ pub fn WorkspaceWorkbenchPage() -> impl IntoView {
         <div class="workspace-workbench-shell" data-testid="workspace-workbench">
             <header class="workbench-top-bar">
                 <div class="workbench-top-left">
-                    <a href="/dashboard" class="workbench-back">"← 全部工作区"</a>
+                    <a href="/dashboard" class="workbench-back">{move || i18n.t("workbench.backAll")}</a>
                     <h2 class="workbench-title">
                         {move || {
                             current_ws
                                 .get()
                                 .map(|ws| ws.name)
-                                .unwrap_or_else(|| format!("工作区：{}", workspace_id.get()))
+                                .unwrap_or_else(|| {
+                                    let id = workspace_id.get();
+                                    i18n.tf("workbench.workspaceFallback", &[("id", id.as_str())])
+                                })
                         }}
                     </h2>
                 </div>
@@ -174,7 +181,7 @@ pub fn WorkspaceWorkbenchPage() -> impl IntoView {
                         class="workbench-analyze-link"
                         data-testid="goto-analyze"
                     >
-                        "分享中心 →"
+                        {move || i18n.t("workbench.shareCenter")}
                     </a>
                 </div>
             </header>
@@ -198,7 +205,7 @@ pub fn WorkspaceWorkbenchPage() -> impl IntoView {
                             data-testid="tab-sources"
                             on:click=move |_| active_tab.set("sources")
                         >
-                            "持久资料库"
+                            {move || i18n.t("workbench.sourcesTab")}
                         </button>
                         <button
                             type="button"
@@ -212,7 +219,7 @@ pub fn WorkspaceWorkbenchPage() -> impl IntoView {
                             data-testid="tab-notes"
                             on:click=move |_| active_tab.set("notes")
                         >
-                            "工作区笔记"
+                            {move || i18n.t("workbench.notesTab")}
                         </button>
                     </div>
 
@@ -220,9 +227,12 @@ pub fn WorkspaceWorkbenchPage() -> impl IntoView {
                         <Show when=move || active_tab.get() == "sources">
                             <section class="rail-section" data-testid="sources-section">
                                 <div class="rail-section-header">
-                                    <span class="rail-section-title">"持久文件列表"</span>
+                                    <span class="rail-section-title">{move || i18n.t("workbench.fileList")}</span>
                                     <span class="rail-section-count">
-                                        {move || format!("{} 篇", documents.get().len())}
+                                        {move || {
+                                            let count = documents.get().len().to_string();
+                                            i18n.tf("workbench.docCount", &[("count", count.as_str())])
+                                        }}
                                     </span>
                                     <button
                                         type="button"
@@ -230,11 +240,11 @@ pub fn WorkspaceWorkbenchPage() -> impl IntoView {
                                         data-testid="open-upload"
                                         on:click=move |_| show_upload.set(true)
                                     >
-                                        "上传"
+                                        {move || i18n.t("workbench.upload")}
                                     </button>
                                 </div>
                                 <p class="page-status-empty" data-testid="sources-empty" hidden=move || !documents.get().is_empty()>
-                                    "还没有资料。可上传文件、粘贴链接或文本。"
+                                    {move || i18n.t("workbench.sourcesEmpty")}
                                 </p>
                                 <ul class="rail-doc-list">
                                     <For
@@ -270,7 +280,7 @@ pub fn WorkspaceWorkbenchPage() -> impl IntoView {
                                                         data-testid="delete-doc-btn"
                                                         on:click=move |_| on_delete_doc(doc_id.clone())
                                                     >
-                                                        "删除"
+                                                        {move || i18n.t("dashboardActionDelete")}
                                                     </button>
                                                 </li>
                                             }
@@ -283,14 +293,14 @@ pub fn WorkspaceWorkbenchPage() -> impl IntoView {
                         <Show when=move || active_tab.get() == "notes">
                             <section class="rail-section" data-testid="notes-section">
                                 <div class="rail-section-header">
-                                    <span class="rail-section-title">"工作区笔记"</span>
+                                    <span class="rail-section-title">{move || i18n.t("workbench.notesTab")}</span>
                                     <button
                                         type="button"
                                         class="rail-btn-new-note"
                                         data-testid="btn-new-note"
                                         on:click=move |_| is_creating_note.set(true)
                                     >
-                                        "+ 新笔记"
+                                        {move || i18n.t("workbench.newNote")}
                                     </button>
                                 </div>
 
@@ -298,7 +308,7 @@ pub fn WorkspaceWorkbenchPage() -> impl IntoView {
                                     <form on:submit=on_create_note class="rail-note-form">
                                         <input
                                             type="text"
-                                            placeholder="笔记标题"
+                                            placeholder=move || i18n.t("workbench.noteTitlePlaceholder")
                                             data-testid="note-title-input"
                                             prop:value=move || new_note_title.get()
                                             on:input=move |ev| new_note_title.set(event_target_value(&ev))
@@ -311,14 +321,14 @@ pub fn WorkspaceWorkbenchPage() -> impl IntoView {
                                                 class="dashboard-btn-cancel"
                                                 on:click=move |_| is_creating_note.set(false)
                                             >
-                                                "取消"
+                                                {move || i18n.t("commonCancel")}
                                             </button>
                                             <button
                                                 type="submit"
                                                 class="dashboard-btn-confirm"
                                                 data-testid="submit-note-btn"
                                             >
-                                                "保存笔记"
+                                                {move || i18n.t("workbench.saveNote")}
                                             </button>
                                         </div>
                                     </form>
@@ -342,7 +352,7 @@ pub fn WorkspaceWorkbenchPage() -> impl IntoView {
                                                         data-testid="delete-note-btn"
                                                         on:click=move |_| on_delete_note(note_id.clone())
                                                     >
-                                                        "删除"
+                                                        {move || i18n.t("dashboardActionDelete")}
                                                     </button>
                                                 </li>
                                             }
@@ -353,9 +363,9 @@ pub fn WorkspaceWorkbenchPage() -> impl IntoView {
                         </Show>
                         <section class="rail-section" data-testid="workspace-sessions">
                             <div class="rail-section-header">
-                                <span class="rail-section-title">"会话"</span>
+                                <span class="rail-section-title">{move || i18n.t("workbench.sessions")}</span>
                             </div>
-                            <p class="page-status-empty" hidden=move || !sessions.get().is_empty()>"还没有工作区会话。"</p>
+                            <p class="page-status-empty" hidden=move || !sessions.get().is_empty()>{move || i18n.t("workbench.sessionsEmpty")}</p>
                             <ul class="rail-note-list">
                                 <For
                                     each=move || sessions.get()
@@ -364,7 +374,7 @@ pub fn WorkspaceWorkbenchPage() -> impl IntoView {
                                         let sid = session.id.clone();
                                         let sid_pin = sid.clone();
                                         let sid_del = sid.clone();
-                                        let title = session.title.clone().unwrap_or_else(|| "未命名对话".into());
+                                        let title = session.title.clone().unwrap_or_else(|| i18n.t("chat.untitled"));
                                         let pinned = session.pinned;
                                         view! {
                                             <li class="rail-note-item" data-testid="workspace-session-item">
@@ -394,7 +404,7 @@ pub fn WorkspaceWorkbenchPage() -> impl IntoView {
                                                         let _ = client.update_session(&sid, None, Some(!pinned)).await;
                                                     });
                                                     refresh_gen.update(|n| *n += 1);
-                                                }>{if pinned { "取消置顶" } else { "置顶" }}</button>
+                                                }>{if pinned { i18n.t("workspaceUnpinSessionAction") } else { i18n.t("workspacePinSessionAction") }}</button>
                                                 <button type="button" data-testid="delete-session" on:click=move |_| {
                                                     let tok = current_wb_token(token);
                                                     let sid = sid_del.clone();
@@ -403,7 +413,7 @@ pub fn WorkspaceWorkbenchPage() -> impl IntoView {
                                                         let _ = client.delete_session(&sid).await;
                                                     });
                                                     refresh_gen.update(|n| *n += 1);
-                                                }>"删除"</button>
+                                                }>{move || i18n.t("dashboardActionDelete")}</button>
                                             </li>
                                         }
                                     }
@@ -413,18 +423,18 @@ pub fn WorkspaceWorkbenchPage() -> impl IntoView {
                     </div>
                 </aside>
             </div>
-            <AppDialog open=Signal::derive(move || show_upload.get()) title="上传资料" test_id="upload-dialog" on_close=Callback::new(move |_| show_upload.set(false))>
+            <AppDialog open=Signal::derive(move || show_upload.get()) title_key="workbench.uploadTitle" test_id="upload-dialog" on_close=Callback::new(move |_| show_upload.set(false))>
                 <div class="upload-tabs">
-                    <button type="button" data-testid="upload-tab-file" on:click=move |_| upload_tab.set("file".into())>"上传文件"</button>
-                    <button type="button" data-testid="upload-tab-url" on:click=move |_| upload_tab.set("url".into())>"链接"</button>
-                    <button type="button" data-testid="upload-tab-paste" on:click=move |_| upload_tab.set("paste".into())>"粘贴"</button>
+                    <button type="button" data-testid="upload-tab-file" on:click=move |_| upload_tab.set("file".into())>{move || i18n.t("workbench.uploadFile")}</button>
+                    <button type="button" data-testid="upload-tab-url" on:click=move |_| upload_tab.set("url".into())>{move || i18n.t("workbench.uploadUrl")}</button>
+                    <button type="button" data-testid="upload-tab-paste" on:click=move |_| upload_tab.set("paste".into())>{move || i18n.t("workbench.uploadPaste")}</button>
                 </div>
                 <div hidden=move || upload_tab.get() != "file">
                     <input type="file" data-testid="workspace-file-input" accept=SESSION_FILE_ACCEPT node_ref=file_input/>
                     <button type="button" data-testid="workspace-file-submit" on:click=move |_| {
                         start_workspace_file_upload(token, workspace_id.get_untracked(), file_input, toaster, refresh_gen);
                         show_upload.set(false);
-                    }>"开始上传"</button>
+                    }>{move || i18n.t("workbench.startUpload")}</button>
                 </div>
                 <div hidden=move || upload_tab.get() != "url">
                     <input type="url" data-testid="workspace-url-input" prop:value=move || source_url.get() on:input=move |ev| source_url.set(event_target_value(&ev))/>
@@ -435,12 +445,12 @@ pub fn WorkspaceWorkbenchPage() -> impl IntoView {
                         leptos::task::spawn_local(async move {
                             let client = BrowserRestClient::new(&poc_api_base(), Some(tok));
                             if client.add_workspace_source_url(&wid, &url).await.is_ok() {
-                                toaster.push("已提交链接");
+                                toaster.push(t_now("workbench.linkSubmitted"));
                             }
                         });
                         show_upload.set(false);
                         refresh_gen.update(|n| *n += 1);
-                    }>"添加链接"</button>
+                    }>{move || i18n.t("workbench.addLink")}</button>
                 </div>
                 <div hidden=move || upload_tab.get() != "paste">
                     <input data-testid="workspace-paste-title" prop:value=move || paste_title.get() on:input=move |ev| paste_title.set(event_target_value(&ev))/>
@@ -453,12 +463,12 @@ pub fn WorkspaceWorkbenchPage() -> impl IntoView {
                         leptos::task::spawn_local(async move {
                             let client = BrowserRestClient::new(&poc_api_base(), Some(tok));
                             if client.add_workspace_source_paste(&wid, &title, &content).await.is_ok() {
-                                toaster.push("已提交文本");
+                                toaster.push(t_now("workbench.textSubmitted"));
                             }
                         });
                         show_upload.set(false);
                         refresh_gen.update(|n| *n += 1);
-                    }>"添加文本"</button>
+                    }>{move || i18n.t("workbench.addText")}</button>
                 </div>
             </AppDialog>
         </div>
@@ -514,10 +524,10 @@ fn start_workspace_file_upload(
                     if let Ok(bytes) = bytes {
                         let _ = client.put_upload_bytes(&resp.upload_url, &bytes, &mime).await;
                         let _ = client.complete_upload(&resp.document_id).await;
-                        toaster.push("资料已上传");
+                        toaster.push(t_now("workbench.uploaded"));
                     }
                 }
-                Err(err) => toaster.push(format!("上传失败：{err}")),
+                Err(err) => toaster.push(tf_now("workbench.uploadFailed", &[("error", &err.to_string())])),
             }
             refresh_gen.update(|n| *n += 1);
         });

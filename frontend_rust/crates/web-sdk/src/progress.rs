@@ -21,10 +21,10 @@ pub fn progress_folded(status: &TurnStatus) -> bool {
 
 pub fn progress_summary_label(status: &TurnStatus) -> &'static str {
     match status {
-        TurnStatus::Done => "思考完成",
-        TurnStatus::Cancelled => "已停止",
-        TurnStatus::Error { .. } => "未完成",
-        TurnStatus::Streaming => "进行中",
+        TurnStatus::Done => "chat.progressDone",
+        TurnStatus::Cancelled => "chat.progressCancelled",
+        TurnStatus::Error { .. } => "chat.progressError",
+        TurnStatus::Streaming => "chat.progressStreaming",
         TurnStatus::Idle => "",
     }
 }

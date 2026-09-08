@@ -1,4 +1,5 @@
 use crate::api_base::poc_api_base;
+use crate::i18n::use_i18n;
 use contracts::documents::SessionFileRow;
 use leptos::prelude::*;
 #[cfg(target_arch = "wasm32")]
@@ -24,6 +25,7 @@ pub fn SessionFileTray(
     disabled: Signal<bool>,
 ) -> impl IntoView {
     let token = expect_context::<RwSignal<String>>();
+    let i18n = use_i18n();
     let params = use_params::<TrayParams>();
     let navigate = use_navigate();
     let files = RwSignal::new(Vec::<SessionFileRow>::new());
@@ -146,22 +148,25 @@ pub fn SessionFileTray(
                     disabled=move || disabled.get() || busy.get()
                     on:click=pick
                 >
-                    "添加文件"
+                    {move || i18n.t("chat.attachFile")}
                 </button>
                 <Show when=move || !files.get().is_empty()>
                     <span class="chat-file-tray-label">
-                        {move || format!("会话文件 · {}", files.get().len())}
+                        {move || {
+                            let count = files.get().len().to_string();
+                            i18n.tf("chat.fileTrayCount", &[("count", count.as_str())])
+                        }}
                     </span>
                 </Show>
             </div>
             <Show when=move || action_error.get()>
                 <p class="chat-file-error" role="alert" data-testid="session-file-error">
-                    "文件操作失败，请重试。"
+                    {move || i18n.t("chat.fileActionFailed")}
                 </p>
             </Show>
             <Show when=move || files_blocked.get()>
                 <p class="chat-file-blocked" data-testid="session-file-blocked">
-                    "文件处理完成后才能发送消息；可移除未就绪的文件后继续。"
+                    {move || i18n.t("chat.fileBlockedHint")}
                 </p>
             </Show>
             <Show when=move || !files.get().is_empty()>
@@ -188,9 +193,10 @@ fn file_row(
     token: RwSignal<String>,
     busy: RwSignal<bool>,
 ) -> impl IntoView {
+    let i18n = use_i18n();
     let status = tray_status(&file.status);
     let status_attr = tray_status_attr(status);
-    let label = tray_status_label(status);
+    let label_key = tray_status_label(status);
     let failed = status == TrayFileStatus::Failed;
     let retry_file = file.clone();
     let remove_file = file.clone();
@@ -198,7 +204,7 @@ fn file_row(
     view! {
         <li class="chat-file-item" data-status=status_attr data-testid="session-file-item">
             <span class="chat-file-name">{file_name}</span>
-            <span class="chat-file-status" data-testid="session-file-status">{label}</span>
+            <span class="chat-file-status" data-testid="session-file-status">{move || i18n.t(label_key)}</span>
             <button
                 type="button"
                 class="chat-file-action"
@@ -219,7 +225,7 @@ fn file_row(
                     );
                 }
             >
-                "重试解析"
+                {move || i18n.t("chat.fileRetry")}
             </button>
             <button
                 type="button"
@@ -240,7 +246,7 @@ fn file_row(
                     );
                 }
             >
-                "移除"
+                {move || i18n.t("chat.fileRemove")}
             </button>
         </li>
     }

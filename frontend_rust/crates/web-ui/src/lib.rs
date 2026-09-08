@@ -5,6 +5,7 @@ pub mod api_base;
 pub mod app;
 pub mod auth;
 pub mod components;
+pub mod i18n;
 pub mod reducer;
 pub mod routes;
 pub mod session;

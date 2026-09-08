@@ -109,18 +109,18 @@ pub fn reconcile_session_rag(
     current.to_vec()
 }
 
-/// Personal-chat mode line. No right-rail copy: hint session files instead.
+/// Personal-chat mode line key (web-ui i18n catalog).
 pub fn mode_line(capabilities: &[Capability], rag_available: bool) -> &'static str {
     if !rag_available && capabilities.is_empty() {
-        return "未添加会话文件：添加文件后可检索本会话。";
+        return "chat.modeLineNoSessionFiles";
     }
     match (
         capabilities.contains(&Capability::Rag),
         capabilities.contains(&Capability::Search),
     ) {
-        (true, true) => "知识库 + 网络搜索：回答检索已选文档与网页。",
-        (true, false) => "知识库：回答检索已选文档。",
-        (false, true) => "网络搜索：回答会检索网页。",
-        (false, false) => "聊天：回答不检索文档与网络。",
+        (true, true) => "workspaceChatModeLineBoth",
+        (true, false) => "workspaceChatModeLineRag",
+        (false, true) => "workspaceChatModeLineSearch",
+        (false, false) => "workspaceChatModeLineChat",
     }
 }
