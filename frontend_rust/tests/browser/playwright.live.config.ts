@@ -11,7 +11,7 @@ const WEB_BASE = `http://127.0.0.1:${WEB_PORT}`;
 
 export default defineConfig({
   testDir: '.',
-  testMatch: 'chat-live-smoke.spec.ts',
+  testMatch: ['chat-live-smoke.spec.ts', 'g5-live-smoke.spec.ts'],
   timeout: 180_000,
   retries: 0,
   workers: 1,
