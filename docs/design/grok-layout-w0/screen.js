@@ -20,7 +20,7 @@ $('account').onclick=()=>menu($('account'),[['设置',()=>go('settings')],['帮�
 $('notifications').onclick=()=>menu($('notifications'),[['暂无新通知',()=>{}]]);
 $('model').onclick=()=>menu($('model'),[['默认模型',()=>{$('model').innerHTML='默认模型 <span>⌄</span>'}],['模型来源设置',()=>go('settings')]]);
 $('web').onclick=()=>{$('web').setAttribute('aria-pressed',String($('web').getAttribute('aria-pressed')!=='true'))};
-function updateSources(){$('sources').setAttribute('aria-expanded',String(!$('source-panel').hidden))}
+function updateSources(){const opened=!$('source-panel').hidden;const notesActive=$('notes-content')&&!$('notes-content').hidden;$('sources').setAttribute('aria-expanded',String(opened&&!notesActive));$('notes-entry')?.setAttribute('aria-expanded',String(opened&&notesActive))}
 $('sources').onclick=()=>{if(!$('source-panel').hidden){if(overlay==='sources')closeOverlay();else $('source-panel').hidden=true}else{if(innerWidth<1200)openOverlay('sources',$('sources'));$('source-panel').hidden=false;$('close-sources').focus()}updateSources()};
 $('close-sources').onclick=()=>{if(overlay==='sources')closeOverlay();else{$('source-panel').hidden=true;$('sources').focus();updateSources()}};
 $('share').onclick=()=>menu($('share'),[['管理工作区访问',()=>say('演示入口：分享权限设置，未创建公开链接')],['API 访问',()=>say('演示入口：工作区 API 访问设置')]]);
@@ -36,6 +36,25 @@ if(workspace){$('context-title').textContent='产品研究';$('context-subtitle'
 else if(scene==='conversation'){ $('context-title').textContent='梳理下周的工作重点';conversation() }
 else if(scene==='attachment'){ $('prompt').value='请分析这份表格中的业务变化。' }
 renderFile();
+if(workspace){
+ const panel=$('source-panel');
+ const resources=document.createElement('section');resources.id='resource-content';
+ Array.from(panel.children).filter(el=>!el.classList.contains('panel-heading')).forEach(el=>resources.append(el));
+ const tabs=document.createElement('nav');tabs.className='panel-tabs';tabs.setAttribute('aria-label','工作区内容');
+ tabs.innerHTML='<button id="resource-tab" aria-pressed="true">资料 3</button><button id="notes-tab" aria-pressed="false">笔记 2</button>';
+ const notes=document.createElement('section');notes.id='notes-content';notes.hidden=true;
+ notes.innerHTML='<p class="muted">保存在此工作区的整理与思考。</p><button class="outline" id="new-note">＋ 新建笔记</button><div id="note-draft" hidden><label class="field">标题<input id="note-title" placeholder="笔记标题"></label><label class="field">内容<textarea id="note-text" placeholder="记录你的思考…"></textarea></label><button class="save" id="save-note">保存笔记</button><p class="muted">演示草稿：收起面板或切换分区不会丢失，刷新页面会重置。</p></div><div class="source-list" id="note-list"><div><span>访谈观察<small>演示笔记 · 待进一步整理</small></span></div><div><span>下一阶段的问题清单<small>演示笔记 · 记录研究方向</small></span></div></div>';
+ panel.append(tabs,resources,notes);
+ const noteEntry=document.createElement('button');noteEntry.id='notes-entry';noteEntry.className='pill';noteEntry.textContent='笔记';noteEntry.setAttribute('aria-expanded','false');$('sources').after(noteEntry);
+ const addEntry=document.createElement('button');addEntry.id='quick-add';addEntry.className='icon';addEntry.innerHTML=icon('plus');addEntry.title='添加工作区资料';addEntry.setAttribute('aria-label','添加工作区资料');$('sources').before(addEntry);
+ function selectPanel(kind){const isNotes=kind==='notes';resources.hidden=isNotes;notes.hidden=!isNotes;$('resource-tab').setAttribute('aria-pressed',String(!isNotes));$('notes-tab').setAttribute('aria-pressed',String(isNotes));panel.querySelector('h2').textContent=isNotes?'工作区笔记':'工作区资料';panel.setAttribute('aria-label',isNotes?'工作区笔记':'工作区资料');noteEntry.setAttribute('aria-expanded',String(isNotes&&!panel.hidden))}
+ function reveal(kind,trigger){if(panel.hidden){if(innerWidth<1200)openOverlay('sources',trigger);panel.hidden=false}selectPanel(kind);updateSources()}
+ $('resource-tab').onclick=()=>selectPanel('sources');$('notes-tab').onclick=()=>selectPanel('notes');
+ $('sources').onclick=()=>reveal('sources',$('sources'));noteEntry.onclick=()=>reveal('notes',noteEntry);
+ $('quick-add').onclick=()=>{say('已直接触发添加资料演示，无需先展开面板；实际文件选择器在产品阶段接入')};
+ $('new-note').onclick=()=>{$('note-draft').hidden=false;$('note-title').focus()};
+ $('save-note').onclick=()=>{if(!$('note-title').value.trim()){say('请填写笔记标题');$('note-title').focus();return}const item=document.createElement('div');const span=document.createElement('span');span.textContent=$('note-title').value;const small=document.createElement('small');small.textContent='本页演示保存 · 未写入工作区';span.append(small);item.append(span);$('note-list').prepend(item);$('note-title').value='';$('note-text').value='';$('note-draft').hidden=true;say('已在本页演示保存笔记，未调用接口')};
+}
 if(scene==='settings'){
  $('context-title').textContent='设置';$('canvas').className='settings-content';$('canvas').innerHTML=`<h1>设置</h1><div class="settings-grid"><nav class="settings-nav" aria-label="设置分类"></nav><section class="settings-panel"><button class="settings-back" id="settings-back">${icon('arrow')}设置</button><div id="setting-detail"></div></section></div>`;
  const tabs=[['profile','个人资料'],['providers','模型来源'],['preferences','偏好设置'],['security','账户安全'],['billing','订阅与用量']];
