@@ -32,7 +32,6 @@
 .chat-progress-toggle,
 .chat-code-copy,
 .chat-file-action,
-.chat-composer-actions button,
 .rail-btn-new-note,
 .admin-pager-btn,
 .app-notify-item-btn,
@@ -171,7 +170,6 @@ select {
 .chat-cite-chip:hover:not(:disabled),
 .chat-code-copy:hover,
 .chat-file-action:hover,
-.chat-composer-actions button[type="button"]:hover:not(:disabled),
 .settings-nav-item:hover,
 .dashboard-header-btn:hover,
 .dashboard-btn-cancel:hover,
@@ -202,7 +200,6 @@ summary:hover {
 .settings-btn-save:hover:not(:disabled),
 .dashboard-create-btn:hover:not(:disabled),
 .dashboard-btn-confirm:hover:not(:disabled),
-.chat-composer-actions button:not([type="button"]):hover:not(:disabled),
 .mkt-nav-enter:hover {
     background: var(--cos-cta-hover);
 }
@@ -335,7 +332,6 @@ summary:hover {
 
 .chat-code-copy:focus-visible,
 .chat-file-action:focus-visible,
-.chat-composer-actions button:focus-visible,
 .chat-scroll-bottom:focus-visible,
 .rail-btn-new-note:focus-visible,
 .admin-pager-btn:focus-visible,
@@ -375,7 +371,6 @@ select:focus-visible {
 .chat-progress-toggle:active,
 .chat-cite-chip:active:not(:disabled),
 .chat-code-copy:active,
-.chat-composer-actions button:active:not(:disabled),
 .auth-submit-btn:active:not(:disabled),
 .settings-logout-btn:active:not(:disabled),
 .settings-btn-save:active:not(:disabled),
@@ -553,4 +548,52 @@ button:disabled,
 .pub-btn:disabled {
     opacity: 0.55;
     cursor: not-allowed;
+}
+
+/* Rust/UI button variants mapped to the product token system. */
+.ui-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 2.5rem;
+    padding: 0.5rem 1rem;
+    flex-shrink: 0;
+    border: 1px solid transparent;
+    border-radius: var(--radius-pill);
+    font: inherit;
+    font-size: 0.875rem;
+    white-space: nowrap;
+    cursor: pointer;
+    touch-action: manipulation;
+    transition: background-color var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard), opacity var(--duration-fast) var(--ease-standard);
+}
+
+.ui-button-primary {
+    background: var(--cos-cta-bg);
+    color: var(--cos-cta-fg);
+}
+
+.ui-button-secondary {
+    border-color: var(--cos-border);
+    background: var(--cos-surface);
+    color: var(--cos-text);
+}
+
+.ui-button-primary:hover:not(:disabled) {
+    opacity: 0.85;
+}
+
+.ui-button-secondary:hover:not(:disabled) {
+    border-color: var(--cos-border-strong);
+    background: var(--cos-bg-secondary);
+}
+
+.ui-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.ui-button:active:not(:disabled) {
+    opacity: 0.75;
 }

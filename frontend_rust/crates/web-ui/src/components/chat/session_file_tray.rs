@@ -203,7 +203,7 @@ fn file_row(
     let file_name = file.file_name.clone();
     view! {
         <li class="chat-file-item" data-status=status_attr data-testid="session-file-item">
-            <span class="chat-file-name">{file_name}</span>
+            <span class="chat-file-name" title=file_name.clone()>{file_name.clone()}</span>
             <span class="chat-file-status" data-testid="session-file-status">{move || i18n.t(label_key)}</span>
             <button
                 type="button"

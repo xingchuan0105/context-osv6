@@ -1143,6 +1143,18 @@
     "en": "Chat composer",
     "zh": "对话输入框"
   },
+  "chat.composerFilesPending": {
+    "en": "Files are being processed. Sending will be available when they are ready.",
+    "zh": "附件处理中，就绪后即可发送。"
+  },
+  "chat.composerShortcut": {
+    "en": "Enter to send · Shift+Enter for a new line",
+    "zh": "Enter 发送 · Shift+Enter 换行"
+  },
+  "chat.composerStreaming": {
+    "en": "Generating a response. You can stop it at any time.",
+    "zh": "正在生成回答，可随时停止。"
+  },
   "chat.composerPlaceholder": {
     "en": "Write a message. Enter to send (Shift+Enter for a new line)",
     "zh": "输入消息，Enter 发送（Shift+Enter 换行）"

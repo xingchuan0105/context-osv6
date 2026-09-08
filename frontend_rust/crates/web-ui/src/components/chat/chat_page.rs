@@ -1,6 +1,6 @@
 use crate::api_base::poc_api_base;
 use crate::components::chat::{
-    ChatCanvasModel, MessageActions, ModelRoleBadge, PreparedUserTurn, ScopeBar, SessionFileTray,
+    ChatCanvasModel, ChatComposer, MessageActions, ModelRoleBadge, PreparedUserTurn,
 };
 use crate::components::shell::AppTopBar;
 use crate::i18n::use_i18n;
@@ -41,10 +41,7 @@ pub fn ChatPage() -> impl IntoView {
     let sessions_loading = RwSignal::new(false);
 
     let composer = RwSignal::new(String::new());
-    let composer_ref = NodeRef::<leptos::html::Textarea>::new();
     let transcript_ref = NodeRef::<leptos::html::Section>::new();
-    let composer_height = RwSignal::new(96_i32);
-    let resize_origin = RwSignal::new(None::<(i32, i32)>);
     let elapsed_secs = RwSignal::new(0_u32);
     let rail_open = RwSignal::new(false);
     let web_sources_open = RwSignal::new(false);
@@ -285,30 +282,13 @@ pub fn ChatPage() -> impl IntoView {
 
     let send = {
         let navigate = navigate.clone();
-        move |ev: leptos::ev::SubmitEvent| {
-            ev.prevent_default();
+        move |()| {
             let Some(turn) = try_prepare_turn(&composer.get()) else {
                 return;
             };
             composer.set(String::new());
             follow_bottom.set(true);
             spawn_chat_stream(model, turn, current_token(), navigate.clone());
-            focus_composer(composer_ref);
-        }
-    };
-
-    let send_keydown = {
-        let navigate = navigate.clone();
-        move |ev: leptos::ev::KeyboardEvent| {
-            if ev.key() == "Enter" && !ev.shift_key() {
-                ev.prevent_default();
-                let Some(turn) = try_prepare_turn(&composer.get()) else {
-                    return;
-                };
-                composer.set(String::new());
-                follow_bottom.set(true);
-                spawn_chat_stream(model, turn, current_token(), navigate.clone());
-            }
         }
     };
 
@@ -316,7 +296,6 @@ pub fn ChatPage() -> impl IntoView {
         model.update(|m| {
             m.cancel();
         });
-        focus_composer(composer_ref);
     };
 
     let retry = {
@@ -331,7 +310,6 @@ pub fn ChatPage() -> impl IntoView {
                 follow_bottom.set(true);
                 spawn_chat_stream(model, turn, current_token(), navigate.clone());
             }
-            focus_composer(composer_ref);
         }
     };
 
@@ -860,80 +838,21 @@ pub fn ChatPage() -> impl IntoView {
                     </div>
                 </section>
 
-                <SessionFileTray
+                <ChatComposer
+                    value=composer
+                    streaming=Signal::derive(is_streaming)
+                    locked=Signal::derive(composer_locked)
+                    can_retry=Signal::derive(can_retry)
+                    history_loading=history_loading
                     files_blocked=files_blocked
                     ready_count=ready_count
-                    disabled=attach_disabled
+                    attach_disabled=attach_disabled
+                    capabilities=capabilities
+                    capabilities_manual=capabilities_manual
+                    on_submit=Callback::new(send)
+                    on_stop=Callback::new(stop)
+                    on_retry=Callback::new(retry)
                 />
-                <form class="chat-composer" aria-label=move || i18n.t("chat.composerSendLabel") on:submit=send>
-                    <ScopeBar
-                        capabilities=capabilities
-                        capabilities_manual=capabilities_manual
-                        ready_count=Signal::derive(move || ready_count.get())
-                        disabled=Signal::derive(move || composer_locked())
-                    />
-                    <label for="chat-composer-input">{move || i18n.t("chat.composerInputLabel")}</label>
-                    <textarea
-                        id="chat-composer-input"
-                        data-testid="composer-input"
-                        node_ref=composer_ref
-                        rows=3
-                        prop:value=move || composer.get()
-                        on:input=move |ev| {
-                            composer.set(event_target_value(&ev));
-                            autosize_composer(composer_ref, composer_height);
-                        }
-                        on:keydown=send_keydown
-                        placeholder=move || i18n.t("chat.composerPlaceholder")
-                    ></textarea>
-                    <div
-                        class="chat-composer-resize"
-                        role="slider"
-                        tabindex="0"
-                        aria-label=move || i18n.t("workspaceChatComposerResize")
-                        aria-orientation="vertical"
-                        aria-valuemin="72"
-                        aria-valuemax="320"
-                        aria-valuenow=move || composer_height.get().to_string()
-                        data-testid="composer-resize"
-                        on:pointerdown=move |ev| {
-                            start_composer_resize(ev, composer_ref, composer_height, resize_origin)
-                        }
-                        on:pointermove=move |ev| {
-                            continue_composer_resize(ev, composer_ref, composer_height, resize_origin)
-                        }
-                        on:pointerup=move |_| resize_origin.set(None)
-                        on:pointercancel=move |_| resize_origin.set(None)
-                        on:keydown=move |ev| {
-                            nudge_composer_height(ev, composer_ref, composer_height)
-                        }
-                    ></div>
-                    <div class="chat-composer-actions">
-                        <button
-                            type="submit"
-                            data-testid="send-button"
-                            disabled=move || composer_locked()
-                        >
-                            {move || i18n.t("workspaceSend")}
-                        </button>
-                        <button
-                            type="button"
-                            data-testid="stop-button"
-                            disabled=move || !is_streaming()
-                            on:click=stop
-                        >
-                            {move || i18n.t("workspaceChatStop")}
-                        </button>
-                        <button
-                            type="button"
-                            data-testid="retry-button"
-                            disabled=move || !can_retry()
-                            on:click=retry
-                        >
-                            {move || i18n.t("chat.retry")}
-                        </button>
-                    </div>
-                </form>
                 <button
                     type="button"
                     class="chat-scroll-bottom"
@@ -1345,87 +1264,6 @@ fn format_elapsed(total_seconds: u32) -> String {
     }
 }
 
-fn apply_composer_height(composer_ref: NodeRef<leptos::html::Textarea>, px: i32) {
-    #[cfg(target_arch = "wasm32")]
-    {
-        if let Some(area) = composer_ref.get() {
-            let html: &web_sys::HtmlElement = &area;
-            let _ = html.style().set_property("height", &format!("{px}px"));
-        }
-    }
-    let _ = (composer_ref, px);
-}
-
-fn autosize_composer(
-    composer_ref: NodeRef<leptos::html::Textarea>,
-    composer_height: RwSignal<i32>,
-) {
-    #[cfg(target_arch = "wasm32")]
-    {
-        let Some(area) = composer_ref.get() else {
-            return;
-        };
-        let html: &web_sys::HtmlElement = &area;
-        let _ = html.style().set_property("height", "auto");
-        let height = html.scroll_height().clamp(72, 240);
-        composer_height.set(height);
-        let _ = html.style().set_property("height", &format!("{height}px"));
-    }
-    let _ = (composer_ref, composer_height);
-}
-
-fn start_composer_resize(
-    ev: leptos::ev::PointerEvent,
-    composer_ref: NodeRef<leptos::html::Textarea>,
-    composer_height: RwSignal<i32>,
-    resize_origin: RwSignal<Option<(i32, i32)>>,
-) {
-    ev.prevent_default();
-    let start_h = composer_height.get_untracked();
-    resize_origin.set(Some((ev.client_y() as i32, start_h)));
-    #[cfg(target_arch = "wasm32")]
-    {
-        use wasm_bindgen::JsCast;
-        if let Some(target) = ev.current_target() {
-            if let Ok(el) = target.dyn_into::<web_sys::Element>() {
-                let _ = el.set_pointer_capture(ev.pointer_id());
-            }
-        }
-        apply_composer_height(composer_ref, start_h);
-    }
-    let _ = composer_ref;
-}
-
-fn continue_composer_resize(
-    ev: leptos::ev::PointerEvent,
-    composer_ref: NodeRef<leptos::html::Textarea>,
-    composer_height: RwSignal<i32>,
-    resize_origin: RwSignal<Option<(i32, i32)>>,
-) {
-    let Some((start_y, start_h)) = resize_origin.get() else {
-        return;
-    };
-    let next = (start_h + (start_y - ev.client_y() as i32)).clamp(72, 320);
-    composer_height.set(next);
-    apply_composer_height(composer_ref, next);
-}
-
-fn nudge_composer_height(
-    ev: leptos::ev::KeyboardEvent,
-    composer_ref: NodeRef<leptos::html::Textarea>,
-    composer_height: RwSignal<i32>,
-) {
-    let delta = match ev.key().as_str() {
-        "ArrowUp" => 16,
-        "ArrowDown" => -16,
-        _ => return,
-    };
-    ev.prevent_default();
-    let next = (composer_height.get_untracked() + delta).clamp(72, 320);
-    composer_height.set(next);
-    apply_composer_height(composer_ref, next);
-}
-
 fn on_transcript_scroll(
     transcript_ref: NodeRef<leptos::html::Section>,
     follow_bottom: RwSignal<bool>,
@@ -1484,12 +1322,6 @@ fn scroll_cite_card(key: &str) {
 
 #[cfg(not(target_arch = "wasm32"))]
 fn scroll_cite_card(_key: &str) {}
-
-fn focus_composer(composer_ref: NodeRef<leptos::html::Textarea>) {
-    if let Some(element) = composer_ref.get() {
-        let _ = element.focus();
-    }
-}
 
 /// 启动一条聊天流。浏览器 Fetch/SSE，事件进同一 reducer。
 /// 任务内只允许访问 App 级 model、Router 级 navigate 与 window.location。

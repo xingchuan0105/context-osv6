@@ -44,18 +44,112 @@ async function fixtureState(request: import('@playwright/test').APIRequestContex
   }>;
 }
 
+test.describe('Rust/UI composer', () => {
+  test.beforeEach(async ({ request }) => {
+    await request.post(`${FIXTURE_BASE}/admin/reset`);
+  });
+
+  test('空白禁用、输入法确认不提交、Shift+Enter 换行、Enter 只发送一次', async ({ page, request }) => {
+    const errors = collectPageErrors(page);
+    await gotoChat(page, `${FIXTURE_BASE}/case/slow`);
+    const input = page.getByTestId('composer-input');
+    await input.fill('   ');
+    await expect(page.getByTestId('send-button')).toBeDisabled();
+    await input.fill('你好');
+    await expect(page.getByTestId('send-button')).toBeEnabled();
+    await input.dispatchEvent('compositionstart');
+    await input.dispatchEvent('keydown', { key: 'Enter', isComposing: false });
+    await input.dispatchEvent('compositionend');
+    await input.dispatchEvent('keydown', { key: 'Enter', isComposing: true });
+    await input.dispatchEvent('keydown', { key: 'Enter', keyCode: 229 });
+    await input.press('Shift+Enter');
+    await expect(input).toHaveValue('你好\n');
+    await page.waitForTimeout(200);
+    expect((await fixtureState(request)).requests).toBe(0);
+    await input.press('Enter');
+    await expect(page.getByTestId('stop-button')).toBeVisible();
+    await expect(page.getByTestId('send-button')).toHaveCount(0);
+    await expect(page.getByTestId('retry-button')).toHaveCount(0);
+    await expect.poll(async () => (await fixtureState(request)).requests).toBe(1);
+    await page.getByTestId('stop-button').click();
+    await expect(input).toBeFocused();
+    await expect(page.getByTestId('send-button')).toBeDisabled();
+    await expect(page.getByTestId('retry-button')).toBeVisible();
+    expect(errors).toEqual([]);
+  });
+
+  test('输入区自动增高、键盘调高和拖动保持边界', async ({ page }) => {
+    await gotoChat(page, FIXTURE_BASE);
+    const input = page.getByTestId('composer-input');
+    const resize = page.getByTestId('composer-resize');
+    await input.fill('短消息');
+    await expect(page.getByTestId('send-button')).toBeEnabled();
+    const shortHeight = (await input.boundingBox())!.height;
+    await input.fill(Array(20).fill('多行消息').join('\n'));
+    await expect.poll(async () => (await input.boundingBox())!.height).toBeGreaterThan(shortHeight);
+    await resize.focus();
+    for (let index = 0; index < 8; index++) await resize.press('ArrowUp');
+    await expect(resize).toHaveAttribute('aria-valuenow', '320');
+    const bounds = (await resize.boundingBox())!;
+    await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + 600);
+    await page.mouse.up();
+    await expect(resize).toHaveAttribute('aria-valuenow', '72');
+    await expect.poll(async () => (await input.boundingBox())!.height).toBe(72);
+  });
+
+  for (const locale of ['zh-CN', 'en']) {
+    for (const theme of ['light', 'dark']) {
+      test(`${locale} ${theme} 输入区在桌面和窄屏完整可见`, async ({ page }, testInfo) => {
+        const errors = collectPageErrors(page);
+        await page.addInitScript((theme) => {
+          localStorage.setItem('avrag.ui.theme.v1', theme);
+        }, theme);
+        await gotoChat(page, FIXTURE_BASE);
+        if (locale === 'en') {
+          await page.getByTestId('dashboard-account-menu-trigger').click();
+          await page.getByTestId('account-locale-toggle').click();
+          await page.getByTestId('account-locale-en').click();
+          if (await page.getByTestId('dashboard-account-menu').isVisible()) {
+            await page.getByTestId('dashboard-account-menu-trigger').click();
+          }
+        }
+        await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+        await page.getByTestId('composer-input').fill(locale === 'en' ? 'Summarize my project notes' : '整理项目资料，提炼下一步行动');
+        await expect(page.getByTestId('send-button')).toBeEnabled();
+        await expect(page.getByTestId('send-button')).toHaveText(locale === 'en' ? 'Send' : '发送');
+        for (const width of [1280, 390]) {
+          await page.setViewportSize({ width, height: 900 });
+          const composer = page.getByTestId('chat-composer');
+          await expect(composer).toBeVisible();
+          const bounds = (await composer.boundingBox())!;
+          expect(bounds.x).toBeGreaterThanOrEqual(0);
+          expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
+          expect(bounds.y + bounds.height).toBeLessThanOrEqual(900);
+          const button = (await page.getByTestId('send-button').boundingBox())!;
+          expect(button.x + button.width).toBeLessThanOrEqual(width);
+          expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+          await page.screenshot({ path: testInfo.outputPath(`composer-${locale}-${theme}-${width}.png`), fullPage: true });
+        }
+        expect(errors).toEqual([]);
+      });
+    }
+  }
+});
+
 test.describe('SSR smoke（Gate D）', () => {
   test('/chat 与 /chat/test-session 返回含表单语义的 SSR HTML', async ({ request }) => {
     for (const path of ['/chat', '/chat/test-session']) {
       const response = await request.get(`${WEB_BASE}${path}`);
       expect(response.status()).toBe(200);
       const html = await response.text();
-      // 表单语义：label + textarea + 三个按钮
+      // 初始表单只展示发送，停止和重试按运行状态出现。
       expect(html).toContain('for="chat-composer-input"');
       expect(html).toContain('<textarea');
       expect(html).toContain('发送');
-      expect(html).toContain('停止');
-      expect(html).toContain('重试');
+      expect(html).not.toContain('data-testid="stop-button"');
+      expect(html).not.toContain('data-testid="retry-button"');
       expect(html).toContain('知识库');
       expect(html).toContain('网络搜索');
       // 不再是占位壳，且带 hydration 接线

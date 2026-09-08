@@ -757,12 +757,20 @@
 .chat-composer {
     display: flex;
     flex-direction: column;
+    flex-shrink: 0;
     gap: 0.5rem;
-    border-top: 1px solid var(--cos-border);
-    padding-top: 0.75rem;
+    min-width: 0;
+    padding: 0.75rem;
+    border: 1px solid var(--cos-border);
+    border-radius: var(--cos-radius-md);
+    background: var(--cos-surface);
 }
 
-.chat-composer label {
+.chat-composer:focus-within {
+    border-color: hsl(var(--ring));
+}
+
+.chat-composer-label {
     font-size: 0.8125rem;
     color: var(--cos-text-muted);
 }
@@ -770,15 +778,39 @@
 .chat-composer textarea {
     width: 100%;
     box-sizing: border-box;
-    padding: 0.5rem 0.75rem;
-    border: 1px solid var(--cos-border);
-    border-radius: var(--cos-radius-md);
-    background: var(--cos-surface);
+    padding: 0.5rem 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
     color: var(--cos-text);
     font: inherit;
+    line-height: 1.6;
     resize: none;
     overflow-y: auto;
     min-height: 4.5rem;
+}
+
+.chat-composer textarea:focus,
+.chat-composer textarea:focus-visible {
+    outline: none;
+    box-shadow: none;
+}
+
+.chat-composer-footer {
+    display: flex;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 0.75rem;
+    border-top: 1px solid var(--cos-border);
+    padding-top: 0.75rem;
+}
+
+.chat-composer-hint {
+    margin: 0;
+    font-size: 0.75rem;
+    color: var(--cos-text-muted);
+    overflow-wrap: anywhere;
 }
 
 .chat-composer-resize {
@@ -791,6 +823,7 @@
     border: 0;
     background: transparent;
     cursor: ns-resize;
+    touch-action: none;
 }
 
 .chat-composer-resize::after {
@@ -937,30 +970,10 @@
 
 .chat-composer-actions {
     display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    margin-left: auto;
     gap: 0.5rem;
-}
-
-.chat-composer-actions button {
-    padding: 0.375rem 0.875rem;
-    border: 1px solid var(--cos-border);
-    border-radius: var(--cos-radius-sm);
-    background: var(--cos-cta-bg);
-    color: var(--cos-cta-fg);
-    cursor: pointer;
-}
-
-.chat-composer-actions button[type="button"] {
-    background: var(--cos-surface);
-    color: var(--cos-text);
-}
-
-.chat-composer-actions button:disabled {
-    opacity: 0.5;
-    cursor: default;
-}
-
-.chat-composer-actions button:hover:not(:disabled) {
-    border-color: var(--cos-border-strong);
 }
 
 .chat-not-found {
