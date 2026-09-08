@@ -6,13 +6,15 @@
 
 **规则**: 改 `frontend_next` 主导航 / 全局入口 / 计费完成页前，**必须先改本文**再改代码。禁止新增「第三完成页」。
 
+**2026-09-08 用户意图修订（优先于旧 Chat-first 会话文件方案）**：个人 `/chat` 是快速聊天，不提供知识库检索。附件保留，但只作为当前轮的直接上下文，不进入检索索引、不自动作为后续轮资料。持久知识库问答在工作区完成。以下为目标产品契约；Rust 现有实现仍有差异，见 `docs/design/2026-09-08-rust-product-intent-audit.md`，不能以旧交互测试通过视为已对齐。
+
 ---
 
 ## 1. Jobs（用户意图）
 
 | Job ID | 意图（用户语言） | 成功态 |
 |--------|------------------|--------|
-| J0 | 不建工作区，直接提问或临时带文件 | 一打开就是对话；无资料可通用聊天，可选联网；本会话文件可被引用且不进入工作区 |
+| J0 | 不建工作区，快速提问或本轮带文件 | 直接聊天，可选联网；附件内容只进入本轮上下文，不展示知识库开关，不索引、不自动跨轮携带、不自动进入工作区 |
 | J1 | 建立持久知识库并持续提问 | 工作区内有可管理资料 + 多个对话共享这些资料并得到 grounded 回答 |
 | J2 | 配置自己的模型（BYOK） | Provider 可用；对话可走自有额度 |
 | J3 | 用平台模型 / 访客问答不断供 | 余额足够或已 BYOK |
@@ -36,18 +38,18 @@ User（所有权 / RLS 根）
  ├─ Conversation[]（用户可见「对话」；workspace_id 可空）
  │    ├─ model_role（与上下文范围解耦）
  │    ├─ TurnContextSnapshot[]（每轮冻结的可用范围与模型事实）
- │    └─ Session DocumentBinding[]（仅本会话可见）
+ │    └─ 本轮附件记录（直接上下文；历史记录不等于后续轮检索资料）
  └─ Workspace[]（唯一可复用、可管理、可分享的持久知识容器 · T7）
       ├─ Workspace DocumentBinding[]（跨对话共享）
       ├─ Notes + associated Conversation[]
       ├─ Share settings + public surface
       └─ Share analytics（对象级）
-DocumentArtifact（用户所有的不可变原件/解析版本/索引）
- └─ DocumentBinding[] → Session(conversation_id) | Workspace(workspace_id)
+Workspace DocumentArtifact（用户所有的不可变原件/解析版本/索引）
+ └─ DocumentBinding[] → Workspace(workspace_id)
 Client (desktop) — 同能力本机形态；本机工作区对外分享 = 先 Publish 到云端副本（向量导入、不重解析）再走 Subscription 名额；模型默认平台 key 走钱包余额（云登录后下发 relay 凭据），BYOK 为登录后高级选项
 ```
 
-**T7 精确定义**：Workspace 是唯一可跨会话复用、管理、分享的持久知识容器。Session 文件可以随 Conversation 持久保留，但只在该 Conversation 内可达，因此不是第二种知识库。文件只有显式增加 Workspace binding 后，才可被其他对话复用、管理或分享。禁止新增 notebook 或全局内容库绕过 Workspace 成为另一套持久知识真相。
+**T7 精确定义**：Workspace 是唯一可跨会话复用、管理、分享的持久知识容器。个人聊天附件的历史展示不授予检索或跨轮使用权；后续轮不自动重新注入附件原文。显式加入工作区才进入工作区的解析/索引流程。禁止新增会话知识库、notebook 或全局内容库绕过 Workspace 成为另一套持久知识真相。附件原件保留时长和格式/大小/上下文上限另行定义，不由 UI 隐式承诺。
 
 ---
 
@@ -125,7 +127,7 @@ Client (desktop) — 同能力本机形态；本机工作区对外分享 = 先 P
 | 进入工作区 | `/dashboard/:id` | 全局栏 Workspaces、工作区总览卡片、最近会话来源标签 |
 | 继续工作区对话 | `/dashboard/:id?session=:sid` | 工作区会话栏、混排最近、Cmd/Ctrl+K、全局搜索 |
 | 移动对话到工作区 | 当前对话内「移动到工作区」动作 | 上下文胶囊、对话菜单；只影响后续轮次，不自动入库附件 |
-| 将会话文件加入工作区 | 当前对话内文件菜单「加入工作区资料」 | Composer 文件托盘、对话文件抽屉；新增 Workspace binding，不复制/重解析 |
+| 将聊天附件加入工作区 | 附件上的显式「加入工作区资料」动作（待实现核对） | 仅在真实保存与索引路径完成后提供；当前轮附件不自动转为工作区资料 |
 | 升级会员 | `/pricing`（档位区） | 顶栏分享组「升级」、升级弹窗「详情」、paywall、分享转化「升级」 |
 | 充值余额 | `/pricing#topup` | 升级弹窗充值 CTA、分享转化充值、产品地图、设置账单可链回 |
 | BYOK | `/settings?tab=providers` | pricing 次要链、产品地图、账单提示 |
@@ -150,7 +152,7 @@ Client (desktop) — 同能力本机形态；本机工作区对外分享 = 先 P
 |-------|------|------|
 | **Marketing chrome** | pricing / desktop / legal | 定价 · 客户端 · 法律 · 语言 · 进入应用 |
 | **App top bar** | chat / dashboard / workspace / settings（产品内） | 品牌（回 `/chat`）· **分享组**（T0；含 访问/API/升级）· 通知 · 账户；设置仍在账户菜单，不设客户端/升级胶囊 |
-| **Chat shell** | `/chat*` | 左：全局「新对话」+ 最近（普通/工作区混排并标来源）+ Workspaces；中：共享 Chat Canvas；右：默认无持久栏，会话文件从 Composer/轻抽屉查看 |
+| **Chat shell** | `/chat*` | 左：全局「新对话」+ 最近（普通/工作区混排并标来源）+ Workspaces；中：快速聊天与本轮附件，无知识库开关；右：默认无持久栏 |
 | **Dashboard main** | `/dashboard*` | 工作区总览；筛选 tab（全部/我的/收藏）；横切「分享访问」与「客户端」入口在工具栏；可复用 Chat shell 的业务栏，**无**百科主侧栏 |
 | **Workspace chrome** | `/dashboard/:id*` | 左：该工作区 Sessions；中：同一个 Chat Canvas；右：工作区资料/笔记 + 本会话文件；标题 · 新建 · **分享**（T0 单胶囊单行为）· 通知 · 账户 |
 | **Settings** | `/settings` | 左侧 tabs（≤5）+ 面板 |
@@ -207,6 +209,8 @@ Client (desktop) — 同能力本机形态；本机工作区对外分享 = 先 P
 10. **两套 Chat Canvas / quickchat AgentKind** — 用页面或执行管线复制来表达上下文差异。
 11. **自动入库 / 自动搬家** — 未经显式确认把会话文件变成 Workspace 资料。
 12. **模型与上下文捆绑** — 因移动会话、上传文件或开启联网而偷偷切主回答模型。
+13. **用开关伪装能力边界** — 个人快速聊天展示知识库入口；工作区知识问答却以会话附件数决定是否可检索。
+14. **成功提示代替业务结果** — 保存、接受邀请、支付到账、复制完成必须对应真实动作结果；页面跳转或按钮文字变化不代表任务完成。
 
 ---
 
