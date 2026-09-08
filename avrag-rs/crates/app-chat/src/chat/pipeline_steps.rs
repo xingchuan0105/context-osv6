@@ -180,7 +180,7 @@ async fn run_general_mode(
         // silent otherwise — same immediate step as orchestrated turns.
         agent_loop::progress::emit_work_fact(
             &sink,
-            agent_loop::progress::WorkFact::understand(&agent_request.query),
+            agent_loop::progress::WorkFact::understand(&request.query),
         )
         .await;
 
@@ -201,7 +201,7 @@ async fn run_general_mode(
                 mode: agent_type,
                 agent_type,
                 session_id: &session.id,
-                input_usage_text: request.query.trim(),
+                input_usage_text: &crate::turn_attachments::query_with_attachments(request),
                 apply_output_guard: true,
                 mode_debug: Some(ModeDebug {
                     rag: None,
@@ -239,7 +239,7 @@ async fn run_general_mode(
             mode: agent_type,
             agent_type,
             session_id: &session.id,
-            input_usage_text: request.query.trim(),
+            input_usage_text: &crate::turn_attachments::query_with_attachments(request),
             apply_output_guard: true,
             mode_debug: Some(ModeDebug {
                 rag: None,

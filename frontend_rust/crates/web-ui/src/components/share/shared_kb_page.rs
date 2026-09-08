@@ -26,6 +26,7 @@ pub fn SharedKbPage() -> impl IntoView {
     let payload = RwSignal::new(None::<SharedWorkspacePayload>);
     let error = RwSignal::new(None::<String>);
     let loading = RwSignal::new(false);
+    let challenge = super::turnstile::ShareChallenge::new();
 
     Effect::new(move |_| {
         let tok = token.get();
@@ -34,10 +35,13 @@ pub fn SharedKbPage() -> impl IntoView {
         }
 
         loading.set(true);
+        payload.set(None);
         error.set(None);
         leptos::task::spawn_local(async move {
             let client = BrowserRestClient::new(&poc_api_base(), None);
-            match client.get_shared_workspace(&tok).await {
+            let result = client.get_shared_workspace(&tok).await;
+            if token.try_get_untracked().as_deref() != Some(tok.as_str()) { return; }
+            match result {
                 Ok(data) => {
                     payload.set(Some(data));
                 }
@@ -98,7 +102,12 @@ pub fn SharedKbPage() -> impl IntoView {
                                 </aside>
 
                                 <div class="shared-kb-chat">
-                                    <ChatPage/>
+                                    <super::turnstile::Turnstile challenge=challenge/>
+                                    <ChatPage
+                                        share_challenge=challenge
+                                        knowledge_scope=Signal::derive(move || payload.get().map(|p| p.sources.into_iter().filter(|s| s.status == "completed").map(|s| s.id).collect::<Vec<_>>()).unwrap_or_default())
+                                        share_source=Signal::derive(move || (token.get(), payload.get().map(|p| p.knowledge_base.id).unwrap_or_default()))
+                                    />
                                 </div>
                             </div>
                         }

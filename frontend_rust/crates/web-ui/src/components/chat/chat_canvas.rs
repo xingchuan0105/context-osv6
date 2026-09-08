@@ -1,6 +1,6 @@
 use crate::reducer::{ChatTurnState, TurnStatus, reduce_chat_event};
 use crate::session::{ConversationManager, ConversationMessage, MessageRole};
-use contracts::chat::{ChatEvent, ChatRequest};
+use contracts::chat::{ChatEvent, ChatRequest, TurnAttachment};
 use contracts::workspaces::ChatSession;
 use web_sdk::{
     Cancellation, TransportError, capabilities_to_wire, derive_agent_type_label,
@@ -25,6 +25,7 @@ pub struct ChatCanvasModel {
     cancellation: Option<Cancellation>,
     next_turn_generation: u64,
     active_stream_scope: Option<StreamScope>,
+    retry_attachments: Vec<TurnAttachment>,
 }
 
 impl ChatCanvasModel {
@@ -35,6 +36,7 @@ impl ChatCanvasModel {
             cancellation: None,
             next_turn_generation: 0,
             active_stream_scope: None,
+            retry_attachments: Vec::new(),
         }
     }
 
@@ -61,8 +63,20 @@ impl ChatCanvasModel {
         query: &str,
         capabilities: &[String],
     ) -> PreparedUserTurn {
+        self.prepare_user_turn_with_attachments(query, capabilities, Vec::new())
+    }
+
+    pub fn prepare_user_turn_with_attachments(
+        &mut self,
+        query: &str,
+        capabilities: &[String],
+        attachments: Vec<TurnAttachment>,
+    ) -> PreparedUserTurn {
         self.invalidate_active_stream();
         self.manager.append_user_message(query);
+        self.manager.active.messages.last_mut().expect("user message").attachment_names =
+            attachments.iter().map(|file| file.filename.clone()).collect();
+        self.retry_attachments = attachments.clone();
         self.live_turn = ChatTurnState {
             request_id: None, // 等待服务端 Start 事件确立权威 request_id
             session_id: self.manager.active.session_id.clone(),
@@ -96,6 +110,7 @@ impl ChatCanvasModel {
                 debug: false,
                 language: None,
                 format_hint: None,
+                attachments,
                 turnstile_token: None,
             },
             stream_scope,
@@ -175,16 +190,19 @@ impl ChatCanvasModel {
     }
 
     pub fn new_personal_chat(&mut self, model_role: Option<&str>) {
+        self.retry_attachments.clear();
         self.invalidate_active_stream();
         self.manager.new_personal_chat(model_role);
     }
 
     pub fn switch_to_personal_session(&mut self, session_id: &str) {
+        self.retry_attachments.clear();
         self.invalidate_active_stream();
         self.manager.switch_to_personal_session(session_id);
     }
 
     pub fn switch_to_session(&mut self, session: &ChatSession) {
+        self.retry_attachments.clear();
         self.invalidate_active_stream();
         self.manager.switch_to_session(session);
     }
@@ -230,6 +248,7 @@ impl ChatCanvasModel {
     }
 
     pub fn switch_to_workspace(&mut self, workspace_id: &str, session_id: Option<&str>) {
+        self.retry_attachments.clear();
         self.invalidate_active_stream();
         self.manager.switch_to_workspace(workspace_id, session_id);
     }
@@ -241,6 +260,7 @@ impl ChatCanvasModel {
 
     /// 重试时用当前芯片，不冻结上一轮 capabilities。
     pub fn retry_last_with(&mut self, capabilities: &[String]) -> Option<PreparedUserTurn> {
+        if !self.has_retry_context() { return None; }
         let last_user_query = self
             .manager
             .active
@@ -264,7 +284,12 @@ impl ChatCanvasModel {
             }
         }
 
-        Some(self.prepare_user_turn_with(&last_user_query, capabilities))
+        Some(self.prepare_user_turn_with_attachments(&last_user_query, capabilities, self.retry_attachments.clone()))
+    }
+
+    pub fn has_retry_context(&self) -> bool {
+        self.manager.active.messages.iter().rfind(|m| m.role == MessageRole::User)
+            .is_some_and(|m| m.attachment_names.is_empty() || !self.retry_attachments.is_empty())
     }
 
     /// Transport 层失败（HTTP 非 2xx、断流、坏帧、取消）进入可恢复终态。

@@ -49,6 +49,7 @@ pub fn App() -> impl IntoView {
     provide_meta_context();
     provide_i18n();
     provide_context(RwSignal::new(ChatCanvasModel::new()));
+    provide_context(crate::components::chat::chat_page::SharedChatModel(RwSignal::new(ChatCanvasModel::new())));
     provide_context(RwSignal::new(String::new()));
     provide_toaster();
 
@@ -65,7 +66,7 @@ pub fn App() -> impl IntoView {
                 }
             }>
                 <Route path=path!("/") view=HomePage/>
-                <Route path=path!("/chat/:session_id?") view=ChatPage/>
+                <Route path=path!("/chat/:session_id?") view=|| view! { <ChatPage/> }/>
                 <Route path=path!("/dashboard") view=DashboardOverviewPage/>
                 <Route path=path!("/dashboard/analytics") view=GlobalAnalyticsPage/>
                 <Route path=path!("/dashboard/:workspace_id/analyze") view=WorkspaceAnalyzePage/>
@@ -140,12 +141,14 @@ pub fn App() -> impl IntoView {
 /// SSR HTML 外壳：包含可读的页面骨架与表单语义（由 App SSR 输出），
 /// 以及 hydration 脚本与样式链接。
 pub fn shell(options: LeptosOptions) -> impl IntoView {
+    let turnstile_site_key = std::env::var("NEXT_PUBLIC_TURNSTILE_SITE_KEY").unwrap_or_default();
     view! {
         <!DOCTYPE html>
         <html lang="zh-CN">
             <head>
                 <meta charset="utf-8"/>
                 <meta name="viewport" content="width=device-width, initial-scale=1"/>
+                <meta name="turnstile-site-key" content=turnstile_site_key/>
                 <title>"Context-OS Chat"</title>
                 <HashedStylesheet id="leptos" options=options.clone()/>
                 <link rel="stylesheet" href="/style/app.css"/>

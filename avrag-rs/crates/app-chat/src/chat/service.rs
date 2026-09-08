@@ -127,6 +127,7 @@ impl ChatContext {
         &self,
         req: &ChatRequest,
     ) -> Result<ChatPreflight, AppError> {
+        crate::turn_attachments::validate_turn_attachments(req)?;
         let effective_workspace_id = chat_workspace_id_for_request(self, req)?;
         // ADR-0010: share chat may be anonymous when owner set workspace visibility
         // to `public`; auth middleware remaps `user_id` to the share owner.
@@ -151,6 +152,7 @@ impl ChatContext {
         let estimated_input_tokens = estimate_token_count(
             &std::iter::once(req.query.as_str())
                 .chain(req.messages.iter().map(|item| item.content.as_str()))
+                .chain(req.attachments.iter().map(|item| item.text.as_str()))
                 .collect::<Vec<_>>()
                 .join("\n"),
         );

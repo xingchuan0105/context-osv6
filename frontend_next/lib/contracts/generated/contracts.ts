@@ -20,10 +20,125 @@ export interface AccessLogsResponse {
 	logs: AccessLogEntry[];
 }
 
-export interface AdminUsageResponse {
-	total_requests: number;
-	total_tokens: number;
-	total_documents: number;
+export interface AdminAccountInfo {
+	id: string;
+	name: string;
+	created_at: number;
+	blocked: boolean;
+	user_count: number;
+	document_count: number;
+	query_count: number;
+}
+
+export interface AdminAuditLogEntry {
+	id: number;
+	actor_id?: string;
+	action: string;
+	resource_type: string;
+	resource_id: string;
+	owner_user_id?: string;
+	created_at: number;
+}
+
+export interface AdminAuditLogPage {
+	items: AdminAuditLogEntry[];
+	total: number;
+	page: number;
+	per_page: number;
+}
+
+export interface AdminAuditLogQuery {
+	query?: string;
+	action?: string;
+	resource_type?: string;
+	actor?: string;
+	window?: string;
+	page?: number;
+	per_page?: number;
+}
+
+export interface AdminBillingOverview {
+	active_subscriptions: number;
+	past_due_subscriptions: number;
+	unpaid_subscriptions: number;
+	canceled_subscriptions: number;
+}
+
+/** 全平台公告广播结果（`POST /api/v1/admin/notifications/broadcast`）。 */
+export interface AdminBroadcastResult {
+	created: number;
+}
+
+export interface AdminDegradationStatus {
+	failed_documents: number;
+	recent_guard_events: number;
+	share_access_events: number;
+}
+
+export interface AdminFeatureFlagChangeRequest {
+	id: string;
+	flag_key: string;
+	current_enabled: boolean;
+	requested_enabled: boolean;
+	reason: string;
+	status: string;
+	requested_by: string;
+	reviewed_by?: string;
+	review_note?: string;
+	created_at: number;
+	reviewed_at?: number;
+	executed_at?: number;
+}
+
+export interface AdminFeatureFlagEntry {
+	key: string;
+	category: string;
+	description: string;
+	enabled: boolean;
+	effective_enabled: boolean;
+	config_ready: boolean;
+	requires_config: boolean;
+	source: string;
+	updated_at?: number;
+	has_pending_request: boolean;
+}
+
+export interface AdminHealthStatus {
+	status: string;
+	version: string;
+	uptime_secs: number;
+}
+
+export interface AdminRagHealthStatus {
+	failed_documents: number;
+	queued_tasks: number;
+	processing_tasks: number;
+	dead_letter_tasks: number;
+	recent_guard_events: number;
+}
+
+export interface AdminUsageStats {
+	owner_user_id: string;
+	period: string;
+	query_count: number;
+	document_count: number;
+	chunk_count: number;
+	storage_bytes: number;
+}
+
+export interface AdminUserInfo {
+	id: string;
+	email: string;
+	role: string;
+	created_at: number;
+}
+
+export interface AdminWorkerStatus {
+	runtime_mode: string;
+	queued_tasks: number;
+	processing_tasks: number;
+	dead_letter_tasks: number;
+	failed_documents: number;
 }
 
 /** Tool catalog entry: describes one callable tool. */
@@ -105,33 +220,6 @@ export interface ApiKeyRow {
 
 export interface ApiKeyListResponse {
 	api_keys: ApiKeyRow[];
-}
-
-export interface AuditLogEntry {
-	id: number;
-	actor_id?: string;
-	action: string;
-	resource_type: string;
-	resource_id: string;
-	owner_user_id?: string;
-	created_at: number;
-}
-
-export interface AuditLogListResponse {
-	items: AuditLogEntry[];
-	total: number;
-	page: number;
-	per_page: number;
-}
-
-export interface AuditLogQuery {
-	query?: string;
-	action?: string;
-	resource_type?: string;
-	actor?: string;
-	window?: string;
-	page?: number;
-	per_page?: number;
 }
 
 export interface AuthUserDto {
@@ -415,6 +503,11 @@ export interface ChatMessageListResponse {
 	messages: ChatMessage[];
 }
 
+export interface TurnAttachment {
+	filename: string;
+	text: string;
+}
+
 export interface ClientContext {
 	/** ISO-8601 local datetime with offset when possible, e.g. `2026-07-15T14:32:00+08:00`. */
 	local_time?: string;
@@ -431,6 +524,8 @@ export interface ChatTurnInput {
 
 export interface ChatRequest {
 	query: string;
+	/** Parsed user files for this request only; never a persistent retrieval scope. */
+	attachments?: TurnAttachment[];
 	workspace_id?: string;
 	session_id?: string;
 	agent_type: string;
@@ -571,12 +666,6 @@ export interface DashboardPreferences {
 	workspace_notes?: WorkspaceNotePreference[];
 }
 
-export interface DegradationStatusResponse {
-	failed_documents: number;
-	recent_guard_events: number;
-	share_access_events: number;
-}
-
 export interface Document {
 	id: string;
 	owner_user_id: string;
@@ -614,40 +703,6 @@ export interface EmptyResponse {
 export interface ErrorEnvelope {
 	error: string;
 	message: string;
-}
-
-export interface FeatureFlagChangeRequest {
-	id: string;
-	flag_key: string;
-	current_enabled: boolean;
-	requested_enabled: boolean;
-	reason: string;
-	status: string;
-	requested_by: string;
-	reviewed_by?: string;
-	review_note?: string;
-	created_at: number;
-	reviewed_at: number;
-	executed_at: number;
-}
-
-export interface FeatureFlagEntry {
-	key: string;
-	category: string;
-	description: string;
-	enabled: boolean;
-	effective_enabled: boolean;
-	config_ready: boolean;
-	requires_config: boolean;
-	source: string;
-	updated_at: number;
-	has_pending_request: boolean;
-}
-
-export interface HealthResponse {
-	status: string;
-	service: string;
-	version: string;
 }
 
 export interface LoginRequest {
@@ -705,25 +760,6 @@ export interface NotificationsResponse {
 	notifications: NotificationRow[];
 }
 
-export interface OrgRow {
-	id: string;
-	name: string;
-	plan: string;
-	user_count: number;
-	workspace_count: number;
-	query_count: number;
-	blocked: boolean;
-	created_at: string;
-}
-
-export interface OrgListResponse {
-	orgs: OrgRow[];
-}
-
-export interface OrgResponse {
-	org: OrgRow;
-}
-
 export interface ParsedPreviewItem {
 	kind: string;
 	text: string;
@@ -753,17 +789,6 @@ export interface WorkspaceNote {
 export interface PromoteWorkspaceNoteResponse {
 	note: WorkspaceNote;
 	source_id: string;
-}
-
-export interface RagHealthStatus {
-	failed_documents: number;
-	queued_tasks: number;
-	processing_tasks: number;
-	recent_guard_events: number;
-}
-
-export interface ReadyResponse {
-	ready: boolean;
 }
 
 export interface RegisterRequest {
@@ -920,20 +945,6 @@ export interface UsageLimitResponse {
 	has_estimated_usage?: boolean;
 }
 
-export interface UserRow {
-	id: string;
-	email: string;
-	full_name: string;
-	owner_user_id: string;
-	role: string;
-	created_at: string;
-	last_active_at?: string;
-}
-
-export interface UserListResponse {
-	users: UserRow[];
-}
-
 export interface UserPreferences {
 	dashboard?: DashboardPreferences;
 	notifications?: NotificationPreferences;
@@ -943,13 +954,6 @@ export interface UserPreferences {
 export interface VerifyResetCodeRequest {
 	email: string;
 	code: string;
-}
-
-export interface WorkerStatusResponse {
-	runtime_mode: string;
-	queued_tasks: number;
-	processing_tasks: number;
-	failed_documents: number;
 }
 
 export interface Workspace {

@@ -10,10 +10,14 @@ use typeshare::typeshare;
 pub struct AdminAccountInfo {
     pub id: String,
     pub name: String,
+    #[typeshare(serialized_as = "f64")]
     pub created_at: i64,
     pub blocked: bool,
+    #[typeshare(serialized_as = "f64")]
     pub user_count: i64,
+    #[typeshare(serialized_as = "f64")]
     pub document_count: i64,
+    #[typeshare(serialized_as = "f64")]
     pub query_count: i64,
 }
 
@@ -23,6 +27,7 @@ pub struct AdminUserInfo {
     pub id: String,
     pub email: String,
     pub role: String,
+    #[typeshare(serialized_as = "f64")]
     pub created_at: i64,
 }
 
@@ -31,9 +36,13 @@ pub struct AdminUserInfo {
 pub struct AdminUsageStats {
     pub owner_user_id: String,
     pub period: String,
+    #[typeshare(serialized_as = "f64")]
     pub query_count: i64,
+    #[typeshare(serialized_as = "f64")]
     pub document_count: i64,
+    #[typeshare(serialized_as = "f64")]
     pub chunk_count: i64,
+    #[typeshare(serialized_as = "f64")]
     pub storage_bytes: i64,
 }
 
@@ -42,25 +51,35 @@ pub struct AdminUsageStats {
 pub struct AdminHealthStatus {
     pub status: String,
     pub version: String,
+    #[typeshare(serialized_as = "f64")]
     pub uptime_secs: i64,
 }
 
 #[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AdminBillingOverview {
+    #[typeshare(serialized_as = "f64")]
     pub active_subscriptions: i64,
+    #[typeshare(serialized_as = "f64")]
     pub past_due_subscriptions: i64,
+    #[typeshare(serialized_as = "f64")]
     pub unpaid_subscriptions: i64,
+    #[typeshare(serialized_as = "f64")]
     pub canceled_subscriptions: i64,
 }
 
 #[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AdminRagHealthStatus {
+    #[typeshare(serialized_as = "f64")]
     pub failed_documents: i64,
+    #[typeshare(serialized_as = "f64")]
     pub queued_tasks: i64,
+    #[typeshare(serialized_as = "f64")]
     pub processing_tasks: i64,
+    #[typeshare(serialized_as = "f64")]
     pub dead_letter_tasks: i64,
+    #[typeshare(serialized_as = "f64")]
     pub recent_guard_events: i64,
 }
 
@@ -68,17 +87,24 @@ pub struct AdminRagHealthStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AdminWorkerStatus {
     pub runtime_mode: String,
+    #[typeshare(serialized_as = "f64")]
     pub queued_tasks: i64,
+    #[typeshare(serialized_as = "f64")]
     pub processing_tasks: i64,
+    #[typeshare(serialized_as = "f64")]
     pub dead_letter_tasks: i64,
+    #[typeshare(serialized_as = "f64")]
     pub failed_documents: i64,
 }
 
 #[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AdminDegradationStatus {
+    #[typeshare(serialized_as = "f64")]
     pub failed_documents: i64,
+    #[typeshare(serialized_as = "f64")]
     pub recent_guard_events: i64,
+    #[typeshare(serialized_as = "f64")]
     pub share_access_events: i64,
 }
 
@@ -169,5 +195,6 @@ pub struct AdminAuditLogPage {
 #[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AdminBroadcastResult {
+    #[typeshare(serialized_as = "f64")]
     pub created: i64,
 }

@@ -14,7 +14,7 @@ impl UnifiedAgentService {
         Self { agent }
     }
 
-    #[tracing::instrument(skip(self, sink), fields(agent_kind = ?request.kind))]
+    #[tracing::instrument(skip(self, sink, request), fields(agent_kind = ?request.kind))]
     pub async fn run(
         &self,
         request: AgentRequest,

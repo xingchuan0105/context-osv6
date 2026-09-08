@@ -17,7 +17,7 @@ impl ChatContext {
 
         Ok(ChatExecution {
             mode: req.agent_type.clone(),
-            input_usage_text: req.query.trim().to_string(),
+            input_usage_text: crate::turn_attachments::query_with_attachments(req),
             apply_output_guard: false,
             response: ChatResponse {
                 answer,

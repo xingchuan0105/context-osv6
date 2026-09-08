@@ -188,7 +188,10 @@ pub fn WorkspaceWorkbenchPage() -> impl IntoView {
 
             <div class="workbench-main-body">
                 <div class="workbench-chat-column">
-                    <ChatPage/>
+                    <ChatPage
+                        knowledge_scope=Signal::derive(move || documents.get().into_iter().filter(|doc| doc.status == "completed").map(|doc| doc.id).collect::<Vec<_>>())
+                        selected_scope=Signal::derive(move || { let mut ids: Vec<_> = selected_docs.get().into_iter().collect(); ids.sort(); ids })
+                    />
                 </div>
 
                 <aside class="workbench-side-rail" data-testid="workspace-side-rail">
@@ -260,6 +263,7 @@ pub fn WorkspaceWorkbenchPage() -> impl IntoView {
                                                         <input
                                                             type="checkbox"
                                                             data-testid="doc-select"
+                                                            disabled=doc.status != "completed"
                                                             prop:checked=move || selected_docs.get().contains(&checked_id)
                                                             on:change=move |_| {
                                                                 selected_docs.update(|set| {

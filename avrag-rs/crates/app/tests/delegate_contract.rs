@@ -153,6 +153,7 @@ async fn execute_chat_empty_query_returns_validation_error() {
             debug: false,
             language: None,
             format_hint: None,
+            attachments: Vec::new(),
             turnstile_token: None,
         })
         .await
@@ -186,6 +187,7 @@ async fn execute_chat_memory_without_llm_returns_internal_error() {
             debug: false,
             language: None,
             format_hint: None,
+            attachments: Vec::new(),
             turnstile_token: None,
         })
         .await
@@ -221,6 +223,7 @@ async fn execute_personal_chat_reaches_quick_chat_provider_resolution() {
             debug: false,
             language: None,
             format_hint: None,
+            attachments: Vec::new(),
             turnstile_token: None,
         })
         .await
@@ -255,6 +258,7 @@ async fn execute_chat_rejects_explicit_invalid_workspace() {
             debug: false,
             language: None,
             format_hint: None,
+            attachments: Vec::new(),
             turnstile_token: None,
         })
         .await

@@ -10,6 +10,7 @@ pub struct ConversationMessage {
     pub message_id: Option<i64>,
     pub role: MessageRole,
     pub content: String,
+    pub attachment_names: Vec<String>,
     pub answer_blocks: Vec<AnswerBlock>,
     pub reasoning: Option<String>,
     pub citations: Vec<serde_json::Value>,
@@ -32,6 +33,8 @@ impl ConversationMessage {
             message_id: Some(message.id),
             role,
             content: message.content.clone(),
+            attachment_names: message.turn_metadata.as_ref().and_then(|meta| meta.get("attachment_names"))
+                .and_then(|names| serde_json::from_value(names.clone()).ok()).unwrap_or_default(),
             answer_blocks: message.answer_blocks.clone(),
             reasoning: None,
             citations: message
@@ -157,6 +160,7 @@ impl ConversationManager {
             session_id: sid,
             message_id: None,
             role: MessageRole::User,
+            attachment_names: Vec::new(),
             content: text.to_string(),
             answer_blocks: Vec::new(),
             reasoning: None,
@@ -185,6 +189,7 @@ impl ConversationManager {
             session_id: sid,
             message_id: None,
             role: MessageRole::Assistant,
+            attachment_names: Vec::new(),
             content: text.to_string(),
             answer_blocks,
             reasoning: reasoning.map(|s| s.to_string()),

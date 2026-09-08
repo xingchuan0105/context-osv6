@@ -14,6 +14,15 @@ pub struct WorkspaceApp<'a> {
 }
 
 impl<'a> WorkspaceApp<'a> {
+    pub async fn parse_turn_attachment(
+        &self,
+        filename: &str,
+        mime_type: &str,
+        bytes: &[u8],
+    ) -> Result<contracts::chat::TurnAttachment, common::AppError> {
+        self.docs.parse_turn_attachment(self.auth, self.billing, filename, mime_type, bytes).await
+    }
+
     pub async fn list_workspaces(&self) -> Vec<contracts::workspaces::Workspace> {
         self.docs.list_workspaces(self.auth, self.storage).await
     }

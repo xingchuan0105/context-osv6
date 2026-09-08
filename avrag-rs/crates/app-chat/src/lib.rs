@@ -34,6 +34,7 @@ pub mod writer;
 
 mod chat_service;
 mod external_agent_guide;
+mod turn_attachments;
 
 pub use agents::AgentKind;
 pub use capabilities::{CapabilitySet, resolve_capabilities, write_disabled_error};

@@ -1,4 +1,16 @@
 {
+  "chat.personalDirect": { "en": "Quick chat", "zh": "快速聊天" },
+  "chat.personalSearch": { "en": "Quick chat with web search", "zh": "快速聊天 · 联网搜索" },
+  "chat.workspaceEmpty": { "en": "No workspace documents are ready for retrieval.", "zh": "工作区还没有可检索的就绪资料。" },
+  "chat.attachmentHint": { "en": "Files provide extracted text for this turn only. Up to 5 files, 20 MiB each; question and extracted text up to 64 KiB. No knowledge-base indexing.", "zh": "附件提取文字仅用于本轮，不进入知识库。每轮最多 5 个、单文件 20 MiB；提问与提取文字合计最多 64 KiB。" },
+  "chat.attachmentLimits": { "en": "Choose up to 5 non-empty files, at most 20 MiB each.", "zh": "每轮最多 5 个非空文件，单文件不超过 20 MiB。" },
+  "chat.attachmentLogin": { "en": "Sign in before attaching files.", "zh": "登录后可添加附件。" },
+  "chat.attachmentContextLimit": { "en": "The question and attachment text exceed 64 KiB. Shorten the question or remove files before sending.", "zh": "提问与附件文字超过 64 KiB，请缩短提问或移除部分附件后再发送。" },
+  "chat.attachmentFailed": { "en": "Could not read {name}: {error}. Re-select files to retry.", "zh": "无法读取 {name}：{error}。可重新选择文件重试。" },
+  "chat.attachmentParsing": { "en": "Reading attachment text…", "zh": "正在读取附件文字…" },
+  "chat.attachmentRemove": { "en": "Remove", "zh": "移除" },
+  "chat.attachmentDismissFailure": { "en": "Continue with the files already listed", "zh": "仅使用已列出的附件继续" },
+  "chat.attachmentHistory": { "en": "Attachments for this turn: {names}. Reattach files to use them in a new question.", "zh": "本轮附件：{names}。新的提问需要重新添加附件。" },
   "share.copied": { "en": "Copied!", "zh": "已复制！" },
   "share.copy": { "en": "Copy link", "zh": "复制链接" },
   "settings.profileSaveFailed": { "en": "Profile could not be saved: {error}", "zh": "资料保存失败：{error}" },
@@ -1168,8 +1180,8 @@
     "zh": "对话输入框"
   },
   "chat.composerFilesPending": {
-    "en": "Files are being processed. Sending will be available when they are ready.",
-    "zh": "附件处理中，就绪后即可发送。"
+    "en": "Attachment text is not ready. Resolve any file errors before sending.",
+    "zh": "附件文字尚未准备好，请先处理文件错误再发送。"
   },
   "chat.composerShortcut": {
     "en": "Enter to send · Shift+Enter for a new line",
@@ -1264,8 +1276,8 @@
     "zh": "本轮输出经过内容护栏处理。检索观察：{reasons}"
   },
   "chat.heroEmpty": {
-    "en": "Start a new chat. Choose knowledge base or web search below.",
-    "zh": "开始一轮新的对话。可在下方选择知识库或网络搜索。"
+    "en": "Ask a question about the available materials.",
+    "zh": "围绕当前资料开始提问。"
   },
   "chat.heroSubtitle": {
     "en": "Ask directly, or turn on web search when you need current information.",
@@ -6998,6 +7010,10 @@
   "workspaceUnpinSessionAction": {
     "en": "Unpin",
     "zh": "取消置顶"
+  },
+  "share.challengeRequired": {
+    "en": "Complete the verification before sending. If it cannot load, reload this page or sign in.",
+    "zh": "完成验证后即可发送；若验证无法加载，请刷新页面或登录后提问。"
   },
   "workspaceUntitledSession": {
     "en": "New chat",

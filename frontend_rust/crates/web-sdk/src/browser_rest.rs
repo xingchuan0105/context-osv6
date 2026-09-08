@@ -35,6 +35,27 @@ impl BrowserRestClient {
             .ok_or_else(|| TransportError::Framing("invalid profile response".into()))
     }
 
+    pub async fn parse_turn_attachment(
+        &self,
+        filename: &str,
+        mime_type: &str,
+        bytes: &[u8],
+    ) -> Result<contracts::chat::TurnAttachment, TransportError> {
+        #[cfg(target_arch = "wasm32")]
+        {
+            let filename = crate::auth::encode_uri_component(filename);
+            let mime_type = crate::auth::encode_uri_component(mime_type);
+            let url = format!("{}/api/v1/chat/attachments/parse?filename={filename}&mime_type={mime_type}", self.base_url);
+            let response = wasm_request::request_bytes(self, "POST", &url, Some(bytes), Some("application/octet-stream"), true).await?;
+            serde_json::from_slice(&response).map_err(TransportError::from)
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let _ = (filename, mime_type, bytes);
+            self.unavailable()
+        }
+    }
+
     pub async fn update_profile(
         &self,
         profile: &crate::auth::AuthUser,

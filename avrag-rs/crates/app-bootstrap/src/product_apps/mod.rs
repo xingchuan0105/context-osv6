@@ -146,6 +146,7 @@ mod tests {
             debug: false,
             language: None,
             format_hint: None,
+            attachments: Vec::new(),
             turnstile_token: None,
         }
     }

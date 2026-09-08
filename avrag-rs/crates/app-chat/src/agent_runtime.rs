@@ -179,7 +179,7 @@ impl ChatContext {
         let debug = req.debug || e2e_force_debug_observe();
         agent_loop::runtime::AgentRequest {
             kind,
-            query: req.query.clone(),
+            query: crate::turn_attachments::query_with_attachments(req),
             workspace_id,
             session_id,
             doc_scope,

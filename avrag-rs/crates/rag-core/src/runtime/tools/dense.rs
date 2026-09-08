@@ -81,6 +81,7 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
         debug: false,
         language: None,
         format_hint: None,
+            attachments: Vec::new(),
             turnstile_token: None,
     };
 

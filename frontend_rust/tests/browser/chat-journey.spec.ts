@@ -13,6 +13,7 @@ async function gotoChat(page: Page, apiBase: string, path = '/chat', token?: str
     (window as unknown as { __POC_CHAT_API_BASE__: string }).__POC_CHAT_API_BASE__ = base;
   }, apiBase);
   await page.goto(path, { waitUntil: 'domcontentloaded' });
+  await expect(page.getByTestId('chat-composer')).toHaveAttribute('data-ready', 'true');
   await expect(page.getByTestId('chat-canvas')).toBeVisible();
 }
 
@@ -40,6 +41,7 @@ async function fixtureState(request: import('@playwright/test').APIRequestContex
       capabilities?: string[];
       agent_type?: string;
       query?: string;
+      attachments?: { filename: string; text: string }[];
     } | null;
   }>;
 }
@@ -76,6 +78,20 @@ test.describe('Rust/UI composer', () => {
     await expect(page.getByTestId('send-button')).toBeDisabled();
     await expect(page.getByTestId('retry-button')).toBeVisible();
     expect(errors).toEqual([]);
+  });
+
+  test('水合前输入的内容在事件就绪后完整保留', async ({ page }) => {
+    let release!: () => void;
+    const pending = new Promise<void>(resolve => { release = resolve; });
+    await page.route('**/*.wasm', async route => { await pending; await route.continue(); });
+    await page.addInitScript(base => { (window as any).__POC_CHAT_API_BASE__ = base; }, FIXTURE_BASE);
+    await page.goto('/chat', { waitUntil: 'domcontentloaded' });
+    const input = page.getByTestId('composer-input');
+    await input.fill('Keep this question');
+    await expect(page.getByTestId('send-button')).toBeDisabled();
+    release();
+    await expect(page.getByTestId('send-button')).toBeEnabled();
+    await expect(input).toHaveValue('Keep this question');
   });
 
   test('输入区自动增高、键盘调高和拖动保持边界', async ({ page }) => {
@@ -278,74 +294,88 @@ test.describe('进度与推理终态折叠（W2）', () => {
   });
 });
 
-test.describe('会话文件（W2.4）', () => {
+test.describe('本轮附件', () => {
   test.beforeEach(async ({ request }) => {
     await request.post(`${FIXTURE_BASE}/admin/reset`);
   });
 
-  test('上传后出现就绪文件，URL 落到新会话，发送可用', async ({ page, request }) => {
-    const errors = collectPageErrors(page);
-    await gotoChat(page, `${FIXTURE_BASE}/case/files`, '/chat', 'poc-test-token');
-    await expect(page.getByTestId('session-file-attach')).toBeEnabled();
-    const fileInput = page.getByTestId('session-file-input');
-    await expect(fileInput).toHaveAttribute('data-listening', 'true', { timeout: 15_000 });
-
-    await fileInput.setInputFiles({
-      name: 'notes.txt',
-      mimeType: 'text/plain',
-      buffer: Buffer.from('hello'),
+  test('办公附件只进入本轮，重试保留，下一轮不继承，也不调用索引接口', async ({ page, request }) => {
+    const indexRequests: string[] = [];
+    page.on('request', req => {
+      if (/\/files(?:\/|$)|\/documents|\/reindex/.test(new URL(req.url()).pathname)) indexRequests.push(req.url());
     });
-    await fileInput.dispatchEvent('change');
-
-    await expect(page).toHaveURL(/\/chat\/sess-file-1$/, { timeout: 15_000 });
-    const item = page.getByTestId('session-file-item');
-    await expect(item).toContainText('notes.txt', { timeout: 15_000 });
-    await expect(page.getByTestId('session-file-status')).toHaveText('就绪', { timeout: 15_000 });
-    await expect(page.getByTestId('session-file-blocked')).toHaveCount(0);
-
-    await expect(page.getByTestId('scope-cap-rag')).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.getByTestId('scope-mode-line')).toContainText('知识库');
-
-    await page.getByTestId('composer-input').fill('文件已就绪');
-    await expect(page.getByTestId('send-button')).toBeEnabled();
+    await page.route('**/chat/attachments/parse?**', route => route.fulfill({
+      json: { filename: 'report.xlsx', text: 'Name | Total\nA | 7' },
+    }));
+    await gotoChat(page, `${FIXTURE_BASE}/case/markdown`, '/chat', 'poc-test-token');
+    await expect(page.getByTestId('scope-cap-rag')).toHaveCount(0);
+    await page.getByTestId('turn-attachment-input').setInputFiles({ name: 'report.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: Buffer.from('parser-fixture') });
+    await expect(page.getByTestId('turn-attachment-item')).toContainText('report.xlsx');
+    await expect(page).toHaveURL(/\/chat$/);
+    await page.getByTestId('composer-input').fill('Read the attachment');
     await page.getByTestId('send-button').click();
-    await expect(page.getByTestId('status-line')).toHaveText('已完成', { timeout: 15_000 });
-    const state = await fixtureState(request);
-    expect(state.lastChatBody?.capabilities).toEqual(['rag']);
-    expect(state.lastChatBody?.agent_type).toBe('rag');
-    expect(errors).toEqual([]);
+    await expect(page.getByTestId('status-line')).toHaveText('已完成');
+    let state = await fixtureState(request);
+    expect(state.lastChatBody?.attachments).toEqual([{ filename: 'report.xlsx', text: 'Name | Total\nA | 7' }]);
+    expect(state.lastChatBody?.capabilities).toEqual([]);
+    await expect(page.getByTestId('turn-attachment-item')).toHaveCount(0);
+    await page.getByTestId('retry-button').click();
+    await expect(page.getByTestId('status-line')).toHaveText('已完成');
+    state = await fixtureState(request);
+    expect(state.lastChatBody?.attachments?.[0].filename).toBe('report.xlsx');
+    await page.getByTestId('composer-input').fill('An unrelated question');
+    await page.getByTestId('send-button').click();
+    await expect(page.getByTestId('status-line')).toHaveText('已完成');
+    state = await fixtureState(request);
+    expect(state.lastChatBody?.attachments ?? []).toEqual([]);
+    expect(indexRequests).toEqual([]);
   });
 
-  test('移除最后一份就绪文件后自动关掉知识库', async ({ page }) => {
-    const errors = collectPageErrors(page);
-    await gotoChat(page, `${FIXTURE_BASE}/case/files`, '/chat', 'poc-test-token');
-    const fileInput = page.getByTestId('session-file-input');
-    await expect(fileInput).toHaveAttribute('data-listening', 'true', { timeout: 15_000 });
-    await fileInput.setInputFiles({
-      name: 'notes.txt',
-      mimeType: 'text/plain',
-      buffer: Buffer.from('hello'),
-    });
-    await fileInput.dispatchEvent('change');
-    await expect(page.getByTestId('session-file-status')).toHaveText('就绪', { timeout: 15_000 });
-    await expect(page.getByTestId('scope-cap-rag')).toHaveAttribute('aria-pressed', 'true');
-
-    await page.getByTestId('session-file-remove').click();
-    await expect(page.getByTestId('session-file-item')).toHaveCount(0, { timeout: 15_000 });
-    await expect(page.getByTestId('scope-cap-rag')).toHaveAttribute('aria-pressed', 'false');
-    await expect(page.getByTestId('scope-mode-line')).toContainText('未添加会话文件');
-    expect(errors).toEqual([]);
-  });
-
-  test('解析中的会话文件挡住发送', async ({ page }) => {
-    const errors = collectPageErrors(page);
-    await gotoChat(page, `${FIXTURE_BASE}/case/files-busy`, '/chat/sess-busy', 'poc-test-token');
-    await expect(page.getByTestId('session-file-item')).toContainText('busy.pdf');
-    await expect(page.getByTestId('session-file-status')).toHaveText('解析中');
-    await expect(page.getByTestId('session-file-blocked')).toBeVisible();
-    await page.getByTestId('composer-input').fill('还不能发');
+  test('解析失败时不发送缺失附件，显式放弃失败附件后才能继续', async ({ page }) => {
+    await page.route('**/chat/attachments/parse?**', route => route.fulfill({ status: 422, json: { error: 'attachment_parse_failed' } }));
+    await gotoChat(page, `${FIXTURE_BASE}/case/markdown`, '/chat', 'poc-test-token');
+    await page.getByTestId('composer-input').fill('Read the file');
+    await page.getByTestId('turn-attachment-input').setInputFiles({ name: 'slides.pptx', mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', buffer: Buffer.from('parser-fixture') });
+    await expect(page.getByTestId('turn-attachment-error')).toBeVisible();
     await expect(page.getByTestId('send-button')).toBeDisabled();
+    await page.getByRole('button', { name: '仅使用已列出的附件继续' }).click();
+    await expect(page.getByTestId('send-button')).toBeEnabled();
+  });
+
+  test('切换会话后迟到的解析结果不会带入新会话', async ({ page, request }) => {
+    const errors = collectPageErrors(page);
+    let release!: () => void;
+    const pending = new Promise<void>(resolve => { release = resolve; });
+    await page.route('**/chat/attachments/parse?**', async route => {
+      await pending;
+      await route.fulfill({ json: { filename: 'old.txt', text: 'old conversation attachment' } });
+    });
+    await gotoChat(page, `${FIXTURE_BASE}/case/markdown`, '/chat', 'poc-test-token');
+    const started = page.waitForRequest('**/chat/attachments/parse?**');
+    await page.getByTestId('turn-attachment-input').setInputFiles({ name: 'old.txt', mimeType: 'text/plain', buffer: Buffer.from('old') });
+    await started;
+    await page.getByTestId('session-item').filter({ hasText: '夹具会话' }).click();
+    await expect(page).toHaveURL(/\/chat\/sess-900$/);
+    const returned = page.waitForResponse('**/chat/attachments/parse?**');
+    release();
+    await returned;
+    await page.getByTestId('composer-input').fill('New conversation question');
+    await page.getByTestId('send-button').click();
+    await expect(page.getByTestId('status-line')).toHaveText('已完成');
+    expect((await fixtureState(request)).lastChatBody?.attachments ?? []).toEqual([]);
+    await expect(page.getByTestId('turn-attachment-item')).toHaveCount(0);
     expect(errors).toEqual([]);
+  });
+
+  test('删除待发送附件不会创建会话或留下检索开关', async ({ page }) => {
+    await page.route('**/chat/attachments/parse?**', route => route.fulfill({ json: { filename: 'notes.txt', text: 'contents' } }));
+    await gotoChat(page, `${FIXTURE_BASE}/case/markdown`, '/chat', 'poc-test-token');
+    await page.getByTestId('turn-attachment-input').setInputFiles({ name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('contents') });
+    await expect(page.getByTestId('turn-attachment-item')).toBeVisible();
+    await page.getByTestId('turn-attachment-item').getByRole('button', { name: '移除' }).click();
+    await expect(page.getByTestId('turn-attachment-item')).toHaveCount(0);
+    await expect(page).toHaveURL(/\/chat$/);
+    await expect(page.getByTestId('scope-cap-rag')).toHaveCount(0);
   });
 });
 
@@ -357,12 +387,9 @@ test.describe('能力标签（W2.5）', () => {
   test('默认发送仍是空 capabilities / chat', async ({ page, request }) => {
     const errors = collectPageErrors(page);
     await gotoChat(page, `${FIXTURE_BASE}/case/markdown`);
-    await expect(page.getByTestId('scope-cap-rag')).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.getByTestId('scope-cap-rag')).toHaveCount(0);
     await expect(page.getByTestId('scope-cap-search')).toHaveAttribute('aria-pressed', 'false');
-    await expect(page.getByTestId('scope-mode-line')).toContainText('未添加会话文件');
-
-    await page.getByTestId('scope-cap-rag').click();
-    await expect(page.getByTestId('scope-cap-rag')).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.getByTestId('scope-mode-line')).toContainText('快速聊天');
 
     await page.getByTestId('composer-input').fill('默认聊天');
     await page.getByTestId('send-button').click();
@@ -378,7 +405,7 @@ test.describe('能力标签（W2.5）', () => {
     await gotoChat(page, `${FIXTURE_BASE}/case/markdown`);
     await page.getByTestId('scope-cap-search').click();
     await expect(page.getByTestId('scope-cap-search')).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.getByTestId('scope-mode-line')).toContainText('网络搜索');
+    await expect(page.getByTestId('scope-mode-line')).toHaveText('快速聊天 · 联网搜索');
 
     await page.getByTestId('composer-input').fill('开搜索');
     await page.getByTestId('send-button').click();
@@ -455,7 +482,7 @@ test.describe('回答操作与 Feedback 持久化（W2.7）', () => {
 });
 
 test.describe('Workspace 最小 Shell 与归属隔离（W2.8）', () => {
-  test('会话列表区分工作区与个人归属，点击工作区会话路由到 /dashboard，展示横幅与工作区 Agent', async ({
+  test('个人会话进入工作区后只保留工作区会话列表，返回个人聊天恢复快速聊天', async ({
     page,
     request,
   }) => {
@@ -473,10 +500,10 @@ test.describe('Workspace 最小 Shell 与归属隔离（W2.8）', () => {
     await wsItem.click();
     await expect(page).toHaveURL(/\/dashboard\/ws-materials\?session=sess-ws-901$/);
 
-    // 3. 工作区最小 shell：展示横幅与模型为工作区 Agent
-    const banner = page.getByTestId('workspace-banner');
-    await expect(banner).toBeVisible();
-    await expect(banner).toContainText('ws-materials');
+    // 3. 工作区使用自己的标题和会话列表，不重复个人聊天侧栏。
+    await expect(page.getByTestId('workspace-workbench')).toBeVisible();
+    await expect(page.getByTestId('workspace-sessions')).toHaveCount(1);
+    await expect(page.getByTestId('session-list')).toHaveCount(0);
     await expect(page.getByTestId('model-role-badge')).toContainText('工作区 Agent');
 
     // 4. 工作区内发问自动携带 workspace_id
@@ -486,8 +513,8 @@ test.describe('Workspace 最小 Shell 与归属隔离（W2.8）', () => {
     const state = await fixtureState(request);
     expect(state.lastChatBody?.workspace_id).toBe('ws-materials');
 
-    // 5. 点击返回个人对话，无缝回到 /chat，横幅消失，模型恢复为个人 quick_chat
-    await page.getByTestId('back-to-personal').click();
+    // 5. 使用全局聊天入口返回个人对话，恢复 quick_chat。
+    await page.locator('a[href="/chat"]').first().click();
     await expect(page).toHaveURL(/\/chat$/);
     await expect(page.getByTestId('workspace-banner')).toHaveCount(0);
     await expect(page.getByTestId('model-role-badge')).toContainText('对话 · qwen3.8-flash');
@@ -670,7 +697,7 @@ test.describe('Chat 呈现（E5.3 / G5.3）', () => {
     const errors = collectPageErrors(page);
     await gotoChat(page, FIXTURE_BASE);
     await expect(page.getByTestId('chat-hero')).toBeVisible();
-    await expect(page.getByTestId('chat-empty')).toContainText('开始一轮新的对话');
+    await expect(page.getByTestId('chat-empty')).toHaveText('直接提问；需要最新信息时可开启网络搜索。');
     const handle = page.getByTestId('composer-resize');
     await expect(handle).toBeVisible();
     await expect(handle).toHaveAttribute('role', 'slider');

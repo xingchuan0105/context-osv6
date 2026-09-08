@@ -6,6 +6,7 @@ mod ingest;
 mod workspaces;
 mod url_fetch;
 mod url_imports;
+mod turn_attachment;
 
 pub use document_context::{DocumentContext, DocumentService, PgDocumentScopeValidator};
 pub use documents::ensure_document_upload_allowed;

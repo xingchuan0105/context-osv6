@@ -35,6 +35,7 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
         debug: false,
         language: None,
         format_hint: None,
+            attachments: Vec::new(),
             turnstile_token: None,
     };
 
@@ -189,6 +190,7 @@ async fn per_term_hit_counts(
             debug: false,
             language: None,
             format_hint: None,
+            attachments: Vec::new(),
             turnstile_token: None,
         };
         let plan = RagPlan {

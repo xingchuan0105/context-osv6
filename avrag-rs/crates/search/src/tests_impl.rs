@@ -25,6 +25,7 @@ async fn missing_qwen_key_is_explicit_error() {
         debug: false,
         language: None,
         format_hint: None,
+        attachments: Vec::new(),
         turnstile_token: None,
     };
     let auth = contracts::auth_runtime::AuthContext::new(
@@ -61,6 +62,7 @@ async fn missing_brave_key_on_brave_only_provider_is_explicit_error() {
         debug: false,
         language: None,
         format_hint: None,
+        attachments: Vec::new(),
         turnstile_token: None,
     };
     let auth = contracts::auth_runtime::AuthContext::new(
@@ -97,6 +99,7 @@ async fn unsupported_provider_is_explicit_error() {
         debug: false,
         language: None,
         format_hint: None,
+        attachments: Vec::new(),
         turnstile_token: None,
     };
     let auth = contracts::auth_runtime::AuthContext::new(
@@ -164,6 +167,7 @@ async fn brave_llm_context_live_smoke_returns_grounding_sources() {
         debug: false,
         language: None,
         format_hint: None,
+        attachments: Vec::new(),
         turnstile_token: None,
     };
     let auth = contracts::auth_runtime::AuthContext::new(

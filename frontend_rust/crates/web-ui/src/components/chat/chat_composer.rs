@@ -1,5 +1,5 @@
 // Adapted from Rust/UI Input Prompt; see frontend_rust/THIRD_PARTY.md.
-use crate::components::chat::{ScopeBar, SessionFileTray};
+use crate::components::chat::{ScopeBar, TurnAttachmentTray};
 use crate::components::ui::{Button, ButtonVariant};
 use crate::i18n::use_i18n;
 use leptos::prelude::*;
@@ -15,6 +15,9 @@ pub fn ChatComposer(
     history_loading: RwSignal<bool>,
     files_blocked: RwSignal<bool>,
     ready_count: RwSignal<usize>,
+    knowledge_chat: bool,
+    attachments: RwSignal<Vec<contracts::chat::TurnAttachment>>,
+    epoch: Signal<u64>,
     attach_disabled: Signal<bool>,
     capabilities: RwSignal<Vec<Capability>>,
     capabilities_manual: RwSignal<bool>,
@@ -27,6 +30,7 @@ pub fn ChatComposer(
     let composer_height = RwSignal::new(96_i32);
     let resize_origin = RwSignal::new(None::<(i32, i32)>);
     let composing = RwSignal::new(false);
+    let input_initialized = RwSignal::new(false);
     let send_disabled = Signal::derive(move || locked.get() || value.get().trim().is_empty());
     let focus = move || {
         if let Some(area) = composer_ref.get() {
@@ -41,9 +45,24 @@ pub fn ChatComposer(
         focus();
     };
 
-    // Programmatic edits (send, edit-message) also update the height.
+    // Adopt text entered into the SSR textarea before hydration; subsequent
+    // programmatic edits (send, edit-message) synchronize the value and height.
     Effect::new(move |_| {
-        let _ = value.get();
+        let desired = value.get();
+        #[cfg(target_arch = "wasm32")]
+        if let Some(area) = composer_ref.get() {
+            if !input_initialized.get_untracked() {
+                input_initialized.set(true);
+                let typed = area.value();
+                if !typed.is_empty() && desired.is_empty() {
+                    value.set(typed);
+                    return;
+                }
+            }
+            if area.value() != desired { area.set_value(&desired); }
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        let _ = (&desired, input_initialized);
         autosize_composer(composer_ref, composer_height);
     });
 
@@ -52,6 +71,7 @@ pub fn ChatComposer(
             class="chat-composer"
             aria-label=move || i18n.t("chat.composerSendLabel")
             data-testid="chat-composer"
+            data-ready=move || input_initialized.get().to_string()
             on:submit=move |ev| {
                 ev.prevent_default();
                 submit();
@@ -65,7 +85,6 @@ pub fn ChatComposer(
                 data-testid="composer-input"
                 node_ref=composer_ref
                 rows=3
-                prop:value=move || value.get()
                 aria-describedby="chat-composer-hint"
                 placeholder=move || i18n.t("chat.composerPlaceholder")
                 on:input=move |ev| value.set(event_target_value(&ev))
@@ -97,11 +116,14 @@ pub fn ChatComposer(
                 on:pointercancel=move |_| resize_origin.set(None)
                 on:keydown=move |ev| nudge_composer_height(ev, composer_ref, composer_height)
             ></div>
-            <SessionFileTray files_blocked=files_blocked ready_count=ready_count disabled=attach_disabled/>
+            <Show when=move || !knowledge_chat>
+                <TurnAttachmentTray files=attachments files_blocked=files_blocked disabled=attach_disabled epoch=epoch/>
+            </Show>
             <div class="chat-composer-footer">
                 <ScopeBar
                     capabilities=capabilities capabilities_manual=capabilities_manual
                     ready_count=Signal::derive(move || ready_count.get()) disabled=locked
+                    knowledge_chat=knowledge_chat
                 />
                 <div class="chat-composer-actions">
                     <Show when=move || can_retry.get()>

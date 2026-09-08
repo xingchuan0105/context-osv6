@@ -210,7 +210,7 @@ enum QuickChatCredential {
 
 #[async_trait::async_trait]
 impl Agent for UnifiedAgent {
-    #[tracing::instrument(skip(self, sink), fields(agent_kind = ?request.kind))]
+    #[tracing::instrument(skip(self, sink, request), fields(agent_kind = ?request.kind))]
     async fn run(
         &self,
         request: AgentRequest,

@@ -1,5 +1,5 @@
 {
-  "service": "avrag-api",
   "status": "ok",
+  "uptime_secs": 3600,
   "version": "0.1.0"
 }

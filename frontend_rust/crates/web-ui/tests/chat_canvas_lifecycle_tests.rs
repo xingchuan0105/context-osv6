@@ -733,6 +733,7 @@ fn sample_session(id: &str) -> ChatSession {
 fn history_messages() -> Vec<ConversationMessage> {
     vec![
         ConversationMessage {
+            attachment_names: Vec::new(),
             id: "11".to_string(),
             session_id: Some("sess-1".to_string()),
             message_id: Some(11),
@@ -747,6 +748,7 @@ fn history_messages() -> Vec<ConversationMessage> {
             created_at: "2026-09-04T00:00:00Z".to_string(),
         },
         ConversationMessage {
+            attachment_names: Vec::new(),
             id: "12".to_string(),
             session_id: Some("sess-1".to_string()),
             message_id: Some(12),
@@ -986,5 +988,23 @@ fn test_invariant_12_snapshot_evidence_immutable_across_turns() {
     assert_eq!(canvas.manager().active.messages[3].content, "第二轮答案");
 }
 
-
+#[test]
+fn attachments_are_reused_only_for_retry_and_cleared_for_next_turn() {
+    use contracts::chat::TurnAttachment;
+    use web_ui::components::chat::ChatCanvasModel;
+    let mut model = ChatCanvasModel::new();
+    let attachment = TurnAttachment { filename: "summary.xlsx".into(), text: "Metric | Value\nA | 7".into() };
+    let first = model.prepare_user_turn_with_attachments("Read this table", &[], vec![attachment.clone()]);
+    assert_eq!(first.request.attachments, vec![attachment.clone()]);
+    assert_eq!(first.request.capabilities, Some(Vec::new()));
+    model.cancel();
+    assert_eq!(model.retry_last().unwrap().request.attachments, vec![attachment]);
+    model.cancel();
+    let next = model.prepare_user_turn("A new question");
+    assert!(next.request.attachments.is_empty());
+    model.cancel();
+    assert!(model.retry_last().unwrap().request.attachments.is_empty());
+    model.new_personal_chat(None);
+    assert!(!model.has_retry_context());
+}
 

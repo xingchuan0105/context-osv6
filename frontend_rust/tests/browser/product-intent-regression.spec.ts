@@ -126,3 +126,88 @@ test('clipboard rejection reports failure and leaves a full address for manual c
   await expect(page.getByTestId('copy-share-btn')).not.toContainText('已复制');
   await expect(page.getByTestId('share-url')).toHaveText(new URL('/shared/kb/tok-valid-123', page.url()).href);
 });
+test('workspace selection enters the request without conversation file uploads', async ({ page }) => {
+  await setup(page);
+  let body: any;
+  page.on('request', request => {
+    if (request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/chat')) body = request.postDataJSON();
+  });
+  await page.goto('/dashboard/ws-materials');
+  await expect(page.getByTestId('scope-cap-rag')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('turn-attachment-tray')).toHaveCount(0);
+  await page.getByTestId('doc-select').first().check();
+  await page.getByTestId('composer-input').fill('Compare the selected materials');
+  await page.getByTestId('send-button').click();
+  await expect.poll(() => body).toBeTruthy();
+  expect(body.workspace_id).toBe('ws-materials');
+  expect(body.capabilities).toContain('rag');
+  expect(body.doc_scope).toHaveLength(1);
+});
+
+test('a workspace session opened on chat moves to its canonical workspace', async ({ page }) => {
+  await setup(page);
+  await page.goto('/chat/sess-ws-901');
+  await expect(page).toHaveURL(/\/dashboard\/ws-materials\?session=sess-ws-901$/);
+  await expect(page.getByTestId('scope-cap-rag')).toBeVisible();
+  await expect(page.getByTestId('turn-attachment-tray')).toHaveCount(0);
+});
+
+test('public sharing submits the share credential and keeps the visitor on the shared page', async ({ page }) => {
+  await page.addInitScript(base => {
+    (window as unknown as { __POC_CHAT_API_BASE__: string }).__POC_CHAT_API_BASE__ = base;
+  }, FIXTURE_BASE);
+  let body: any;
+  page.on('request', request => {
+    if (request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/chat')) body = request.postDataJSON();
+  });
+  await page.goto('/shared/kb/tok-valid-123');
+  await page.getByTestId('composer-input').fill('Summarize the shared material');
+  await page.getByTestId('send-button').click();
+  await expect.poll(() => body).toBeTruthy();
+  expect(body.source_type).toBe('share');
+  expect(body.source_token).toBe('tok-valid-123');
+  await expect(page).toHaveURL(/\/shared\/kb\/tok-valid-123$/);
+  await expect(page.getByTestId('chat-rail-toggle')).toHaveCount(0);
+});
+
+test('anonymous verification blocks sending and renews its token before retry', async ({ page }) => {
+  const bodies: any[] = [];
+  await page.route(/\/shared\/kb\/tok-valid-123$/, async route => {
+    if (route.request().resourceType() !== 'document') return route.continue();
+    const response = await route.fetch();
+    await route.fulfill({ response, body: (await response.text()).replace('<head>', '<head><meta name="turnstile-site-key" content="test-site-key">') });
+  });
+  await page.addInitScript(base => {
+    const win = window as any;
+    win.__POC_CHAT_API_BASE__ = base;
+    let sequence = 0;
+    const hosts = new Map<string, Element>();
+    win.turnstile = {
+      render(host: Element, options: any) {
+        const id = String(++sequence);
+        hosts.set(id, host);
+        const solve = document.createElement('button');
+        solve.textContent = 'Solve fixture challenge';
+        solve.onclick = () => options.callback(`verified-${id}`);
+        host.append(solve);
+        return id;
+      },
+      remove(id: string) { hosts.get(id)?.replaceChildren(); hosts.delete(id); },
+    };
+  }, FIXTURE_BASE);
+  page.on('request', request => {
+    if (request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/chat')) bodies.push(request.postDataJSON());
+  });
+  await page.goto('/shared/kb/tok-valid-123');
+  await page.getByTestId('composer-input').fill('Read the shared material');
+  await expect(page.getByTestId('send-button')).toBeDisabled();
+  await page.getByRole('button', { name: 'Solve fixture challenge' }).click();
+  await page.getByTestId('send-button').click();
+  await expect(page.getByTestId('status-line')).toHaveText('已完成');
+  expect(bodies[0].turnstile_token).toBe('verified-1');
+  await expect(page.getByTestId('retry-button')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Solve fixture challenge' }).click();
+  await page.getByTestId('retry-button').click();
+  await expect.poll(() => bodies.length).toBe(2);
+  expect(bodies[1].turnstile_token).toBe('verified-2');
+});

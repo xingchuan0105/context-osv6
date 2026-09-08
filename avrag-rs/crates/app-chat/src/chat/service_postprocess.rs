@@ -149,6 +149,10 @@ impl ChatContext {
         });
         let user_turn_metadata: Option<serde_json::Value> = {
             let mut meta = serde_json::Map::new();
+            if !req.attachments.is_empty() {
+                // Names are display metadata; raw attachment text never enters history.
+                meta.insert("attachment_names".into(), serde_json::json!(req.attachments.iter().map(|file| &file.filename).collect::<Vec<_>>()));
+            }
             if let Some(caps) = resolved_capabilities {
                 meta.insert("capabilities".to_string(), caps);
             }

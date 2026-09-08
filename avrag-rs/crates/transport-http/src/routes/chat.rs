@@ -10,6 +10,11 @@ pub(crate) fn router() -> Router<AppState> {
     Router::new()
         .route("/chat", post(handlers::chat_post_handler))
         .route(
+            "/chat/attachments/parse",
+            post(handlers::parse_chat_attachment_handler)
+                .layer(axum::extract::DefaultBodyLimit::max(contracts::chat::MAX_TURN_ATTACHMENT_BYTES)),
+        )
+        .route(
             "/chat/sessions",
             get(handlers::list_chat_sessions_handler).post(handlers::create_chat_session_handler),
         )

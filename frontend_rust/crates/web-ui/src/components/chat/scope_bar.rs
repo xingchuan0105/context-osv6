@@ -8,6 +8,7 @@ pub fn ScopeBar(
     capabilities_manual: RwSignal<bool>,
     ready_count: Signal<usize>,
     disabled: Signal<bool>,
+    knowledge_chat: bool,
 ) -> impl IntoView {
     let i18n = use_i18n();
     let rag_available = Signal::derive(move || ready_count.get() > 0);
@@ -30,6 +31,7 @@ pub fn ScopeBar(
             aria-label=move || i18n.t("workspaceChatCapabilityLabel")
         >
             <div class="chat-scope-chips">
+                <Show when=move || knowledge_chat>
                 <button
                     type="button"
                     class=move || chip_class(capabilities.get().contains(&Capability::Rag))
@@ -41,7 +43,7 @@ pub fn ScopeBar(
                             "false"
                         }
                     }
-                    disabled=move || disabled.get()
+                    disabled=move || disabled.get() || !rag_available.get()
                     on:click=move |_| toggle(Capability::Rag)
                 >
                     {move || i18n.t("workspaceChatCapRag")}
@@ -53,6 +55,7 @@ pub fn ScopeBar(
                         </span>
                     </Show>
                 </button>
+                </Show>
                 <button
                     type="button"
                     class=move || chip_class(capabilities.get().contains(&Capability::Search))
@@ -71,7 +74,10 @@ pub fn ScopeBar(
                 </button>
             </div>
             <p class="chat-scope-mode" data-testid="scope-mode-line">
-                {move || i18n.t(mode_line(&capabilities.get(), rag_available.get()))}
+                {move || i18n.t(if !knowledge_chat {
+                    if capabilities.get().contains(&Capability::Search) { "chat.personalSearch" } else { "chat.personalDirect" }
+                } else if !rag_available.get() { "chat.workspaceEmpty" }
+                else { mode_line(&capabilities.get(), true) })}
             </p>
         </div>
     }

@@ -157,16 +157,19 @@ fn ProfilePanel() -> impl IntoView {
     let toaster = expect_context::<Toaster>();
     let i18n = use_i18n();
     let name = RwSignal::new(String::new());
+    let initialized = RwSignal::new(false);
     let busy = RwSignal::new(false);
     let error = RwSignal::new(None::<String>);
     Effect::new(move |_| {
         if let Some(auth) = web_sdk::read_browser_auth() {
             name.set(auth.user.full_name);
         }
+        initialized.set(true);
     });
     view! {
         <section class="settings-panel" data-testid="profile-panel">
             <h2>{move || i18n.t("settings.profile.sectionTitle")}</h2>
+            <Show when=move || initialized.get()>
             <form
                 class="settings-form"
                 on:submit=move |ev| {
@@ -211,6 +214,7 @@ fn ProfilePanel() -> impl IntoView {
                 <button type="submit" disabled=move || busy.get() data-testid="profile-save">{move || i18n.t("settings.profile.saveAction")}</button>
                 {move || error.get().map(|message| view! { <p role="alert" class="settings-error">{message}</p> })}
             </form>
+            </Show>
         </section>
     }
 }

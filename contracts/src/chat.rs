@@ -18,6 +18,9 @@ pub struct ClientContext {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChatRequest {
     pub query: String,
+    /// Parsed user files for this request only; never a persistent retrieval scope.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attachments: Vec<TurnAttachment>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workspace_id: Option<String>,
     #[serde(default)]
@@ -53,6 +56,17 @@ pub struct ChatRequest {
     /// Cloudflare Turnstile token for anonymous share chat (ADR-0010 §9).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub turnstile_token: Option<String>,
+}
+
+pub const MAX_TURN_ATTACHMENTS: usize = 5;
+pub const MAX_TURN_ATTACHMENT_BYTES: usize = 20 * 1024 * 1024;
+pub const MAX_TURN_CONTEXT_BYTES: usize = 64 * 1024;
+
+#[typeshare]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TurnAttachment {
+    pub filename: String,
+    pub text: String,
 }
 
 #[typeshare]

@@ -51,7 +51,32 @@ pub(crate) async fn runtime_execute_handler(
     }
 }
 
-#[tracing::instrument(skip(state, headers), fields(agent_type = %req.agent_type, request_id = tracing::field::Empty))]
+#[derive(serde::Deserialize)]
+pub(crate) struct AttachmentParseQuery {
+    filename: String,
+    #[serde(default)]
+    mime_type: String,
+}
+
+pub(crate) async fn parse_chat_attachment_handler(
+    Extension(RequestState(state)): Extension<RequestState>,
+    Query(query): Query<AttachmentParseQuery>,
+    bytes: axum::body::Bytes,
+) -> Response {
+    if !matches!(state.auth().subject_kind(), SubjectKind::User) || state.auth().actor_id().is_none() {
+        return error_response(StatusCode::UNAUTHORIZED, "unauthorized", "A signed-in user session is required.");
+    }
+    static PARSERS: std::sync::OnceLock<tokio::sync::Semaphore> = std::sync::OnceLock::new();
+    let Ok(_permit) = PARSERS.get_or_init(|| tokio::sync::Semaphore::new(2)).try_acquire() else {
+        return error_response(StatusCode::TOO_MANY_REQUESTS, "attachment_parser_busy", "Attachment parsing is busy. Try again shortly.");
+    };
+    match state.workspace().parse_turn_attachment(&query.filename, &query.mime_type, &bytes).await {
+        Ok(attachment) => Json(attachment).into_response(),
+        Err(error) => app_error_response(error),
+    }
+}
+
+#[tracing::instrument(skip(state, headers, req), fields(agent_type = %req.agent_type, request_id = tracing::field::Empty))]
 pub(crate) async fn chat_post_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     headers: HeaderMap,

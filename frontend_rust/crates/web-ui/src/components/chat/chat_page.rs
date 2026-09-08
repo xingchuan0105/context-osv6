@@ -16,7 +16,7 @@ use leptos_router::params::Params;
 use web_sdk::{
     BrowserHttpTransport, BrowserRestClient, Capability, ChatClient, CitationView, SourceCard,
     activities_for_display, capabilities_to_wire, progress_folded, progress_summary_label,
-    reconcile_session_rag, render_assistant_answer,
+    render_assistant_answer,
 };
 
 #[derive(Params, PartialEq, Clone, Debug)]
@@ -25,11 +25,21 @@ struct ChatParams {
     workspace_id: Option<String>,
 }
 
+#[derive(Clone, Copy)]
+pub struct SharedChatModel(pub RwSignal<ChatCanvasModel>);
+
 /// Chat-first 页面：/chat 与 /chat/:session_id 共用。
 /// 模型信号由 App 级上下文提供；路由参数只负责会话绑定，不重建模型。
 #[component]
-pub fn ChatPage() -> impl IntoView {
-    let model = expect_context::<RwSignal<ChatCanvasModel>>();
+pub fn ChatPage(
+    #[prop(optional)] knowledge_scope: Option<Signal<Vec<String>>>,
+    #[prop(optional)] selected_scope: Option<Signal<Vec<String>>>,
+    #[prop(optional)] share_source: Option<Signal<(String, String)>>,
+    #[prop(optional)] share_challenge: Option<crate::components::share::turnstile::ShareChallenge>,
+) -> impl IntoView {
+    let is_shared = share_source.is_some();
+    let model = if is_shared { expect_context::<SharedChatModel>().0 } else { expect_context::<RwSignal<ChatCanvasModel>>() };
+    if is_shared { on_cleanup(move || model.update(|m| { m.cancel(); })); }
     let token = expect_context::<RwSignal<String>>();
     let i18n = use_i18n();
     let params = use_params::<ChatParams>();
@@ -50,6 +60,9 @@ pub fn ChatPage() -> impl IntoView {
     provide_context(active_cite);
     let progress_expanded = RwSignal::new(false);
     let files_blocked = RwSignal::new(false);
+    let attachments = RwSignal::new(Vec::<contracts::chat::TurnAttachment>::new());
+    let attachment_error = RwSignal::new(false);
+    let knowledge_chat = knowledge_scope.is_some();
     let ready_count = RwSignal::new(0_usize);
     let capabilities = RwSignal::new(Vec::<Capability>::new());
     let capabilities_manual = RwSignal::new(false);
@@ -60,6 +73,7 @@ pub fn ChatPage() -> impl IntoView {
 
     let (session_query, _) = query_signal::<String>("session");
     let route_workspace_id = Signal::derive(move || {
+        if let Some(source) = share_source { return Some(source.get().1); }
         params
             .read()
             .as_ref()
@@ -67,6 +81,7 @@ pub fn ChatPage() -> impl IntoView {
             .and_then(|p| p.workspace_id.clone())
     });
     let route_session_id = Signal::derive(move || {
+        if is_shared { return None; }
         let p_sid = params
             .read()
             .as_ref()
@@ -114,6 +129,11 @@ pub fn ChatPage() -> impl IntoView {
     // 清空消息并作废当前流。
     Effect::new(move |_| {
         let ws_id = route_workspace_id.get();
+        if let Some(source) = share_source {
+            let (_, workspace_id) = source.get();
+            model.update(|m| m.switch_to_workspace(&workspace_id, None));
+            return;
+        }
         let session_id = route_session_id.get();
         if let Some(ws_id) = ws_id {
             let needs_bind = model.with_untracked(|m| {
@@ -159,9 +179,8 @@ pub fn ChatPage() -> impl IntoView {
             }
         } else {
             let should_reset = model.with_untracked(|m| {
-                !m.is_streaming()
-                    && (m.manager().active.session_id.is_some()
-                        || m.manager().active.workspace_id.is_some())
+                m.manager().active.workspace_id.is_some()
+                    || (!m.is_streaming() && m.manager().active.session_id.is_some())
             });
             if should_reset {
                 model.update(|m| m.new_personal_chat(None));
@@ -196,6 +215,7 @@ pub fn ChatPage() -> impl IntoView {
 
     Effect::new(move |_| {
         let token_value = token.get();
+        if is_shared { return; }
         if token_value.is_empty() {
             model.update(|m| m.replace_session_list(Vec::new()));
             has_byok.set(false);
@@ -230,6 +250,21 @@ pub fn ChatPage() -> impl IntoView {
         }
     });
 
+    // A workspace session opened through an old /chat URL belongs in its workspace.
+    let navigate_workspace_session = navigate.clone();
+    Effect::new(move |_| {
+        if knowledge_chat { return; }
+        let Some(requested) = route_session_id.get() else { return; };
+        let destination = model.with(|m| {
+            let active = &m.manager().active;
+            (active.session_id.as_deref() == Some(requested.as_str()))
+                .then(|| active.workspace_id.clone()).flatten()
+        });
+        if let Some(workspace) = destination {
+            navigate_workspace_session(&format!("/dashboard/{workspace}?session={requested}"), NavigateOptions { replace: true, scroll: false, ..Default::default() });
+        }
+    });
+
     let current_token = move || {
         let value = token.get_untracked();
         (!value.is_empty()).then_some(value)
@@ -257,10 +292,17 @@ pub fn ChatPage() -> impl IntoView {
     });
 
     Effect::new(move |_| {
-        let ready = ready_count.get();
+        let ready = knowledge_scope.map(|scope| scope.get().len()).unwrap_or(0);
+        let _ = model.with(|m| m.manager().conversation_epoch);
+        ready_count.set(ready);
         let manual = capabilities_manual.get_untracked();
         let current = capabilities.get_untracked();
-        let next = reconcile_session_rag(&current, manual, ready);
+        let mut next = current.clone();
+        if !knowledge_chat || ready == 0 {
+            next.retain(|cap| *cap != Capability::Rag);
+        } else if !manual && !next.contains(&Capability::Rag) {
+            next.insert(0, Capability::Rag);
+        }
         if next != current {
             capabilities.set(next);
         }
@@ -268,15 +310,33 @@ pub fn ChatPage() -> impl IntoView {
 
     let try_prepare_turn = move |query: &str| {
         let query = query.trim().to_string();
-        if query.is_empty() || history_loading.get_untracked() || files_blocked.get_untracked() {
+        if query.is_empty() || history_loading.get_untracked() || files_blocked.get_untracked()
+            || share_challenge.is_some_and(|challenge| challenge.blocked_untracked()) {
             return None;
         }
         let caps = capabilities_to_wire(&capabilities.get_untracked());
+        let files = attachments.get_untracked();
+        if !files.is_empty() && query.len() + files.iter().map(|f| f.text.len() + f.filename.len()).sum::<usize>() > contracts::chat::MAX_TURN_CONTEXT_BYTES {
+            attachment_error.set(true);
+            return None;
+        }
+        attachment_error.set(false);
         let mut model = model.write();
         if model.is_streaming() {
             None
         } else {
-            Some(model.prepare_user_turn_with(&query, &caps))
+            let mut turn = model.prepare_user_turn_with_attachments(&query, &caps, files);
+            turn.request.doc_scope = selected_scope.map(|scope| scope.get_untracked()).unwrap_or_default();
+            if let Some(source) = share_source {
+                turn.request.source_type = Some("share".into());
+                turn.request.source_token = Some(source.get_untracked().0);
+                turn.request.turnstile_token = share_challenge.and_then(|challenge| challenge.consume());
+                turn.request.messages = model.manager().active.messages.iter().rev().skip(1).rev().map(|message| contracts::chat::ChatTurnInput {
+                    role: if message.role == MessageRole::User { "user" } else { "assistant" }.into(),
+                    content: message.content.clone(), resolved_query: None,
+                }).collect();
+            }
+            Some(turn)
         }
     };
 
@@ -287,6 +347,7 @@ pub fn ChatPage() -> impl IntoView {
                 return;
             };
             composer.set(String::new());
+            attachments.set(Vec::new());
             follow_bottom.set(true);
             spawn_chat_stream(model, turn, current_token(), navigate.clone());
         }
@@ -301,12 +362,23 @@ pub fn ChatPage() -> impl IntoView {
     let retry = {
         let navigate = navigate.clone();
         move |_| {
-            if history_loading.get_untracked() || files_blocked.get_untracked() {
+            if history_loading.get_untracked() || files_blocked.get_untracked()
+                || share_challenge.is_some_and(|challenge| challenge.blocked_untracked()) {
                 return;
             }
             let caps = capabilities_to_wire(&capabilities.get_untracked());
             let turn = model.write().retry_last_with(&caps);
-            if let Some(turn) = turn {
+            if let Some(mut turn) = turn {
+                turn.request.doc_scope = selected_scope.map(|scope| scope.get_untracked()).unwrap_or_default();
+                if let Some(source) = share_source {
+                    turn.request.source_type = Some("share".into());
+                    turn.request.source_token = Some(source.get_untracked().0);
+                    turn.request.turnstile_token = share_challenge.and_then(|challenge| challenge.consume());
+                    turn.request.messages = model.with_untracked(|m| m.manager().active.messages.iter().rev().skip(1).rev().map(|message| contracts::chat::ChatTurnInput {
+                        role: if message.role == MessageRole::User { "user" } else { "assistant" }.into(),
+                        content: message.content.clone(), resolved_query: None,
+                    }).collect());
+                }
                 follow_bottom.set(true);
                 spawn_chat_stream(model, turn, current_token(), navigate.clone());
             }
@@ -378,15 +450,18 @@ pub fn ChatPage() -> impl IntoView {
     };
 
     let is_streaming = move || model.with(|m| m.is_streaming());
-    let composer_locked = move || is_streaming() || history_loading.get() || files_blocked.get();
+    let composer_locked = move || is_streaming() || history_loading.get() || files_blocked.get()
+        || share_challenge.is_some_and(|challenge| challenge.blocked());
     let attach_disabled = Signal::derive(move || {
         token.get().is_empty() || is_streaming() || history_loading.get()
     });
     let can_retry = move || {
         model.with(|m| {
             !m.is_streaming()
+                && m.has_retry_context()
                 && !history_loading.get()
                 && !files_blocked.get()
+                && !share_challenge.is_some_and(|challenge| challenge.blocked())
                 && m.manager()
                     .active
                     .messages
@@ -409,6 +484,7 @@ pub fn ChatPage() -> impl IntoView {
                 "chat-shell"
             }
         }>
+            {(!knowledge_chat).then(|| view! {
             <button
                 type="button"
                 class="chat-rail-toggle"
@@ -582,6 +658,7 @@ pub fn ChatPage() -> impl IntoView {
                     })
                 }}
             </aside>
+            })}
             <main
                 class=move || {
                     if model.with(|m| m.manager().active.messages.is_empty()) && !history_loading.get()
@@ -615,7 +692,7 @@ pub fn ChatPage() -> impl IntoView {
                         <div class="chat-hero" data-testid="chat-hero">
                             <p class="chat-hero-title">"Context-OS"</p>
                             <p class="chat-hero-hint" data-testid="chat-empty">
-                                {move || i18n.t("chat.heroEmpty")}
+                                {move || i18n.t(if knowledge_chat { "chat.heroEmpty" } else { "chat.heroSubtitle" })}
                             </p>
                         </div>
                     </Show>
@@ -846,6 +923,9 @@ pub fn ChatPage() -> impl IntoView {
                     history_loading=history_loading
                     files_blocked=files_blocked
                     ready_count=ready_count
+                    knowledge_chat=knowledge_chat
+                    attachments=attachments
+                    epoch=Signal::derive(move || model.with(|m| m.manager().conversation_epoch))
                     attach_disabled=attach_disabled
                     capabilities=capabilities
                     capabilities_manual=capabilities_manual
@@ -853,6 +933,9 @@ pub fn ChatPage() -> impl IntoView {
                     on_stop=Callback::new(stop)
                     on_retry=Callback::new(retry)
                 />
+                <Show when=move || attachment_error.get()>
+                    <p role="alert" class="chat-file-error">{move || i18n.t("chat.attachmentContextLimit")}</p>
+                </Show>
                 <button
                     type="button"
                     class="chat-scroll-bottom"
@@ -941,6 +1024,9 @@ fn message_view(
     view! {
         <article class="chat-message" data-role=role data-testid="chat-message">
             <div class="chat-message-role">{role_label}</div>
+            {(!message.attachment_names.is_empty()).then(|| view! {
+                <p class="chat-composer-hint" data-testid="message-attachments">{i18n.tf("chat.attachmentHistory", &[("names", &message.attachment_names.join(", "))])}</p>
+            })}
             {if let Some(html) = html {
                 view! {
                     <div
@@ -1332,6 +1418,7 @@ fn spawn_chat_stream(
     navigate: impl Fn(&str, NavigateOptions) + Clone + 'static,
 ) {
     leptos::task::spawn_local(async move {
+        let is_shared = turn.request.source_type.as_deref() == Some("share");
         let client = ChatClient::new(BrowserHttpTransport::new(&poc_api_base(), token.clone()));
         let scope = turn.stream_scope;
         match client.stream(turn.request, turn.cancellation).await {
@@ -1340,7 +1427,7 @@ fn spawn_chat_stream(
                     match item {
                         Ok(event) => {
                             let accepted = model.write().on_event(scope, event);
-                            if accepted {
+                            if accepted && !is_shared {
                                 maybe_navigate_to_session(model, &navigate);
                             }
                         }
@@ -1358,7 +1445,7 @@ fn spawn_chat_stream(
                 });
             }
         }
-        spawn_refresh_sessions(model, token, None);
+        if !is_shared { spawn_refresh_sessions(model, token, None); }
     });
 }
 
@@ -1413,7 +1500,7 @@ fn spawn_load_history(
         let client = BrowserRestClient::new(&poc_api_base(), Some(token));
         let session = client.get_session(&session_id).await.ok();
         let result = client.list_messages(&session_id).await;
-        if history_load_gen.get_untracked() != load_gen {
+        if history_load_gen.try_get_untracked() != Some(load_gen) {
             return;
         }
         history_loading.set(false);
@@ -1495,4 +1582,3 @@ fn spawn_check_byok(has_byok: RwSignal<bool>, token: String) {
         }
     });
 }
-
