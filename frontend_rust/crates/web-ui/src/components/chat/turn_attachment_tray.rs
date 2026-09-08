@@ -120,23 +120,33 @@ pub fn TurnAttachmentTray(
             <input node_ref=input type="file" multiple hidden class="chat-file-input" data-testid="turn-attachment-input"
                 accept=".pdf,.doc,.docx,.xls,.xlsx,.xlsm,.xlsb,.ppt,.pptx,.pptm,.txt,.md,.csv,.tsv,.json,.png,.jpg,.jpeg,.webp,.gif,.bmp,.odt,.ods,.odp,.rtf"
                 on:change=on_change/>
+            <div class="chat-file-tray-row">
             <button type="button" class="chat-file-attach" data-testid="turn-attachment-add"
+                aria-describedby="turn-attachment-hint"
+                title=move || i18n.t("chat.attachmentHint")
                 disabled=move || disabled.get() || busy.get()
-                on:click=move |_| { if let Some(el) = input.get() { el.click(); } }>{move || i18n.t("chat.attachFile")}</button>
-            <p class="chat-composer-hint">{move || i18n.t("chat.attachmentHint")}</p>
+                on:click=move |_| { if let Some(el) = input.get() { el.click(); } }>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="m21 11-8 8a6 6 0 0 1-8.5-8.5l9-9a4 4 0 0 1 5.7 5.7l-9 9a2 2 0 0 1-2.8-2.8l8-8"/>
+                </svg>
+                {move || i18n.t("chat.attachFile")}
+            </button>
+            <span class="chat-composer-hint">{move || i18n.t("chat.attachmentScope")}</span>
+            </div>
+            <p id="turn-attachment-hint" class="sr-only">{move || i18n.t("chat.attachmentHint")}</p>
             <Show when=move || busy.get()><p role="status">{move || i18n.t("chat.attachmentParsing")}</p></Show>
             <ul class="chat-file-list">
                 {move || files.get().into_iter().enumerate().map(|(index, file)| view! {
                     <li class="chat-file-item" data-testid="turn-attachment-item">
-                        <span>{file.filename}</span>
-                        <button type="button" disabled=move || disabled.get() || busy.get()
+                        <span class="chat-file-name" title=file.filename.clone()>{file.filename.clone()}</span>
+                        <button type="button" class="chat-file-action" disabled=move || disabled.get() || busy.get()
                             on:click=move |_| files.update(|items| { if index < items.len() { items.remove(index); } })>{move || i18n.t("chat.attachmentRemove")}</button>
                     </li>
                 }).collect_view()}
             </ul>
             {move || error.get().map(|message| view! {
                 <p role="alert" class="chat-file-error" data-testid="turn-attachment-error">{message}</p>
-                <button type="button" disabled=move || busy.get() || disabled.get()
+                <button type="button" class="chat-file-dismiss" disabled=move || busy.get() || disabled.get()
                     on:click=move |_| { error.set(None); files_blocked.set(false); }>{move || i18n.t("chat.attachmentDismissFailure")}</button>
             })}
         </div>

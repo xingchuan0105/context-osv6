@@ -1,5 +1,6 @@
 /* Product stylesheet entry. Tokens load via cargo-leptos style-file. */
 
+@import url("fonts.css");
 @import url("base.css");
 @import url("chat.css");
 @import url("auth.css");

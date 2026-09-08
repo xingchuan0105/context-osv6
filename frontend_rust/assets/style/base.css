@@ -32,7 +32,22 @@ body {
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    font-synthesis: none;
 }
+
+h1, h2, h3, h4, h5, h6, strong, b, th {
+    font-weight: var(--font-weight-regular);
+}
+
+h1, h2, h3, h4, h5, h6 {
+    margin: 0;
+    color: var(--cos-text);
+    letter-spacing: var(--letter-spacing-title);
+}
+
+h1 { font-size: var(--font-size-title); line-height: 1.18; }
+h2 { font-size: var(--font-size-display-xs); line-height: 1.4; }
+h3, h4, h5, h6 { font-size: var(--font-size-body-lg); line-height: 1.5; }
 
 a {
     color: inherit;
@@ -44,6 +59,67 @@ input,
 textarea,
 select {
     font: inherit;
+}
+
+/* Native controls share the same foundation as the reusable components. */
+button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    align-self: flex-start;
+    max-width: 100%;
+    gap: var(--space-sm);
+    min-height: 2rem;
+    padding: var(--space-sm) var(--space-lg);
+    border: 1px solid var(--cos-border);
+    border-radius: var(--radius-pill);
+    background: var(--cos-surface);
+    color: var(--cos-text);
+    font-size: var(--font-size-control);
+    line-height: 1.5;
+    cursor: pointer;
+    touch-action: manipulation;
+    transition: background-color var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard);
+}
+
+button:hover:not(:disabled) {
+    border-color: var(--cos-border-strong);
+}
+
+:where(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]), select, textarea) {
+    min-width: 0;
+    max-width: 100%;
+    width: 100%;
+    padding: var(--space-md) var(--space-lg);
+    border: 1px solid var(--cos-border);
+    border-radius: var(--radius-control);
+    background: hsl(var(--input-background));
+    color: var(--cos-text);
+}
+
+:where(form) {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-lg);
+}
+
+:where(form > label) {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    width: 100%;
+}
+
+:where(label:has(input[type="checkbox"], input[type="radio"])) {
+    display: inline-flex;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+:where(form > input, form > select, form > textarea, form > div) {
+    width: 100%;
 }
 
 input[type="checkbox"],

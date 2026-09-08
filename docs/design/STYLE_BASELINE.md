@@ -20,7 +20,9 @@
 | Token 命名、语义、推荐值 | 业务 API / workspace 运维细节 |
 | 组件用法契约（按钮 / 输入 / 壳） | 逐文件改动清单 |
 
-**消费方**: `frontend_next` · `context-os-landing` · `context-os-theme`（Ghost）· `whyiamright` · `cchess`（仅 chrome）
+**消费方**: `frontend_next` · `frontend_rust` · `context-os-landing` · `context-os-theme`（Ghost）· `whyiamright` · `cchess`（仅 chrome）
+
+Rust 前端同样遵循本规范：`--cos-*` 只映射本规范的语义颜色，不引入半透明面板替代深色 `card`；原生控件和公共组件遵循相同的字重、按钮、输入和焦点契约。2026-09-08 复核记录见 [Rust 视觉对齐审计](2026-09-08-rust-visual-alignment-audit.md)。
 
 **实现约定**: CSS 变量存 **HSL 分量**（无 `hsl()` 包裹），使用时写 `hsl(var(--token))` 或 `hsl(var(--token) / 0.15)`。与现 v6 `design-tokens.css` 格式一致。
 

@@ -119,7 +119,7 @@
     text-decoration: none;
     font: inherit;
     padding: 0.45rem 0.65rem;
-    border-radius: var(--cos-radius-sm);
+    border-radius: var(--radius-pill);
     cursor: pointer;
 }
 
@@ -293,7 +293,7 @@
     color: var(--cos-text-muted);
     text-decoration: none;
     padding: 0.15rem 0.4rem;
-    border-radius: var(--cos-radius-sm);
+    border-radius: var(--radius-pill);
 }
 
 .mkt-lang-btn.is-active {

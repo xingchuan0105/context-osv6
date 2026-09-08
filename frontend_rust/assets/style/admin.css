@@ -48,7 +48,7 @@
     border: 1px solid var(--cos-border);
     background: var(--cos-surface);
     color: var(--cos-text-secondary);
-    border-radius: var(--cos-radius-sm);
+    border-radius: var(--radius-pill);
     padding: 0.375rem 0.75rem;
     font-size: 0.8125rem;
     text-decoration: none;
@@ -122,7 +122,7 @@
     border: 1px solid var(--cos-border);
     background: var(--cos-bg-secondary);
     color: var(--cos-text);
-    border-radius: var(--cos-radius-sm);
+    border-radius: var(--radius-pill);
     padding: 0.375rem 0.75rem;
     font-size: 0.8125rem;
     text-decoration: none;
@@ -196,7 +196,7 @@
 
 .admin-link-card-href {
     color: var(--cos-text-subtle);
-    font-family: monospace;
+    font-family: var(--font-mono);
     font-size: 0.75rem;
 }
 
@@ -223,7 +223,7 @@
 }
 
 .admin-table-mono {
-    font-family: monospace;
+    font-family: var(--font-mono);
 }
 
 .admin-stat-list {
@@ -308,7 +308,7 @@
     border: 1px solid var(--cos-border);
     background: var(--cos-bg-secondary);
     color: var(--cos-text);
-    border-radius: var(--cos-radius-sm);
+    border-radius: var(--radius-pill);
     padding: 0.3125rem 0.625rem;
     font-size: 0.8125rem;
     cursor: pointer;

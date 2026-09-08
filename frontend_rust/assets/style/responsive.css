@@ -64,7 +64,42 @@
     .settings-shell,
     .dashboard-shell,
     .pricing-shell {
-        padding: 1.25rem 0.75rem 3rem;
+        padding: 1.5rem 1rem 3rem;
+    }
+}
+
+.pub-doc-body,
+.legal-document,
+.legal-body,
+.settings-content,
+.settings-panel,
+.dashboard-panel,
+.admin-content,
+.admin-panel {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+    .shared-kb-body {
+        flex-direction: column;
+    }
+
+    .shared-kb-sources {
+        width: 100%;
+        border-right: 0;
+        border-bottom: 1px solid var(--cos-border);
+    }
+
+    .settings-provider-action,
+    .settings-secret-form,
+    .share-link-row {
+        flex-wrap: wrap;
+        min-width: 0;
+    }
+
+    .settings-provider-meta {
+        min-width: 0;
     }
 }
 

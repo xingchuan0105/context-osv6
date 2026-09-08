@@ -391,7 +391,7 @@ select:focus-visible {
 .pub-btn:active:not(:disabled),
 .mkt-nav-enter:active,
 .admin-table-danger:active {
-    transform: translateY(1px);
+    border-color: var(--cos-border-strong);
 }
 
 .chat-workspace-back:hover,
@@ -437,7 +437,7 @@ select:focus-visible {
 }
 
 dialog.app-dialog::backdrop {
-    background: hsl(var(--foreground) / 0.28);
+    background: hsl(var(--dashboard-overlay) / 0.4);
 }
 
 .source-preview-text {
@@ -463,7 +463,7 @@ dialog.app-dialog::backdrop {
     border: 1px solid var(--cos-border);
     background: var(--cos-surface);
     color: var(--cos-text);
-    border-radius: var(--cos-radius-sm);
+    border-radius: var(--radius-pill);
     cursor: pointer;
     transition: background-color var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard);
 }
@@ -475,7 +475,7 @@ dialog.app-dialog::backdrop {
 }
 
 .app-dialog-close:active {
-    transform: translateY(1px);
+    border-color: var(--cos-border-strong);
 }
 
 .app-toast {
@@ -595,4 +595,25 @@ button:disabled,
 
 .ui-button:active:not(:disabled) {
     opacity: 0.75;
+}
+
+.chat-scope-chip.is-pressed:hover:not(:disabled),
+.settings-nav-item.is-active:hover,
+.rail-tab.is-active:hover {
+    border-color: var(--cos-accent);
+    background: var(--cos-accent-soft);
+    color: var(--cos-text);
+}
+
+/* Dismiss surfaces cover the viewport; they are not visible action buttons. */
+.app-menu-dismiss,
+.chat-rail-dismiss {
+    border-radius: 0;
+    min-height: 0;
+    width: 100%;
+    height: 100%;
+}
+
+.app-menu-dismiss {
+    height: calc(100dvh - 3.25rem);
 }

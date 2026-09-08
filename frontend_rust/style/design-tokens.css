@@ -215,7 +215,7 @@
   --letter-spacing-display-lg: -1.8px;
   --letter-spacing-display-xl: -2.4px;
 
-  --font-body: "Inter", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC",
+  --font-body: "Inter", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Noto Sans CJK SC",
     "Microsoft YaHei", sans-serif;
   --font-heading: var(--font-body);
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -387,13 +387,13 @@
     --app-history-active: 220 8% 16%;
 
     --cos-bg: hsl(var(--background));
-    --cos-bg-secondary: hsl(220 10% 5%);
-    --cos-surface: hsl(0 0% 100% / 0.03);
-    --cos-surface-hover: hsl(0 0% 100% / 0.06);
+    --cos-bg-secondary: hsl(var(--surface-muted));
+    --cos-surface: hsl(var(--surface-elevated));
+    --cos-surface-hover: hsl(var(--surface-soft));
     --cos-text: hsl(var(--foreground));
     --cos-text-muted: hsl(var(--muted-foreground));
     --cos-text-subtle: hsl(var(--subtle-foreground));
-    --cos-border: hsl(0 0% 100% / 0.08);
+    --cos-border: hsl(var(--border));
     --cos-accent: hsl(var(--accent));
     --cos-accent-hover: hsl(var(--accent-strong));
     --cos-accent-bg: hsl(var(--accent-soft));
@@ -520,13 +520,13 @@
   --app-history-active: 220 8% 16%;
 
   --cos-bg: hsl(var(--background));
-  --cos-bg-secondary: hsl(220 10% 5%);
-  --cos-surface: hsl(0 0% 100% / 0.03);
-  --cos-surface-hover: hsl(0 0% 100% / 0.06);
+  --cos-bg-secondary: hsl(var(--surface-muted));
+  --cos-surface: hsl(var(--surface-elevated));
+  --cos-surface-hover: hsl(var(--surface-soft));
   --cos-text: hsl(var(--foreground));
   --cos-text-muted: hsl(var(--muted-foreground));
   --cos-text-subtle: hsl(var(--subtle-foreground));
-  --cos-border: hsl(0 0% 100% / 0.08);
+  --cos-border: hsl(var(--border));
   --cos-accent: hsl(var(--accent));
   --cos-accent-hover: hsl(var(--accent-strong));
   --cos-accent-bg: hsl(var(--accent-soft));

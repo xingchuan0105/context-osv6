@@ -20,7 +20,8 @@ async function gotoPage(page: Page, path: string) {
   await page.addInitScript((base) => {
     (window as unknown as { __POC_CHAT_API_BASE__: string }).__POC_CHAT_API_BASE__ = base;
   }, FIXTURE_BASE);
-  await page.goto(path, { waitUntil: 'domcontentloaded' });
+  // SSR fields are visible before the WASM client binds their input handlers.
+  await page.goto(path, { waitUntil: 'networkidle' });
 }
 
 test.describe('账号登录与凭据持久化（E3.1）', () => {

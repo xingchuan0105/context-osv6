@@ -77,7 +77,7 @@
 .auth-submit-btn {
     padding: 0.625rem 1rem;
     border: 1px solid var(--cos-border);
-    border-radius: var(--cos-radius-sm);
+    border-radius: var(--radius-pill);
     background: var(--cos-cta-bg);
     color: var(--cos-cta-fg);
     font-size: 0.875rem;

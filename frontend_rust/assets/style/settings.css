@@ -44,7 +44,7 @@
 .settings-logout-btn {
     padding: 0.375rem 0.75rem;
     border: 1px solid var(--cos-border);
-    border-radius: var(--cos-radius-sm);
+    border-radius: var(--radius-pill);
     background: transparent;
     color: var(--cos-text-secondary);
     font-size: 0.8125rem;
@@ -67,7 +67,7 @@
 .settings-nav-item {
     padding: 0.375rem 0.75rem;
     border: 1px solid transparent;
-    border-radius: var(--cos-radius-sm);
+    border-radius: var(--radius-pill);
     background: transparent;
     color: var(--cos-text-secondary);
     font-size: 0.875rem;
@@ -76,8 +76,8 @@
 }
 
 .settings-nav-item.is-active {
-    background: var(--cos-surface);
-    border-color: var(--cos-border);
+    background: var(--cos-accent-soft);
+    border-color: var(--cos-accent);
     color: var(--cos-text);
 }
 
@@ -162,7 +162,7 @@
     padding: 0.25rem 0.5rem;
     background: var(--cos-primary-subtle, var(--cos-surface));
     color: var(--cos-primary);
-    border-radius: var(--cos-radius-sm);
+    border-radius: var(--radius-pill);
 }
 
 .settings-secret-form {
@@ -184,7 +184,7 @@
 .settings-btn-save {
     padding: 0.375rem 0.75rem;
     border: 1px solid var(--cos-border);
-    border-radius: var(--cos-radius-sm);
+    border-radius: var(--radius-pill);
     background: var(--cos-cta-bg);
     color: var(--cos-cta-fg);
     font-size: 0.8125rem;
@@ -194,7 +194,7 @@
 .settings-btn-revoke {
     padding: 0.375rem 0.75rem;
     border: 1px solid var(--cos-border);
-    border-radius: var(--cos-radius-sm);
+    border-radius: var(--radius-pill);
     background: transparent;
     color: var(--cos-error);
     font-size: 0.8125rem;
@@ -231,6 +231,6 @@
 
 .settings-usage-value {
     font-size: 1.5rem;
+    font-family: var(--font-mono);
     color: var(--cos-text);
 }
-

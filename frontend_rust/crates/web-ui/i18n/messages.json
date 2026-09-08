@@ -42,6 +42,7 @@
   "chat.personalSearch": { "en": "Quick chat with web search", "zh": "快速聊天 · 联网搜索" },
   "chat.workspaceEmpty": { "en": "No workspace documents are ready for retrieval.", "zh": "工作区还没有可检索的就绪资料。" },
   "chat.attachmentHint": { "en": "Files provide extracted text for this turn only. Up to 5 files, 20 MiB each; question and extracted text up to 64 KiB. No knowledge-base indexing.", "zh": "附件提取文字仅用于本轮，不进入知识库。每轮最多 5 个、单文件 20 MiB；提问与提取文字合计最多 64 KiB。" },
+  "chat.attachmentScope": { "en": "This turn only", "zh": "仅用于本轮对话" },
   "chat.attachmentLimits": { "en": "Choose up to 5 non-empty files, at most 20 MiB each.", "zh": "每轮最多 5 个非空文件，单文件不超过 20 MiB。" },
   "chat.attachmentLogin": { "en": "Sign in before attaching files.", "zh": "登录后可添加附件。" },
   "chat.attachmentContextLimit": { "en": "The question and attachment text exceed 64 KiB. Shorten the question or remove files before sending.", "zh": "提问与附件文字超过 64 KiB，请缩短提问或移除部分附件后再发送。" },
