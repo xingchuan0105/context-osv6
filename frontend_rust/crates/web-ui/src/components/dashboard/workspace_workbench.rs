@@ -1,12 +1,15 @@
 use crate::api_base::poc_api_base;
 use crate::components::chat::chat_page::ChatPage;
+use crate::components::notes::NoteEditor;
 use crate::components::shell::ProductChrome;
+use crate::components::ui::{AppDialog, Toaster};
 use contracts::documents::Document;
-use contracts::workspaces::{Workspace, WorkspaceNote};
+use contracts::workspaces::{ChatSession, Workspace, WorkspaceNote};
 use leptos::prelude::*;
-use leptos_router::hooks::use_params;
+use leptos_router::hooks::{query_signal, use_navigate, use_params};
 use leptos_router::params::Params;
-use web_sdk::BrowserRestClient;
+use leptos_router::NavigateOptions;
+use web_sdk::{BrowserRestClient, SESSION_FILE_ACCEPT};
 
 #[derive(Params, PartialEq, Clone, Debug)]
 struct WorkbenchParams {
@@ -34,6 +37,17 @@ pub fn WorkspaceWorkbenchPage() -> impl IntoView {
     let new_note_content = RwSignal::new(String::new());
     let is_creating_note = RwSignal::new(false);
     let refresh_gen = RwSignal::new(0_u64);
+    let sessions = RwSignal::new(Vec::<ChatSession>::new());
+    let show_upload = RwSignal::new(false);
+    let upload_tab = RwSignal::new("file".to_string());
+    let source_url = RwSignal::new(String::new());
+    let paste_title = RwSignal::new(String::new());
+    let paste_body = RwSignal::new(String::new());
+    let selected_docs = RwSignal::new(std::collections::HashSet::<String>::new());
+    let toaster = expect_context::<Toaster>();
+    let navigate = use_navigate();
+    let (_session_query, set_session_query) = query_signal::<String>("session");
+    let file_input = NodeRef::<leptos::html::Input>::new();
 
     Effect::new(move |_| {
         let wid = workspace_id.get();
@@ -61,6 +75,14 @@ pub fn WorkspaceWorkbenchPage() -> impl IntoView {
             }
             if let Ok(resp) = client.list_workspace_notes(&wid_clone).await {
                 notes.set(resp.notes);
+            }
+            if let Ok(list) = client.list_sessions().await {
+                sessions.set(
+                    list.sessions
+                        .into_iter()
+                        .filter(|session| session.workspace_id.as_deref() == Some(wid_clone.as_str()))
+                        .collect(),
+                );
             }
         });
     });
@@ -148,11 +170,11 @@ pub fn WorkspaceWorkbenchPage() -> impl IntoView {
                 </div>
                 <div class="workbench-top-actions">
                     <a
-                        href=move || format!("/dashboard/{}/analyze", workspace_id.get())
+                        href=move || format!("/dashboard/{}/share", workspace_id.get())
                         class="workbench-analyze-link"
                         data-testid="goto-analyze"
                     >
-                        "资料分析与切片 →"
+                        "分享中心 →"
                     </a>
                 </div>
             </header>
@@ -202,18 +224,45 @@ pub fn WorkspaceWorkbenchPage() -> impl IntoView {
                                     <span class="rail-section-count">
                                         {move || format!("{} 篇", documents.get().len())}
                                     </span>
+                                    <button
+                                        type="button"
+                                        class="rail-btn-new-note"
+                                        data-testid="open-upload"
+                                        on:click=move |_| show_upload.set(true)
+                                    >
+                                        "上传"
+                                    </button>
                                 </div>
+                                <p class="page-status-empty" data-testid="sources-empty" hidden=move || !documents.get().is_empty()>
+                                    "还没有资料。可上传文件、粘贴链接或文本。"
+                                </p>
                                 <ul class="rail-doc-list">
                                     <For
                                         each=move || documents.get()
                                         key=|doc| doc.id.clone()
                                         children=move |doc| {
                                             let doc_id = doc.id.clone();
+                                            let select_id = doc.id.clone();
+                                            let checked_id = doc.id.clone();
                                             view! {
                                                 <li class="rail-doc-item" data-testid="workspace-doc-item">
+                                                    <label class="rail-doc-select">
+                                                        <input
+                                                            type="checkbox"
+                                                            data-testid="doc-select"
+                                                            prop:checked=move || selected_docs.get().contains(&checked_id)
+                                                            on:change=move |_| {
+                                                                selected_docs.update(|set| {
+                                                                    if !set.insert(select_id.clone()) {
+                                                                        set.remove(&select_id);
+                                                                    }
+                                                                });
+                                                            }
+                                                        />
+                                                    </label>
                                                     <div class="rail-doc-info">
                                                         <span class="rail-doc-name">{doc.file_name}</span>
-                                                        <span class="rail-doc-status">{doc.status}</span>
+                                                        <span class="rail-doc-status">{doc.status.clone()}</span>
                                                     </div>
                                                     <button
                                                         type="button"
@@ -255,13 +304,7 @@ pub fn WorkspaceWorkbenchPage() -> impl IntoView {
                                             on:input=move |ev| new_note_title.set(event_target_value(&ev))
                                             required
                                         />
-                                        <textarea
-                                            placeholder="输入 Markdown 笔记内容…"
-                                            rows=4
-                                            data-testid="note-content-input"
-                                            prop:value=move || new_note_content.get()
-                                            on:input=move |ev| new_note_content.set(event_target_value(&ev))
-                                        ></textarea>
+                                        <NoteEditor value=new_note_content/>
                                         <div class="rail-note-form-actions">
                                             <button
                                                 type="button"
@@ -308,10 +351,185 @@ pub fn WorkspaceWorkbenchPage() -> impl IntoView {
                                 </ul>
                             </section>
                         </Show>
+                        <section class="rail-section" data-testid="workspace-sessions">
+                            <div class="rail-section-header">
+                                <span class="rail-section-title">"会话"</span>
+                            </div>
+                            <p class="page-status-empty" hidden=move || !sessions.get().is_empty()>"还没有工作区会话。"</p>
+                            <ul class="rail-note-list">
+                                <For
+                                    each=move || sessions.get()
+                                    key=|session| session.id.clone()
+                                    children=move |session| {
+                                        let sid = session.id.clone();
+                                        let sid_pin = sid.clone();
+                                        let sid_del = sid.clone();
+                                        let title = session.title.clone().unwrap_or_else(|| "未命名对话".into());
+                                        let pinned = session.pinned;
+                                        view! {
+                                            <li class="rail-note-item" data-testid="workspace-session-item">
+                                                <button
+                                                    type="button"
+                                                    class="rail-session-open"
+                                                    data-testid="open-workspace-session"
+                                                    on:click={
+                                                        let navigate = navigate.clone();
+                                                        let sid = sid.clone();
+                                                        move |_| {
+                                                            set_session_query.set(Some(sid.clone()));
+                                                            navigate(
+                                                                &format!("/dashboard/{}?session={sid}", workspace_id.get_untracked()),
+                                                                NavigateOptions { replace: true, ..Default::default() },
+                                                            );
+                                                        }
+                                                    }
+                                                >
+                                                    {if pinned { "📌 " } else { "" }}{title}
+                                                </button>
+                                                <button type="button" data-testid="pin-session" on:click=move |_| {
+                                                    let tok = current_wb_token(token);
+                                                    let sid = sid_pin.clone();
+                                                    leptos::task::spawn_local(async move {
+                                                        let client = BrowserRestClient::new(&poc_api_base(), Some(tok));
+                                                        let _ = client.update_session(&sid, None, Some(!pinned)).await;
+                                                    });
+                                                    refresh_gen.update(|n| *n += 1);
+                                                }>{if pinned { "取消置顶" } else { "置顶" }}</button>
+                                                <button type="button" data-testid="delete-session" on:click=move |_| {
+                                                    let tok = current_wb_token(token);
+                                                    let sid = sid_del.clone();
+                                                    leptos::task::spawn_local(async move {
+                                                        let client = BrowserRestClient::new(&poc_api_base(), Some(tok));
+                                                        let _ = client.delete_session(&sid).await;
+                                                    });
+                                                    refresh_gen.update(|n| *n += 1);
+                                                }>"删除"</button>
+                                            </li>
+                                        }
+                                    }
+                                />
+                            </ul>
+                        </section>
                     </div>
                 </aside>
             </div>
+            <AppDialog open=Signal::derive(move || show_upload.get()) title="上传资料" test_id="upload-dialog" on_close=Callback::new(move |_| show_upload.set(false))>
+                <div class="upload-tabs">
+                    <button type="button" data-testid="upload-tab-file" on:click=move |_| upload_tab.set("file".into())>"上传文件"</button>
+                    <button type="button" data-testid="upload-tab-url" on:click=move |_| upload_tab.set("url".into())>"链接"</button>
+                    <button type="button" data-testid="upload-tab-paste" on:click=move |_| upload_tab.set("paste".into())>"粘贴"</button>
+                </div>
+                <div hidden=move || upload_tab.get() != "file">
+                    <input type="file" data-testid="workspace-file-input" accept=SESSION_FILE_ACCEPT node_ref=file_input/>
+                    <button type="button" data-testid="workspace-file-submit" on:click=move |_| {
+                        start_workspace_file_upload(token, workspace_id.get_untracked(), file_input, toaster, refresh_gen);
+                        show_upload.set(false);
+                    }>"开始上传"</button>
+                </div>
+                <div hidden=move || upload_tab.get() != "url">
+                    <input type="url" data-testid="workspace-url-input" prop:value=move || source_url.get() on:input=move |ev| source_url.set(event_target_value(&ev))/>
+                    <button type="button" data-testid="workspace-url-submit" on:click=move |_| {
+                        let tok = current_wb_token(token);
+                        let wid = workspace_id.get_untracked();
+                        let url = source_url.get();
+                        leptos::task::spawn_local(async move {
+                            let client = BrowserRestClient::new(&poc_api_base(), Some(tok));
+                            if client.add_workspace_source_url(&wid, &url).await.is_ok() {
+                                toaster.push("已提交链接");
+                            }
+                        });
+                        show_upload.set(false);
+                        refresh_gen.update(|n| *n += 1);
+                    }>"添加链接"</button>
+                </div>
+                <div hidden=move || upload_tab.get() != "paste">
+                    <input data-testid="workspace-paste-title" prop:value=move || paste_title.get() on:input=move |ev| paste_title.set(event_target_value(&ev))/>
+                    <textarea data-testid="workspace-paste-body" prop:value=move || paste_body.get() on:input=move |ev| paste_body.set(event_target_value(&ev))></textarea>
+                    <button type="button" data-testid="workspace-paste-submit" on:click=move |_| {
+                        let tok = current_wb_token(token);
+                        let wid = workspace_id.get_untracked();
+                        let title = paste_title.get();
+                        let content = paste_body.get();
+                        leptos::task::spawn_local(async move {
+                            let client = BrowserRestClient::new(&poc_api_base(), Some(tok));
+                            if client.add_workspace_source_paste(&wid, &title, &content).await.is_ok() {
+                                toaster.push("已提交文本");
+                            }
+                        });
+                        show_upload.set(false);
+                        refresh_gen.update(|n| *n += 1);
+                    }>"添加文本"</button>
+                </div>
+            </AppDialog>
         </div>
         </ProductChrome>
     }
+}
+
+fn current_wb_token(token: RwSignal<String>) -> String {
+    if token.get_untracked().is_empty() {
+        web_sdk::read_browser_auth().map(|a| a.token).unwrap_or_default()
+    } else {
+        token.get_untracked()
+    }
+}
+
+fn start_workspace_file_upload(
+    token: RwSignal<String>,
+    workspace_id: String,
+    file_input: NodeRef<leptos::html::Input>,
+    toaster: Toaster,
+    refresh_gen: RwSignal<u64>,
+) {
+    let tok = current_wb_token(token);
+    if tok.is_empty() || workspace_id.is_empty() {
+        return;
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        let Some(input) = file_input.get() else {
+            return;
+        };
+        let Some(files) = input.files() else {
+            return;
+        };
+        let Some(file) = files.item(0) else {
+            return;
+        };
+        let name = file.name();
+        let size = file.size() as u64;
+        let mime = if file.type_().is_empty() {
+            "application/octet-stream".to_string()
+        } else {
+            file.type_()
+        };
+        leptos::task::spawn_local(async move {
+            let client = BrowserRestClient::new(&poc_api_base(), Some(tok));
+            match client
+                .create_workspace_document_upload(&workspace_id, &name, size, &mime)
+                .await
+            {
+                Ok(resp) => {
+                    let bytes = gloo_file_bytes(&file).await;
+                    if let Ok(bytes) = bytes {
+                        let _ = client.put_upload_bytes(&resp.upload_url, &bytes, &mime).await;
+                        let _ = client.complete_upload(&resp.document_id).await;
+                        toaster.push("资料已上传");
+                    }
+                }
+                Err(err) => toaster.push(format!("上传失败：{err}")),
+            }
+            refresh_gen.update(|n| *n += 1);
+        });
+    }
+    let _ = (file_input, toaster, refresh_gen);
+}
+
+#[cfg(target_arch = "wasm32")]
+async fn gloo_file_bytes(file: &web_sys::File) -> Result<Vec<u8>, ()> {
+    use wasm_bindgen_futures::JsFuture;
+    let promise = file.array_buffer();
+    let buffer = JsFuture::from(promise).await.map_err(|_| ())?;
+    let array = js_sys::Uint8Array::new(&buffer);
+    Ok(array.to_vec())
 }

@@ -2,7 +2,8 @@ use crate::conversation_api::{encode_path_segment, trim_base_url};
 use crate::transport::TransportError;
 use contracts::documents::DocumentsResponse;
 use contracts::workspaces::{
-    CreateWorkspaceNoteRequest, CreateWorkspaceRequest, WorkspaceListResponse,
+    CreateWorkspaceNoteRequest, CreateWorkspaceRequest, UpdateChatSessionRequest,
+    UpdateWorkspaceNoteRequest, UpdateWorkspaceRequest, WorkspaceListResponse,
     WorkspaceNoteListResponse, WorkspaceResponse,
 };
 
@@ -73,6 +74,46 @@ pub fn create_workspace_json(name: &str, description: &str) -> Result<Vec<u8>, T
         name: name.to_string(),
         description: description.to_string(),
     })?)
+}
+
+pub fn update_workspace_json(name: &str, description: &str) -> Result<Vec<u8>, TransportError> {
+    Ok(serde_json::to_vec(&UpdateWorkspaceRequest {
+        name: name.to_string(),
+        description: description.to_string(),
+    })?)
+}
+
+pub fn update_session_json(
+    title: Option<&str>,
+    pinned: Option<bool>,
+) -> Result<Vec<u8>, TransportError> {
+    Ok(serde_json::to_vec(&UpdateChatSessionRequest {
+        title: title.map(str::to_string),
+        pinned,
+    })?)
+}
+
+pub fn update_note_json(title: &str, content: &str) -> Result<Vec<u8>, TransportError> {
+    Ok(serde_json::to_vec(&UpdateWorkspaceNoteRequest {
+        title: Some(title.to_string()),
+        content: Some(content.to_string()),
+    })?)
+}
+
+pub fn workspace_sources_url_endpoint(base_url: &str, workspace_id: &str) -> String {
+    format!(
+        "{}/api/v1/workspaces/{}/sources/url",
+        trim_base_url(base_url),
+        encode_path_segment(workspace_id)
+    )
+}
+
+pub fn workspace_sources_paste_endpoint(base_url: &str, workspace_id: &str) -> String {
+    format!(
+        "{}/api/v1/workspaces/{}/sources/paste",
+        trim_base_url(base_url),
+        encode_path_segment(workspace_id)
+    )
 }
 
 pub fn create_note_json(title: &str, content: &str) -> Result<Vec<u8>, TransportError> {

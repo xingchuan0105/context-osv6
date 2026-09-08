@@ -36,6 +36,7 @@ use crate::components::share::{
     InvitePage, SharedKbPage, SharedUserPage, WorkspaceShareAnalyticsPage,
     WorkspaceShareLogsPage, WorkspaceSharePage,
 };
+use crate::components::ui::{ToastHost, provide_toaster};
 use leptos::prelude::*;
 use leptos_config::LeptosOptions;
 use leptos_meta::{HashedStylesheet, MetaTags, provide_meta_context};
@@ -47,9 +48,11 @@ pub fn App() -> impl IntoView {
     provide_meta_context();
     provide_context(RwSignal::new(ChatCanvasModel::new()));
     provide_context(RwSignal::new(String::new()));
+    provide_toaster();
 
     view! {
         <AuthBootstrap/>
+        <ToastHost/>
         <Router>
             <Routes fallback=|| {
                 view! {

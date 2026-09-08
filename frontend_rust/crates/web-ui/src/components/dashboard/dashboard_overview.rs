@@ -1,5 +1,6 @@
 use crate::api_base::poc_api_base;
 use crate::components::shell::ProductChrome;
+use crate::components::ui::{AppDialog, Toaster};
 use crate::routes::dest;
 use contracts::workspaces::Workspace;
 use leptos::prelude::*;
@@ -19,6 +20,17 @@ pub fn DashboardOverviewPage() -> impl IntoView {
     let new_name = RwSignal::new(String::new());
     let new_desc = RwSignal::new(String::new());
     let create_loading = RwSignal::new(false);
+    let tab = RwSignal::new("all".to_string());
+    let sort_mode = RwSignal::new("recent".to_string());
+    let view_mode = RwSignal::new("cards".to_string());
+    let search = RwSignal::new(String::new());
+    let show_search = RwSignal::new(false);
+    let favorite_ids = RwSignal::new(Vec::<String>::new());
+    let menu_id = RwSignal::new(None::<String>);
+    let rename_target = RwSignal::new(None::<Workspace>);
+    let delete_target = RwSignal::new(None::<Workspace>);
+    let rename_name = RwSignal::new(String::new());
+    let toaster = expect_context::<Toaster>();
 
     let load_workspaces = move || {
         let tok = if token.get_untracked().is_empty() {
@@ -41,6 +53,9 @@ pub fn DashboardOverviewPage() -> impl IntoView {
                 Err(err) => {
                     error.set(Some(format!("加载工作区失败：{err}")));
                 }
+            }
+            if let Ok(prefs) = client.get_preferences().await {
+                favorite_ids.set(prefs.dashboard.favorite_workspace_ids);
             }
             loading.set(false);
         });
@@ -167,22 +182,51 @@ pub fn DashboardOverviewPage() -> impl IntoView {
                 </div>
             </div>
 
+            <nav class="dashboard-toolbar" aria-label="工作区筛选">
+                <button type="button" class=move || if tab.get() == "all" { "settings-nav-item is-active" } else { "settings-nav-item" } data-testid="dash-tab-all" on:click=move |_| tab.set("all".into())>"全部"</button>
+                <button type="button" class=move || if tab.get() == "mine" { "settings-nav-item is-active" } else { "settings-nav-item" } data-testid="dash-tab-mine" on:click=move |_| tab.set("mine".into())>"我的"</button>
+                <button type="button" class=move || if tab.get() == "favorites" { "settings-nav-item is-active" } else { "settings-nav-item" } data-testid="dash-tab-favorites" on:click=move |_| tab.set("favorites".into())>"收藏"</button>
+                <button type="button" class="dashboard-header-btn" data-testid="dash-sort" on:click=move |_| {
+                    sort_mode.update(|mode| *mode = if *mode == "recent" { "name".into() } else { "recent".into() });
+                }>{move || if sort_mode.get() == "name" { "按名称" } else { "按最近" }}</button>
+                <button type="button" class="dashboard-header-btn" data-testid="dash-view" on:click=move |_| {
+                    view_mode.update(|mode| *mode = if *mode == "cards" { "list".into() } else { "cards".into() });
+                }>{move || if view_mode.get() == "list" { "列表" } else { "卡片" }}</button>
+                <button type="button" class="dashboard-header-btn" data-testid="dash-search-open" on:click=move |_| show_search.set(true)>"搜索"</button>
+            </nav>
+
+            <AppDialog open=Signal::derive(move || show_search.get()) title="搜索工作区" test_id="dashboard-search-dialog" on_close=Callback::new(move |_| show_search.set(false))>
+                <input
+                    type="search"
+                    data-testid="dashboard-search-input"
+                    placeholder="按名称筛选"
+                    prop:value=move || search.get()
+                    on:input=move |ev| search.set(event_target_value(&ev))
+                />
+            </AppDialog>
+
             <main class="dashboard-content">
                 {move || {
                     error.get().map(|msg| {
                         view! {
-                            <p class="dashboard-error" role="alert">
+                            <p class="dashboard-error" role="alert" data-testid="page-error">
                                 {msg}
                             </p>
                         }
                     })
                 }}
                 <Show when=move || loading.get()>
-                    <p class="dashboard-loading">"正在加载工作区列表…"</p>
+                    <p class="dashboard-loading" data-testid="page-loading">"正在加载工作区列表…"</p>
                 </Show>
-                <div class="dashboard-workspace-grid" data-testid="workspace-grid">
+                <p class="page-status-empty" data-testid="page-empty" hidden=move || loading.get() || !visible_workspaces(workspaces.get(), tab.get(), favorite_ids.get(), search.get(), sort_mode.get()).is_empty()>
+                    "还没有工作区。"
+                </p>
+                <div
+                    class=move || if view_mode.get() == "list" { "dashboard-workspace-list" } else { "dashboard-workspace-grid" }
+                    data-testid="workspace-grid"
+                >
                     <For
-                        each=move || workspaces.get()
+                        each=move || visible_workspaces(workspaces.get(), tab.get(), favorite_ids.get(), search.get(), sort_mode.get())
                         key=|ws| ws.id.clone()
                         children=move |ws| {
                             let wid = ws.id.clone();
@@ -192,24 +236,186 @@ pub fn DashboardOverviewPage() -> impl IntoView {
                             } else {
                                 ws.description.clone()
                             };
+                            let item = ws.clone();
+                            let item_fav = item.clone();
+                            let item_rename = item.clone();
+                            let item_delete = item.clone();
+                            let item_id = item.id.clone();
                             view! {
-                                <a href=href class="dashboard-workspace-card" data-testid="workspace-card">
-                                    <div class="dashboard-card-top">
-                                        <h3 class="dashboard-card-title">{ws.name}</h3>
-                                        <span class="dashboard-card-docs">
-                                            {format!("{} 篇资料", ws.document_count)}
-                                        </span>
+                                <article class="dashboard-workspace-card" data-testid="workspace-card">
+                                    <a href=href.clone() class="dashboard-card-link">
+                                        <div class="dashboard-card-top">
+                                            <h3 class="dashboard-card-title">{ws.name.clone()}</h3>
+                                            <span class="dashboard-card-docs">
+                                                {format!("{} 篇资料", ws.document_count)}
+                                            </span>
+                                        </div>
+                                        <p class="dashboard-card-desc">{desc}</p>
+                                    </a>
+                                    <button
+                                        type="button"
+                                        class="dashboard-card-menu"
+                                        data-testid="workspace-menu"
+                                        on:click=move |_| menu_id.set(Some(wid.clone()))
+                                    >
+                                        "更多"
+                                    </button>
+                                    <div class="dashboard-card-actions" hidden=move || menu_id.get().as_deref() != Some(item_id.as_str())>
+                                        <button type="button" data-testid="workspace-favorite" on:click=move |_| toggle_favorite(token, favorite_ids, toaster, item_fav.id.clone())>
+                                            {if favorite_ids.get().contains(&item_fav.id) { "取消收藏" } else { "收藏" }}
+                                        </button>
+                                        <button type="button" data-testid="workspace-rename" on:click=move |_| {
+                                            rename_name.set(item_rename.name.clone());
+                                            rename_target.set(Some(item_rename.clone()));
+                                            menu_id.set(None);
+                                        }>"重命名"</button>
+                                        <button type="button" data-testid="workspace-delete" on:click=move |_| {
+                                            delete_target.set(Some(item_delete.clone()));
+                                            menu_id.set(None);
+                                        }>"删除"</button>
                                     </div>
-                                    <p class="dashboard-card-desc">
-                                        {desc}
-                                    </p>
-                                </a>
+                                </article>
                             }
                         }
                     />
                 </div>
             </main>
+
+            <AppDialog
+                open=Signal::derive(move || rename_target.get().is_some())
+                title="重命名工作区"
+                test_id="rename-workspace-dialog"
+                on_close=Callback::new(move |_| rename_target.set(None))
+            >
+                <input data-testid="rename-workspace-input" prop:value=move || rename_name.get() on:input=move |ev| rename_name.set(event_target_value(&ev))/>
+                <button type="button" data-testid="rename-workspace-confirm" on:click=move |_| {
+                    if let Some(ws) = rename_target.get() {
+                        apply_rename(token, workspaces, toaster, ws.id, rename_name.get(), ws.description.clone());
+                    }
+                    rename_target.set(None);
+                }>"保存"</button>
+            </AppDialog>
+            <AppDialog
+                open=Signal::derive(move || delete_target.get().is_some())
+                title="删除工作区"
+                test_id="delete-workspace-dialog"
+                on_close=Callback::new(move |_| delete_target.set(None))
+            >
+                <p>"删除后不可恢复。"</p>
+                <button type="button" data-testid="delete-workspace-confirm" on:click=move |_| {
+                    if let Some(ws) = delete_target.get() {
+                        apply_delete(token, workspaces, toaster, ws.id);
+                    }
+                    delete_target.set(None);
+                }>"确认删除"</button>
+            </AppDialog>
         </div>
         </ProductChrome>
     }
+}
+
+fn visible_workspaces(
+    mut list: Vec<Workspace>,
+    tab: String,
+    favorites: Vec<String>,
+    search: String,
+    sort_mode: String,
+) -> Vec<Workspace> {
+    let q = search.trim().to_lowercase();
+    list.retain(|ws| {
+        let matches_search = q.is_empty() || ws.name.to_lowercase().contains(&q);
+        let matches_tab = match tab.as_str() {
+            "favorites" => favorites.contains(&ws.id),
+            _ => true,
+        };
+        matches_search && matches_tab
+    });
+    if sort_mode == "name" {
+        list.sort_by(|a, b| a.name.cmp(&b.name));
+    } else {
+        list.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+    }
+    list
+}
+
+fn current_token(token: RwSignal<String>) -> String {
+    if token.get_untracked().is_empty() {
+        web_sdk::read_browser_auth().map(|a| a.token).unwrap_or_default()
+    } else {
+        token.get_untracked()
+    }
+}
+
+fn toggle_favorite(
+    token: RwSignal<String>,
+    favorite_ids: RwSignal<Vec<String>>,
+    toaster: Toaster,
+    workspace_id: String,
+) {
+    let tok = current_token(token);
+    if tok.is_empty() {
+        return;
+    }
+    let mut next = favorite_ids.get_untracked();
+    if next.contains(&workspace_id) {
+        next.retain(|id| id != &workspace_id);
+    } else {
+        next.push(workspace_id);
+    }
+    favorite_ids.set(next.clone());
+    leptos::task::spawn_local(async move {
+        let client = BrowserRestClient::new(&poc_api_base(), Some(tok));
+        let mut prefs = client.get_preferences().await.unwrap_or_default();
+        prefs.dashboard.favorite_workspace_ids = next;
+        if client.put_preferences(&prefs).await.is_ok() {
+            toaster.push("已更新收藏");
+        }
+    });
+}
+
+fn apply_rename(
+    token: RwSignal<String>,
+    workspaces: RwSignal<Vec<Workspace>>,
+    toaster: Toaster,
+    workspace_id: String,
+    name: String,
+    description: String,
+) {
+    let tok = current_token(token);
+    if tok.is_empty() || name.trim().is_empty() {
+        return;
+    }
+    leptos::task::spawn_local(async move {
+        let client = BrowserRestClient::new(&poc_api_base(), Some(tok));
+        if let Ok(resp) = client
+            .update_workspace(&workspace_id, name.trim(), &description)
+            .await
+        {
+            workspaces.update(|list| {
+                if let Some(item) = list.iter_mut().find(|ws| ws.id == workspace_id) {
+                    *item = resp.workspace;
+                }
+            });
+            toaster.push("已重命名");
+        }
+    });
+}
+
+fn apply_delete(
+    token: RwSignal<String>,
+    workspaces: RwSignal<Vec<Workspace>>,
+    toaster: Toaster,
+    workspace_id: String,
+) {
+    let tok = current_token(token);
+    if tok.is_empty() {
+        return;
+    }
+    leptos::task::spawn_local(async move {
+        let client = BrowserRestClient::new(&poc_api_base(), Some(tok));
+        if client.delete_workspace(&workspace_id).await.is_ok() {
+            workspaces.update(|list| list.retain(|ws| ws.id != workspace_id));
+            toaster.push("已删除工作区");
+        }
+    });
 }

@@ -10,6 +10,7 @@ pub mod fixture_transport;
 pub mod citations;
 pub mod markdown;
 pub mod notifications;
+pub mod preferences;
 pub mod progress;
 pub mod providers;
 pub mod scope;
@@ -45,9 +46,12 @@ pub use auth::{
 };
 pub use billing_api::{
     BillingOrderStatusResponse, BillingPlan, BillingPlansResponse, CheckoutRequest,
-    CheckoutResponse, TopupPack, WalletBalanceResponse, billing_plans_url, checkout_session_url,
-    order_status_url, parse_billing_plans, parse_checkout_response, parse_order_status,
-    parse_topup_packs, parse_wallet_balance, topup_packs_url, wallet_balance_url,
+    CheckoutResponse, DailyUsage, LimitHits, TopupPack, UsageForecastResponse,
+    UsageHistoryResponse, UsageWindowBucket, UsageWindowResponse, WalletBalanceResponse,
+    billing_plans_url, checkout_session_url, order_status_url, parse_billing_plans,
+    parse_checkout_response, parse_order_status, parse_topup_packs, parse_usage_forecast,
+    parse_usage_history, parse_usage_window, parse_wallet_balance, topup_packs_url,
+    usage_forecast_url, usage_history_url, usage_window_url, wallet_balance_url,
 };
 pub use browser_auth::{
     auth_login, auth_register, auth_reset_confirm, auth_reset_send_code, auth_reset_verify_code,
@@ -66,6 +70,10 @@ pub use markdown::render_assistant_markdown;
 pub use notifications::{
     NotificationRow, NotificationsResponse, notification_read_url, notifications_url,
     parse_notifications,
+};
+pub use preferences::{
+    DashboardPreferences, NotificationPreferences, UserPreferences, parse_preferences,
+    preferences_url,
 };
 pub use progress::{activities_for_display, progress_folded, progress_summary_label};
 pub use providers::{

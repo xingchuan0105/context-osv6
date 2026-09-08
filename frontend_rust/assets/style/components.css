@@ -311,6 +311,97 @@ select:focus-visible {
     background: var(--cos-surface-hover);
 }
 
+.app-dialog-backdrop {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: hsl(var(--foreground) / 0.28);
+    z-index: var(--z-modal);
+}
+
+.app-dialog {
+    width: min(32rem, calc(100vw - 2rem));
+    max-height: min(36rem, calc(100vh - 4rem));
+    overflow: auto;
+    background: var(--cos-surface);
+    border: 1px solid var(--cos-border);
+    border-radius: var(--cos-radius-md);
+    padding: 1rem;
+}
+
+.app-dialog-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+}
+
+.app-dialog-header h2 {
+    margin: 0;
+    font-size: 1rem;
+}
+
+.app-dialog-close {
+    border: 1px solid var(--cos-border);
+    background: var(--cos-surface);
+    color: var(--cos-text);
+    border-radius: var(--cos-radius-sm);
+    cursor: pointer;
+}
+
+.app-toast {
+    position: fixed;
+    right: 1rem;
+    bottom: 1rem;
+    z-index: var(--z-toast);
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--cos-border);
+    border-radius: var(--cos-radius-sm);
+    background: var(--cos-surface);
+    color: var(--cos-text);
+}
+
+.page-status-loading,
+.page-status-empty {
+    color: var(--cos-text-muted);
+}
+
+.page-status-error {
+    color: var(--cos-text);
+    border-left: 3px solid var(--cos-accent);
+    padding: 0.5rem 0.75rem;
+}
+
+.usage-trend-line,
+.share-views-bar {
+    stroke: var(--cos-accent);
+    fill: var(--cos-accent);
+}
+
+.usage-trend-line {
+    fill: none;
+    stroke-width: 2;
+}
+
+.dashboard-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0 1rem 1rem;
+}
+
+.admin-badge {
+    font-size: 0.75rem;
+    color: var(--cos-text-muted);
+}
+
+.admin-badge.is-blocked {
+    color: var(--cos-text);
+}
+
 /* Last in the product cascade so it beats domain `display` rules. */
 .is-hidden,
 [hidden] {

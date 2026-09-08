@@ -417,6 +417,99 @@ impl BrowserRestClient {
     ) -> Result<crate::admin_api::AdminBroadcastResult, TransportError> {
         self.unavailable()
     }
+
+    pub async fn get_usage_window(
+        &self,
+    ) -> Result<crate::billing_api::UsageWindowResponse, TransportError> {
+        self.unavailable()
+    }
+
+    pub async fn get_usage_history(
+        &self,
+        _days: u32,
+    ) -> Result<crate::billing_api::UsageHistoryResponse, TransportError> {
+        self.unavailable()
+    }
+
+    pub async fn get_usage_forecast(
+        &self,
+    ) -> Result<crate::billing_api::UsageForecastResponse, TransportError> {
+        self.unavailable()
+    }
+
+    pub async fn get_preferences(&self) -> Result<crate::preferences::UserPreferences, TransportError> {
+        self.unavailable()
+    }
+
+    pub async fn put_preferences(
+        &self,
+        _prefs: &crate::preferences::UserPreferences,
+    ) -> Result<crate::preferences::UserPreferences, TransportError> {
+        self.unavailable()
+    }
+
+    pub async fn update_workspace(
+        &self,
+        _workspace_id: &str,
+        _name: &str,
+        _description: &str,
+    ) -> Result<contracts::workspaces::WorkspaceResponse, TransportError> {
+        self.unavailable()
+    }
+
+    pub async fn delete_workspace(&self, _workspace_id: &str) -> Result<(), TransportError> {
+        self.unavailable()
+    }
+
+    pub async fn update_session(
+        &self,
+        _session_id: &str,
+        _title: Option<&str>,
+        _pinned: Option<bool>,
+    ) -> Result<contracts::workspaces::ChatSession, TransportError> {
+        self.unavailable()
+    }
+
+    pub async fn delete_session(&self, _session_id: &str) -> Result<(), TransportError> {
+        self.unavailable()
+    }
+
+    pub async fn create_workspace_document_upload(
+        &self,
+        _workspace_id: &str,
+        _filename: &str,
+        _file_size: u64,
+        _mime_type: &str,
+    ) -> Result<CreateDocumentUploadResponse, TransportError> {
+        self.unavailable()
+    }
+
+    pub async fn add_workspace_source_url(
+        &self,
+        _workspace_id: &str,
+        _url: &str,
+    ) -> Result<CreateDocumentUploadResponse, TransportError> {
+        self.unavailable()
+    }
+
+    pub async fn add_workspace_source_paste(
+        &self,
+        _workspace_id: &str,
+        _title: &str,
+        _content: &str,
+    ) -> Result<CreateDocumentUploadResponse, TransportError> {
+        self.unavailable()
+    }
+
+    pub async fn update_workspace_note(
+        &self,
+        _workspace_id: &str,
+        _note_id: &str,
+        _title: &str,
+        _content: &str,
+    ) -> Result<contracts::workspaces::WorkspaceNoteResponse, TransportError> {
+        self.unavailable()
+    }
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -1295,5 +1388,215 @@ impl BrowserRestClient {
             )
             .await?,
         )
+    }
+
+    pub async fn get_usage_window(
+        &self,
+    ) -> Result<crate::billing_api::UsageWindowResponse, TransportError> {
+        crate::billing_api::parse_usage_window(
+            &wasm_request::get_bytes(self, &crate::billing_api::usage_window_url(&self.base_url))
+                .await?,
+        )
+    }
+
+    pub async fn get_usage_history(
+        &self,
+        days: u32,
+    ) -> Result<crate::billing_api::UsageHistoryResponse, TransportError> {
+        crate::billing_api::parse_usage_history(
+            &wasm_request::get_bytes(
+                self,
+                &crate::billing_api::usage_history_url(&self.base_url, days),
+            )
+            .await?,
+        )
+    }
+
+    pub async fn get_usage_forecast(
+        &self,
+    ) -> Result<crate::billing_api::UsageForecastResponse, TransportError> {
+        crate::billing_api::parse_usage_forecast(
+            &wasm_request::get_bytes(self, &crate::billing_api::usage_forecast_url(&self.base_url))
+                .await?,
+        )
+    }
+
+    pub async fn get_preferences(&self) -> Result<crate::preferences::UserPreferences, TransportError> {
+        crate::preferences::parse_preferences(
+            &wasm_request::get_bytes(self, &crate::preferences::preferences_url(&self.base_url))
+                .await?,
+        )
+    }
+
+    pub async fn put_preferences(
+        &self,
+        prefs: &crate::preferences::UserPreferences,
+    ) -> Result<crate::preferences::UserPreferences, TransportError> {
+        let body = serde_json::to_vec(prefs)?;
+        crate::preferences::parse_preferences(
+            &wasm_request::request_bytes(
+                self,
+                "PUT",
+                &crate::preferences::preferences_url(&self.base_url),
+                Some(&body),
+                Some("application/json"),
+                true,
+            )
+            .await?,
+        )
+    }
+
+    pub async fn update_workspace(
+        &self,
+        workspace_id: &str,
+        name: &str,
+        description: &str,
+    ) -> Result<contracts::workspaces::WorkspaceResponse, TransportError> {
+        let body = crate::workspace_api::update_workspace_json(name, description)?;
+        crate::workspace_api::parse_workspace_response(
+            &wasm_request::request_bytes(
+                self,
+                "PATCH",
+                &crate::workspace_api::workspace_url(&self.base_url, workspace_id),
+                Some(&body),
+                Some("application/json"),
+                true,
+            )
+            .await?,
+        )
+    }
+
+    pub async fn delete_workspace(&self, workspace_id: &str) -> Result<(), TransportError> {
+        wasm_request::request_bytes(
+            self,
+            "DELETE",
+            &crate::workspace_api::workspace_url(&self.base_url, workspace_id),
+            None,
+            None,
+            true,
+        )
+        .await?;
+        Ok(())
+    }
+
+    pub async fn update_session(
+        &self,
+        session_id: &str,
+        title: Option<&str>,
+        pinned: Option<bool>,
+    ) -> Result<ChatSession, TransportError> {
+        let body = crate::workspace_api::update_session_json(title, pinned)?;
+        parse_session(
+            &wasm_request::request_bytes(
+                self,
+                "PATCH",
+                &session_url(&self.base_url, session_id),
+                Some(&body),
+                Some("application/json"),
+                true,
+            )
+            .await?,
+        )
+    }
+
+    pub async fn delete_session(&self, session_id: &str) -> Result<(), TransportError> {
+        wasm_request::request_bytes(
+            self,
+            "DELETE",
+            &session_url(&self.base_url, session_id),
+            None,
+            None,
+            true,
+        )
+        .await?;
+        Ok(())
+    }
+
+    pub async fn create_workspace_document_upload(
+        &self,
+        workspace_id: &str,
+        filename: &str,
+        file_size: u64,
+        mime_type: &str,
+    ) -> Result<CreateDocumentUploadResponse, TransportError> {
+        let body = create_upload_json(filename, file_size, mime_type)?;
+        parse_upload_response(
+            &wasm_request::request_bytes(
+                self,
+                "POST",
+                &crate::workspace_api::workspace_documents_url(&self.base_url, workspace_id),
+                Some(&body),
+                Some("application/json"),
+                true,
+            )
+            .await?,
+        )
+    }
+
+    pub async fn add_workspace_source_url(
+        &self,
+        workspace_id: &str,
+        url: &str,
+    ) -> Result<CreateDocumentUploadResponse, TransportError> {
+        let body = serde_json::to_vec(&serde_json::json!({ "url": url }))?;
+        parse_upload_response(
+            &wasm_request::request_bytes(
+                self,
+                "POST",
+                &crate::workspace_api::workspace_sources_url_endpoint(&self.base_url, workspace_id),
+                Some(&body),
+                Some("application/json"),
+                true,
+            )
+            .await?,
+        )
+    }
+
+    pub async fn add_workspace_source_paste(
+        &self,
+        workspace_id: &str,
+        title: &str,
+        content: &str,
+    ) -> Result<CreateDocumentUploadResponse, TransportError> {
+        let body = serde_json::to_vec(&serde_json::json!({
+            "title": title,
+            "content": content,
+        }))?;
+        parse_upload_response(
+            &wasm_request::request_bytes(
+                self,
+                "POST",
+                &crate::workspace_api::workspace_sources_paste_endpoint(
+                    &self.base_url,
+                    workspace_id,
+                ),
+                Some(&body),
+                Some("application/json"),
+                true,
+            )
+            .await?,
+        )
+    }
+
+    pub async fn update_workspace_note(
+        &self,
+        workspace_id: &str,
+        note_id: &str,
+        title: &str,
+        content: &str,
+    ) -> Result<contracts::workspaces::WorkspaceNoteResponse, TransportError> {
+        let body = crate::workspace_api::update_note_json(title, content)?;
+        serde_json::from_slice(
+            &wasm_request::request_bytes(
+                self,
+                "PATCH",
+                &crate::workspace_api::workspace_note_url(&self.base_url, workspace_id, note_id),
+                Some(&body),
+                Some("application/json"),
+                true,
+            )
+            .await?,
+        )
+        .map_err(TransportError::from)
     }
 }

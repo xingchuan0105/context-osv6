@@ -105,3 +105,98 @@ pub fn parse_checkout_response(body: &[u8]) -> Result<CheckoutResponse, Transpor
 pub fn parse_order_status(body: &[u8]) -> Result<BillingOrderStatusResponse, TransportError> {
     serde_json::from_slice(body).map_err(TransportError::from)
 }
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct UsageWindowBucket {
+    pub used: f64,
+    pub limit: f64,
+    #[serde(default)]
+    pub used_tokens_approx: Option<f64>,
+    #[serde(default)]
+    pub limit_tokens_approx: Option<f64>,
+    pub percentage: f64,
+    pub reset_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LimitHits {
+    pub rolling_5h: bool,
+    pub rolling_7d: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct UsageWindowResponse {
+    pub plan_id: String,
+    #[serde(default)]
+    pub margin_multiplier: Option<f64>,
+    pub rolling_5h: UsageWindowBucket,
+    pub rolling_7d: UsageWindowBucket,
+    pub soft_limit_hit: LimitHits,
+    pub hard_limit_hit: LimitHits,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DailyUsage {
+    pub date: String,
+    pub tokens: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct UsageHistoryResponse {
+    pub daily: Vec<DailyUsage>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct UsageForecastResponse {
+    pub current_plan: String,
+    pub avg_30d_tokens: i64,
+    pub projected_30d_tokens: i64,
+    pub current_limit_7d: i64,
+    pub upgrade_recommended: bool,
+    #[serde(default)]
+    pub suggestion_zh: String,
+    #[serde(default)]
+    pub suggestion_en: String,
+}
+
+pub fn usage_window_url(base_url: &str) -> String {
+    format!("{}/api/v1/billing/usage/window", trim_base_url(base_url))
+}
+
+pub fn usage_history_url(base_url: &str, days: u32) -> String {
+    format!(
+        "{}/api/v1/billing/usage/history?days={days}",
+        trim_base_url(base_url)
+    )
+}
+
+pub fn usage_forecast_url(base_url: &str) -> String {
+    format!("{}/api/v1/billing/usage/forecast", trim_base_url(base_url))
+}
+
+pub fn parse_usage_window(body: &[u8]) -> Result<UsageWindowResponse, TransportError> {
+    parse_direct_or_envelope(body)
+}
+
+pub fn parse_usage_history(body: &[u8]) -> Result<UsageHistoryResponse, TransportError> {
+    parse_direct_or_envelope(body)
+}
+
+pub fn parse_usage_forecast(body: &[u8]) -> Result<UsageForecastResponse, TransportError> {
+    parse_direct_or_envelope(body)
+}
+
+fn parse_direct_or_envelope<T: serde::de::DeserializeOwned>(
+    body: &[u8],
+) -> Result<T, TransportError> {
+    if let Ok(value) = serde_json::from_slice::<serde_json::Value>(body) {
+        if value.get("ok").and_then(serde_json::Value::as_bool) == Some(true) {
+            if let Some(data) = value.get("data") {
+                return serde_json::from_value(data.clone()).map_err(TransportError::from);
+            }
+        }
+        serde_json::from_value(value).map_err(TransportError::from)
+    } else {
+        serde_json::from_slice(body).map_err(TransportError::from)
+    }
+}

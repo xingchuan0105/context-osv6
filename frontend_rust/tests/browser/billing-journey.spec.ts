@@ -49,6 +49,8 @@ test.describe('套餐定价与按需充值（E3.4）', () => {
     await page.getByTestId('provider-creem').click();
     await expect(page.getByTestId('provider-creem')).toHaveClass(/is-active/);
 
+    await page.getByTestId('pricing-agree').check();
+
     // 3. 点击充值生成结账链接
     await page.getByTestId('btn-start-topup').click();
     const redirectBox = page.getByTestId('checkout-redirect-box');

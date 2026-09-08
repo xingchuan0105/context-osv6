@@ -99,16 +99,15 @@ test.describe('工作区深度分析与全局统计（E3.2）', () => {
   test('切片健康度分析页与全局分享流量统计页正常渲染', async ({ page }) => {
     const errors = collectPageErrors(page);
 
-    // 1. 访问工作区分析页
+    // 1. /analyze 重定向到分享中心
     await gotoDashboard(page, '/dashboard/ws-materials/analyze');
-    await expect(page.getByTestId('workspace-analyze-page')).toBeVisible();
-    await expect(page.getByTestId('analyze-panel')).toContainText('ws-materials');
-    await expect(page.getByTestId('analyze-panel')).toContainText('42');
+    await expect(page).toHaveURL(/\/dashboard\/ws-materials\/share/, { timeout: 15_000 });
 
-    // 2. 访问全局分析页
+    // 2. 访问全局分析页，数字来自 API
     await gotoDashboard(page, '/dashboard/analytics');
     await expect(page.getByTestId('global-analytics-page')).toBeVisible();
-    await expect(page.getByTestId('global-analytics-page')).toContainText('总公开浏览量');
+    await expect(page.getByTestId('analytics-views')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('global-analytics-page')).not.toContainText('128');
 
     expect(errors).toEqual([]);
   });

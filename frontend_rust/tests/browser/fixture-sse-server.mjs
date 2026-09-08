@@ -39,6 +39,10 @@ const state = {
 };
 const filesState = { file: null, events: [] };
 let secretsState = [];
+let preferencesState = {
+  dashboard: { favorite_workspace_ids: [] },
+  notifications: { email_enabled: true, product_enabled: true, security_enabled: true },
+};
 let workspacesState = [
   {
     id: 'ws-materials',
@@ -205,7 +209,7 @@ function jsonOk(res, body) {
 function cors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, GET, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, GET, PUT, PATCH, DELETE, OPTIONS');
 }
 
 function sessionJson(id, title) {
@@ -914,6 +918,57 @@ const server = http.createServer((req, res) => {
       });
       return;
     }
+    if (pathname.endsWith('/api/auth/preferences')) {
+      jsonOk(res, preferencesState);
+      return;
+    }
+    if (pathname.endsWith('/api/v1/billing/usage/window')) {
+      jsonOk(res, {
+        plan_id: 'free',
+        margin_multiplier: 2,
+        rolling_5h: {
+          used: 120,
+          limit: 1000,
+          used_tokens_approx: 120,
+          limit_tokens_approx: 1000,
+          percentage: 12,
+          reset_at: '2026-09-08T12:00:00Z',
+        },
+        rolling_7d: {
+          used: 800,
+          limit: 8000,
+          used_tokens_approx: 800,
+          limit_tokens_approx: 8000,
+          percentage: 10,
+          reset_at: '2026-09-14T00:00:00Z',
+        },
+        soft_limit_hit: { rolling_5h: false, rolling_7d: false },
+        hard_limit_hit: { rolling_5h: false, rolling_7d: false },
+      });
+      return;
+    }
+    if (pathname.includes('/api/v1/billing/usage/history')) {
+      jsonOk(res, {
+        daily: [
+          { date: '2026-09-01', tokens: 100 },
+          { date: '2026-09-02', tokens: 140 },
+          { date: '2026-09-03', tokens: 90 },
+        ],
+      });
+      return;
+    }
+    if (pathname.endsWith('/api/v1/billing/usage/forecast')) {
+      jsonOk(res, {
+        current_plan: 'free',
+        avg_30d_tokens: 110,
+        projected_30d_tokens: 3300,
+        current_limit_7d: 8000,
+        upgrade_recommended: false,
+        suggestion_zh: '用量平稳',
+        suggestion_en: 'stable',
+      });
+      return;
+    }
     if (pathname.endsWith('/api/v1/billing/wallet/topup-packs')) {
       jsonOk(res, [
         { pack_id: 'topup_50', amount_fen: 5000, amount_yuan: 50, label_cny: '50元' },
@@ -951,7 +1006,11 @@ const server = http.createServer((req, res) => {
       jsonOk(res, {
         total_views: 45,
         total_unique_visitors: 18,
-        views_by_day: {},
+        views_by_day: {
+          '2026-09-01': 10,
+          '2026-09-02': 15,
+          '2026-09-03': 20,
+        },
       });
       return;
     }
@@ -1177,6 +1236,89 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  if (req.method === 'PUT' && url.pathname.endsWith('/api/auth/preferences')) {
+    readBody(req).then((buf) => {
+      try {
+        preferencesState = JSON.parse(buf.toString('utf8') || '{}');
+      } catch {
+        preferencesState = preferencesState;
+      }
+      jsonOk(res, preferencesState);
+    });
+    return;
+  }
+
+  if (req.method === 'PATCH') {
+    const wsMatch = url.pathname.match(/\/api\/v1\/workspaces\/([^/]+)$/);
+    if (wsMatch) {
+      const wid = decodeURIComponent(wsMatch[1]);
+      readBody(req).then((buf) => {
+        const body = JSON.parse(buf.toString('utf8') || '{}');
+        const found = workspacesState.find((w) => w.id === wid);
+        if (found) {
+          if (body.name) found.name = body.name;
+          if (body.description != null) found.description = body.description;
+          found.updated_at = '2026-09-08T00:00:00Z';
+          jsonOk(res, { workspace: found });
+          return;
+        }
+        jsonOk(res, {
+          workspace: {
+            id: wid,
+            owner_user_id: 'fixture-user',
+            owner_id: 'fixture-user',
+            name: body.name || '工作区',
+            title: body.name || '工作区',
+            description: body.description || '',
+            created_at: '2026-09-01T00:00:00Z',
+            updated_at: '2026-09-08T00:00:00Z',
+            document_count: 0,
+            status_summary: {},
+            shared: false,
+          },
+        });
+      });
+      return;
+    }
+    const sessionMatch = url.pathname.match(/\/api\/v1\/chat\/sessions\/([^/]+)$/);
+    if (sessionMatch) {
+      readBody(req).then((buf) => {
+        const body = JSON.parse(buf.toString('utf8') || '{}');
+        jsonOk(res, {
+          id: decodeURIComponent(sessionMatch[1]),
+          owner_user_id: 'fixture-user',
+          workspace_id: 'ws-materials',
+          scope_kind: 'workspace',
+          title: body.title || '会话',
+          pinned: Boolean(body.pinned),
+          agent_type: 'rag',
+          model_role: 'agent',
+          created_at: '2026-09-04T00:00:00Z',
+          updated_at: '2026-09-08T00:00:00Z',
+        });
+      });
+      return;
+    }
+    const noteMatch = url.pathname.match(/\/api\/v1\/workspaces\/([^/]+)\/notes\/([^/]+)$/);
+    if (noteMatch) {
+      readBody(req).then((buf) => {
+        const body = JSON.parse(buf.toString('utf8') || '{}');
+        jsonOk(res, {
+          note: {
+            id: decodeURIComponent(noteMatch[2]),
+            workspace_id: decodeURIComponent(noteMatch[1]),
+            title: body.title || '笔记',
+            content: body.content || '',
+            preview: (body.content || '').slice(0, 40),
+            created_at: '2026-09-03T00:00:00Z',
+            updated_at: '2026-09-08T00:00:00Z',
+          },
+        });
+      });
+      return;
+    }
+  }
+
   if (req.method === 'PUT' && url.pathname.endsWith('/api/v1/settings/provider-secrets')) {
     readBody(req).then((buf) => {
       const body = JSON.parse(buf.toString('utf8') || '{}');
@@ -1202,6 +1344,20 @@ const server = http.createServer((req, res) => {
         adminState.users[owner] = adminState.users[owner].filter((u) => u.id !== userId);
       }
       adminOk(res, null);
+      return;
+    }
+    const wsDelete = url.pathname.match(/\/api\/v1\/workspaces\/([^/]+)$/);
+    if (wsDelete && !url.pathname.includes('/documents') && !url.pathname.includes('/notes') && !url.pathname.includes('/share')) {
+      const wid = decodeURIComponent(wsDelete[1]);
+      workspacesState = workspacesState.filter((w) => w.id !== wid);
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+    const sessionDelete = url.pathname.match(/\/api\/v1\/chat\/sessions\/([^/]+)$/);
+    if (sessionDelete && !url.pathname.includes('/files') && !url.pathname.includes('/messages')) {
+      res.writeHead(204);
+      res.end();
       return;
     }
     const wsDocMatch = url.pathname.match(/\/api\/v1\/workspaces\/([^/]+)\/documents\/([^/]+)$/);
@@ -1258,6 +1414,51 @@ const server = http.createServer((req, res) => {
         };
         workspacesState.push(newWs);
         jsonOk(res, { workspace: newWs });
+      });
+      return;
+    }
+    const wsDocCreate = pathname.match(/\/api\/v1\/workspaces\/([^/]+)\/documents$/);
+    if (wsDocCreate) {
+      const wid = decodeURIComponent(wsDocCreate[1]);
+      readBody(req).then((buf) => {
+        const body = JSON.parse(buf.toString('utf8') || '{}');
+        const id = `doc-${Date.now()}`;
+        workspaceDocsState.push({
+          id,
+          owner_user_id: 'fixture-user',
+          owner_id: 'fixture-user',
+          workspace_id: wid,
+          file_name: body.filename || 'upload.txt',
+          mime_type: body.mime_type || 'text/plain',
+          file_size: body.file_size || 1,
+          status: 'completed',
+          chunk_count: 1,
+          created_at: '2026-09-08T00:00:00Z',
+          updated_at: '2026-09-08T00:00:00Z',
+        });
+        jsonOk(res, {
+          document_id: id,
+          upload_url: `http://127.0.0.1:${PORT}/upload/${id}`,
+          status: 'pending',
+        });
+      });
+      return;
+    }
+    const sourceUrlMatch = pathname.match(/\/api\/v1\/workspaces\/([^/]+)\/sources\/url$/);
+    if (sourceUrlMatch) {
+      jsonOk(res, {
+        document_id: `doc-url-${Date.now()}`,
+        upload_url: '',
+        status: 'completed',
+      });
+      return;
+    }
+    const sourcePasteMatch = pathname.match(/\/api\/v1\/workspaces\/([^/]+)\/sources\/paste$/);
+    if (sourcePasteMatch) {
+      jsonOk(res, {
+        document_id: `doc-paste-${Date.now()}`,
+        upload_url: '',
+        status: 'completed',
       });
       return;
     }

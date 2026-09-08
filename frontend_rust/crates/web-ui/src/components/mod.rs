@@ -7,6 +7,8 @@ pub mod help;
 pub mod integrations;
 pub mod legal;
 pub mod marketing;
+pub mod notes;
 pub mod settings;
 pub mod share;
 pub mod shell;
+pub mod ui;
