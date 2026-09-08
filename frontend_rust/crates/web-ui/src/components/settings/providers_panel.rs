@@ -15,28 +15,28 @@ const FIXED_PROVIDER_ROWS: &[FixedProviderRow] = &[
     FixedProviderRow {
         id: "quick_chat",
         provider: "bailian",
-        label: "Quick Chat (百炼 · qwen3.8-flash)",
+        label: "providers.quickChatLabel",
         model_hint: "qwen3.8-flash",
         purpose: "quick_chat",
     },
     FixedProviderRow {
         id: "agent_llm",
         provider: "deepseek",
-        label: "Agent 主模型 (DeepSeek · deepseek-v4-flash)",
+        label: "providers.agentLabel",
         model_hint: "deepseek-v4-flash",
         purpose: "llm",
     },
     FixedProviderRow {
         id: "parse_llm",
         provider: "bailian",
-        label: "文档解析模型 (百炼 · qwen3.7-flash)",
+        label: "providers.parseLabel",
         model_hint: "qwen3.7-flash",
         purpose: "llm",
     },
     FixedProviderRow {
         id: "siliconflow",
         provider: "siliconflow",
-        label: "向量与重排 (SiliconFlow · BAAI/bge-m3)",
+        label: "providers.embeddingLabel",
         model_hint: "BAAI/bge-m3",
         purpose: "embedding",
     },
@@ -49,6 +49,7 @@ pub fn ProvidersPanel() -> impl IntoView {
     let secrets = RwSignal::new(Vec::<ProviderSecretRow>::new());
     let loading = RwSignal::new(false);
     let refresh_gen = RwSignal::new(0_u64);
+    let load_error = RwSignal::new(None::<String>);
 
     Effect::new(move |_| {
         let mut tok = token.get();
@@ -63,10 +64,12 @@ pub fn ProvidersPanel() -> impl IntoView {
         }
         let _ = refresh_gen.get();
         loading.set(true);
+        load_error.set(None);
         leptos::task::spawn_local(async move {
             let client = BrowserRestClient::new(&poc_api_base(), Some(tok));
-            if let Ok(resp) = client.list_provider_secrets().await {
-                secrets.set(resp.secrets);
+            match client.list_provider_secrets().await {
+                Ok(resp) => secrets.set(resp.secrets),
+                Err(err) => load_error.set(Some(tf_now("providers.loadFailed", &[("error", &err.to_string())]))),
             }
             loading.set(false);
         });
@@ -80,11 +83,15 @@ pub fn ProvidersPanel() -> impl IntoView {
                     {move || i18n.t("providers.subtitle")}
                 </p>
             </header>
+            {move || load_error.get().map(|message| view! {
+                <p role="alert" class="settings-error">{message}</p>
+                <button type="button" disabled=move || loading.get() on:click=move |_| refresh_gen.update(|n| *n += 1)>{move || i18n.t("payment.refresh")}</button>
+            })}
             <div class="settings-provider-list">
-                <ProviderRowItem row=&FIXED_PROVIDER_ROWS[0] secrets=secrets token=token refresh_gen=refresh_gen/>
-                <ProviderRowItem row=&FIXED_PROVIDER_ROWS[1] secrets=secrets token=token refresh_gen=refresh_gen/>
-                <ProviderRowItem row=&FIXED_PROVIDER_ROWS[2] secrets=secrets token=token refresh_gen=refresh_gen/>
-                <ProviderRowItem row=&FIXED_PROVIDER_ROWS[3] secrets=secrets token=token refresh_gen=refresh_gen/>
+                <ProviderRowItem row=&FIXED_PROVIDER_ROWS[0] secrets=secrets token=token busy=loading load_error=load_error/>
+                <ProviderRowItem row=&FIXED_PROVIDER_ROWS[1] secrets=secrets token=token busy=loading load_error=load_error/>
+                <ProviderRowItem row=&FIXED_PROVIDER_ROWS[2] secrets=secrets token=token busy=loading load_error=load_error/>
+                <ProviderRowItem row=&FIXED_PROVIDER_ROWS[3] secrets=secrets token=token busy=loading load_error=load_error/>
             </div>
         </section>
     }
@@ -95,11 +102,11 @@ fn ProviderRowItem(
     row: &'static FixedProviderRow,
     secrets: RwSignal<Vec<ProviderSecretRow>>,
     token: RwSignal<String>,
-    refresh_gen: RwSignal<u64>,
+    busy: RwSignal<bool>,
+    load_error: RwSignal<Option<String>>,
 ) -> impl IntoView {
     let input_ref = NodeRef::<leptos::html::Input>::new();
     let action_error = RwSignal::new(None::<String>);
-    let busy = RwSignal::new(false);
 
     let active_secret = Signal::derive(move || {
         secrets.with(|list| {
@@ -132,7 +139,7 @@ fn ProviderRowItem(
         } else {
             token.get_untracked()
         };
-        if tok.is_empty() || busy.get() {
+        if tok.is_empty() || busy.get() || load_error.get().is_some() {
             return;
         }
 
@@ -148,18 +155,10 @@ fn ProviderRowItem(
                     if let Some(el) = input_ref.get() {
                         el.set_value("");
                     }
-                    secrets.update(|list| {
-                        list.retain(|s| s.purpose != row.purpose);
-                        list.push(ProviderSecretRow {
-                            id: format!("local-sec-{}", row.id),
-                            purpose: row.purpose.to_string(),
-                            provider: row.provider.to_string(),
-                            model_hint: Some(row.model_hint.to_string()),
-                            is_active: Some(true),
-                            revoked_at: None,
-                        });
-                    });
-                    refresh_gen.update(|n| *n += 1);
+                    match client.list_provider_secrets().await {
+                        Ok(resp) => secrets.set(resp.secrets),
+                        Err(err) => load_error.set(Some(tf_now("providers.loadFailed", &[("error", &err.to_string())]))),
+                    }
                 }
                 Err(err) => {
                     action_error.set(Some(tf_now("providers.saveFailed", &[("error", &err.to_string())])));
@@ -177,7 +176,7 @@ fn ProviderRowItem(
         } else {
             token.get_untracked()
         };
-        if tok.is_empty() || busy.get() {
+        if tok.is_empty() || busy.get() || load_error.get().is_some() {
             return;
         }
 
@@ -188,9 +187,8 @@ fn ProviderRowItem(
             match client.revoke_provider_secret(&secret_id).await {
                 Ok(_) => {
                     secrets.update(|list| {
-                        list.retain(|s| s.id != secret_id && s.purpose != row.purpose);
+                        list.retain(|s| s.id != secret_id);
                     });
-                    refresh_gen.update(|n| *n += 1);
                 }
                 Err(err) => {
                     action_error.set(Some(tf_now("providers.revokeFailed", &[("error", &err.to_string())])));
@@ -204,7 +202,7 @@ fn ProviderRowItem(
     view! {
         <div class="settings-provider-row" data-testid=format!("provider-row-{}", row.id)>
             <div class="settings-provider-meta">
-                <span class="settings-provider-name">{row.label}</span>
+                <span class="settings-provider-name">{move || i18n.t(row.label)}</span>
                 <span class="settings-provider-model">{row.model_hint}</span>
             </div>
             <div class="settings-provider-action">
@@ -220,7 +218,7 @@ fn ProviderRowItem(
                                     type="button"
                                     class="settings-btn-revoke"
                                     data-testid=format!("revoke-{}", row.id)
-                                    disabled=move || busy.get()
+                                    disabled=move || busy.get() || load_error.get().is_some()
                                     on:click=move |_| on_revoke(sec_id.clone())
                                 >
                                     {move || i18n.t("providers.removeKey")}
@@ -242,7 +240,7 @@ fn ProviderRowItem(
                                     type="button"
                                     class="settings-btn-save"
                                     data-testid=format!("save-{}", row.id)
-                                    disabled=move || busy.get()
+                                    disabled=move || busy.get() || load_error.get().is_some()
                                     on:click=on_save
                                 >
                                     {move || i18n.t("commonSave")}

@@ -41,6 +41,7 @@ test.describe('工作区分享中心与子页面（E3.3）', () => {
     const copyBtn = page.getByTestId('copy-share-btn');
     await copyBtn.click();
     await expect(copyBtn).toHaveText('已复制！');
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(`${WEB_BASE}/shared/kb/tok-valid-123`);
 
     // 2. 访问审计日志子页面
     await gotoShare(page, '/dashboard/ws-materials/share/access-logs', 'poc-test-token');
@@ -101,14 +102,22 @@ test.describe('工作区邀请加入页面（E3.3）', () => {
     await gotoShare(page, '/invite/ws-materials/mem-99');
     await expect(page.getByTestId('invite-page')).toBeVisible();
     await expect(page.getByTestId('invite-login-btn')).toBeVisible();
+    await expect(page.getByTestId('invite-login-btn')).toHaveAttribute('href', '/login?next=/invite/ws-materials/mem-99');
 
     // 2. 已登录用户打开邀请链接并接受
     await gotoShare(page, '/invite/ws-materials/mem-99', 'poc-test-token');
+    let accepted = false;
+    await page.route('**/api/v1/workspaces/ws-materials/members/mem-99/accept', async route => {
+      expect(route.request().method()).toBe('POST');
+      accepted = true;
+      await route.fulfill({ json: { ok: true } });
+    });
     const acceptBtn = page.getByTestId('accept-invite-btn');
     await expect(acceptBtn).toBeVisible();
     await acceptBtn.click();
 
     await expect(page).toHaveURL(/\/dashboard\/ws-materials$/);
+    expect(accepted).toBe(true);
 
     expect(errors).toEqual([]);
   });

@@ -122,6 +122,8 @@ test.describe('设置页与自备密钥 BYOK 配置闭环（E3.1）', () => {
     await page.getByTestId('login-submit').click();
 
     await expect(page).toHaveURL(/\/settings$/);
+    await expect(page.getByTestId('profile-panel')).toBeVisible();
+    await page.getByTestId('tab-providers').click();
     await expect(page.getByTestId('providers-panel')).toBeVisible();
 
     // 1. 录入 Quick Chat 自备 API Key

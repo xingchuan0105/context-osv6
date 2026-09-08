@@ -15,7 +15,7 @@ pub fn SettingsPage() -> impl IntoView {
     let (tab_query, set_tab_query) = query_signal::<String>("tab");
 
     let current_tab = Signal::derive(move || {
-        tab_query.get().unwrap_or_else(|| "providers".to_string())
+        tab_query.get().unwrap_or_else(|| "profile".to_string())
     });
 
     let on_logout = {
@@ -142,7 +142,7 @@ pub fn SettingsPage() -> impl IntoView {
                             </section>
                         }
                         .into_any(),
-                        _ => view! { <ProvidersPanel/> }.into_any(),
+                        _ => view! { <ProfilePanel/> }.into_any(),
                     }
                 }}
             </main>
@@ -153,9 +153,12 @@ pub fn SettingsPage() -> impl IntoView {
 
 #[component]
 fn ProfilePanel() -> impl IntoView {
+    let token = expect_context::<RwSignal<String>>();
     let toaster = expect_context::<Toaster>();
     let i18n = use_i18n();
     let name = RwSignal::new(String::new());
+    let busy = RwSignal::new(false);
+    let error = RwSignal::new(None::<String>);
     Effect::new(move |_| {
         if let Some(auth) = web_sdk::read_browser_auth() {
             name.set(auth.user.full_name);
@@ -168,19 +171,45 @@ fn ProfilePanel() -> impl IntoView {
                 class="settings-form"
                 on:submit=move |ev| {
                     ev.prevent_default();
-                    toaster.push(t_now("settings.profileSaved"));
+                    if busy.get_untracked() { return; }
+                    let tok = token.get_untracked();
+                    let submitted_name = name.get_untracked().trim().to_string();
+                    busy.set(true);
+                    error.set(None);
+                    leptos::task::spawn_local(async move {
+                        let client = web_sdk::BrowserRestClient::new(&crate::api_base::poc_api_base(), Some(tok.clone()));
+                        // The endpoint replaces profile fields; read current values so a name edit
+                        // does not erase the user's biography or public-profile preferences.
+                        let result = async {
+                            let mut profile = client.get_profile().await?;
+                            profile.full_name = submitted_name;
+                            client.update_profile(&profile).await
+                        }.await;
+                        match result {
+                            Ok(user) => {
+                                name.set(user.full_name.clone());
+                                web_sdk::write_browser_auth(&web_sdk::PersistedAuth { token: tok, user });
+                                toaster.push(t_now("settings.profileSaved"));
+                            }
+                            Err(err) => error.set(Some(i18n.tf("settings.profileSaveFailed", &[("error", &err.to_string())]))),
+                        }
+                        busy.set(false);
+                    });
                 }
             >
                 <label>
                     {move || i18n.t("settings.profile.nameLabel")}
                     <input
                         type="text"
+                        maxlength="120"
+                        disabled=move || busy.get()
                         data-testid="profile-name"
                         prop:value=move || name.get()
                         on:input=move |ev| name.set(event_target_value(&ev))
                     />
                 </label>
-                <button type="submit" data-testid="profile-save">{move || i18n.t("settings.profile.saveAction")}</button>
+                <button type="submit" disabled=move || busy.get() data-testid="profile-save">{move || i18n.t("settings.profile.saveAction")}</button>
+                {move || error.get().map(|message| view! { <p role="alert" class="settings-error">{message}</p> })}
             </form>
         </section>
     }

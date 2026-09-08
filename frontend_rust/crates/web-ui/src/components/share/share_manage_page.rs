@@ -13,6 +13,7 @@ struct ShareParams {
 
 #[component]
 pub fn WorkspaceSharePage() -> impl IntoView {
+    let i18n = crate::i18n::use_i18n();
     let token = expect_context::<RwSignal<String>>();
     let params = use_params::<ShareParams>();
     let workspace_id = Signal::derive(move || {
@@ -29,6 +30,15 @@ pub fn WorkspaceSharePage() -> impl IntoView {
     let error = RwSignal::new(None::<String>);
     let copied = RwSignal::new(false);
     let busy = RwSignal::new(false);
+    let origin = RwSignal::new(String::new());
+    Effect::new(move |_| {
+        #[cfg(target_arch = "wasm32")]
+        if let Some(window) = web_sys::window() {
+            if let Ok(value) = window.location().origin() { origin.set(value); }
+        }
+        let _ = current_token.get();
+        copied.set(false);
+    });
 
     Effect::new(move |_| {
         let wid = workspace_id.get();
@@ -108,12 +118,21 @@ pub fn WorkspaceSharePage() -> impl IntoView {
         let Some(tok) = current_token.get_untracked() else {
             return;
         };
-        let _link = format!("/shared/kb/{tok}");
+        let _link = format!("{}/shared/kb/{tok}", origin.get_untracked());
+        copied.set(false);
+        error.set(None);
         #[cfg(target_arch = "wasm32")]
         if let Some(w) = web_sys::window() {
-            let _ = w.navigator().clipboard().write_text(&_link);
+            let promise = w.navigator().clipboard().write_text(&_link);
+            leptos::task::spawn_local(async move {
+                let result = wasm_bindgen_futures::JsFuture::from(promise).await;
+                if current_token.get_untracked().as_deref() != Some(tok.as_str()) { return; }
+                match result {
+                    Ok(_) => copied.set(true),
+                    Err(_) => error.set(Some(i18n.t("share.copyFailed"))),
+                }
+            });
         }
-        copied.set(true);
     };
 
     view! {
@@ -151,14 +170,14 @@ pub fn WorkspaceSharePage() -> impl IntoView {
                             view! {
                                 <div class="share-active-box" data-testid="share-active-box">
                                     <div class="share-link-row">
-                                        <span class="share-link-text">{format!("/shared/kb/{tok}")}</span>
+                                        <span class="share-link-text" data-testid="share-url">{format!("{}/shared/kb/{tok}", origin.get())}</span>
                                         <button
                                             type="button"
                                             class="dashboard-btn-confirm"
                                             data-testid="copy-share-btn"
                                             on:click=on_copy_link
                                         >
-                                            {move || if copied.get() { "已复制！" } else { "复制链接" }}
+                                            {move || i18n.t(if copied.get() { "share.copied" } else { "share.copy" })}
                                         </button>
                                     </div>
                                     <button
@@ -190,6 +209,7 @@ pub fn WorkspaceSharePage() -> impl IntoView {
                             .into_any()
                         }
                     }}
+                    {move || error.get().map(|message| view! { <p role="alert" class="settings-error" data-testid="share-error">{message}</p> })}
                 </section>
             </main>
         </div>

@@ -28,6 +28,60 @@ impl BrowserRestClient {
             auth_token,
         }
     }
+
+    pub async fn get_profile(&self) -> Result<crate::auth::AuthUser, TransportError> {
+        let body = self.get_bytes(&crate::auth::auth_me_url(&self.base_url)).await?;
+        crate::auth::parse_auth_me_json(&body)
+            .ok_or_else(|| TransportError::Framing("invalid profile response".into()))
+    }
+
+    pub async fn update_profile(
+        &self,
+        profile: &crate::auth::AuthUser,
+    ) -> Result<crate::auth::AuthUser, TransportError> {
+        #[cfg(target_arch = "wasm32")]
+        {
+            let body = serde_json::to_vec(&serde_json::json!({
+                "full_name": profile.full_name,
+                "bio": profile.bio,
+                "contact_url": profile.contact_url,
+                "public_profile_enabled": profile.public_profile_enabled,
+            }))?;
+            let response = wasm_request::request_bytes(
+                self, "PUT", &format!("{}/api/auth/profile", self.base_url),
+                Some(&body), Some("application/json"), true,
+            ).await?;
+            crate::auth::parse_auth_me_json(&response)
+                .ok_or_else(|| TransportError::Framing("invalid profile response".into()))
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let _ = profile;
+            self.unavailable()
+        }
+    }
+
+    pub async fn accept_workspace_invite(
+        &self,
+        workspace_id: &str,
+        member_id: &str,
+    ) -> Result<(), TransportError> {
+        #[cfg(target_arch = "wasm32")]
+        {
+            let wid = crate::conversation_api::encode_path_segment(workspace_id);
+            let mid = crate::conversation_api::encode_path_segment(member_id);
+            wasm_request::request_bytes(
+                self, "POST", &format!("{}/api/v1/workspaces/{wid}/members/{mid}/accept", self.base_url),
+                None, None, true,
+            ).await?;
+            Ok(())
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let _ = (workspace_id, member_id);
+            self.unavailable()
+        }
+    }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
