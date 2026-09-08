@@ -747,7 +747,7 @@ test.describe('Chat 呈现（E5.3 / G5.3）', () => {
     await page.getByTestId('web-sources-button').first().click();
     await expect(page.getByTestId('workspace-web-sources-modal')).toBeVisible();
     await expect(page.getByTestId('workspace-web-sources-list')).toContainText('example.com/alloy');
-    await page.getByTestId('web-sources-close').click();
+    await page.getByTestId('workspace-web-sources-modal').getByTestId('dialog-close').click();
     await expect(page.getByTestId('workspace-web-sources-modal')).toHaveCount(0);
 
     await page.getByTestId('edit-user-message').click();

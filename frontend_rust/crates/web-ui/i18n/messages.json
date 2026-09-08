@@ -1,4 +1,43 @@
 {
+  "common.unknown": {"en":"Unknown","zh":"未知"},
+  "common.loading": {"en":"Loading…","zh":"加载中…"},
+  "common.saving": {"en":"Saving…","zh":"正在处理…"},
+  "common.retry": {"en":"Retry","zh":"重试"},
+  "pricing.currentPlan": {"en":"Current plan","zh":"当前会员"},
+  "pricing.freePlan": {"en":"Free plan","zh":"免费方案"},
+  "pricing.subscribe": {"en":"Buy membership","zh":"购买会员"},
+  "pricing.catalogFailed": {"en":"Plans could not be loaded. Retry to see current prices.","zh":"会员方案加载失败，请重试查看当前价格。"},
+  "workbench.sourceUnavailable": {"en":"This document is not available in the current workspace.","zh":"当前工作区中找不到这份资料。"},
+  "workbench.previewTitle": {"en":"Document content","zh":"资料内容"},
+  "workbench.chooseFile": {"en":"Choose a file first.","zh":"请先选择文件。"},
+  "workbench.readFailed": {"en":"The file could not be read. Select it again to retry.","zh":"文件读取失败，请重新选择后重试。"},
+  "analytics.incomplete": {"en":"Some workspace statistics could not be loaded. Totals are unavailable until a successful retry.","zh":"部分工作区统计加载失败，暂不显示合计，请重试。"},
+  "analytics.visitorsSum": {"en":"Sum of workspace UV (not deduplicated across workspaces)","zh":"各工作区 UV 合计（跨库未去重）"},
+  "analytics.countedWorkspaces": {"en":"Workspaces included","zh":"已统计工作区"},
+  "share.backWorkbench": {"en":"← Back to workspace","zh":"← 返回工作台"},
+  "share.centerTitle": {"en":"Workspace sharing","zh":"工作区公开分享中心"},
+  "share.navLabel": {"en":"Sharing navigation","zh":"分享导航"},
+  "share.linkSettings": {"en":"Share link settings","zh":"分享链接设置"},
+  "share.logsTitle": {"en":"Access logs","zh":"访问审计日志"},
+  "share.analyticsNav": {"en":"Engagement and traffic","zh":"互动与流量分析"},
+  "share.readOnly": {"en":"Read-only public sharing","zh":"只读公开分享"},
+  "share.readOnlyBody": {"en":"Visitors can read and ask questions about shared documents. They cannot edit documents or access other workspaces.","zh":"生成公开链接后，访客可以阅读分享资料并提问，无法修改资料或访问其他工作区。"},
+  "share.revoke": {"en":"Stop sharing","zh":"关闭公开分享"},
+  "share.create": {"en":"Create public link","zh":"生成公开分享链接"},
+  "share.backCenter": {"en":"← Back to sharing","zh":"← 返回分享中心"},
+  "share.analyticsTitle": {"en":"Sharing analytics","zh":"分享互动分析"},
+  "share.visitor": {"en":"Visitor: {id}","zh":"访客：{id}"},
+  "share.logsEmpty": {"en":"No access records yet.","zh":"暂无访问记录。"},
+  "share.unavailable": {"en":"Share unavailable","zh":"分享不可用"},
+  "share.unavailableBody": {"en":"The share may have expired, or it could not be loaded. Retry or contact its owner.","zh":"分享可能已失效，或暂时无法加载。可重试或联系分享者。"},
+  "share.signIn": {"en":"Sign in","zh":"返回首页登录"},
+  "share.publicKnowledge": {"en":"Public knowledge base","zh":"公开知识库"},
+  "share.owner": {"en":"Shared by","zh":"分享者"},
+  "share.sources": {"en":"Included documents (read-only)","zh":"包含资料（只读）"},
+  "share.profilePrivate": {"en":"Profile is private","zh":"主页未公开"},
+  "share.profilePrivateBody": {"en":"This user has not enabled a public profile.","zh":"该用户尚未开启公开主页展示。"},
+  "share.publicUser": {"en":"Public user","zh":"公开用户"},
+  "share.noBio": {"en":"No biography yet.","zh":"暂无个人简介"},
   "chat.personalDirect": { "en": "Quick chat", "zh": "快速聊天" },
   "chat.personalSearch": { "en": "Quick chat with web search", "zh": "快速聊天 · 联网搜索" },
   "chat.workspaceEmpty": { "en": "No workspace documents are ready for retrieval.", "zh": "工作区还没有可检索的就绪资料。" },
@@ -2932,24 +2971,24 @@
     "zh": "用量信息"
   },
   "pricing.agreeLabel": {
-    "en": "I have read and agree to the terms and top-up notes",
-    "zh": "我已阅读并同意用户服务协议与充值说明"
+    "en": "I have read and agree to the terms of service and payment terms",
+    "zh": "我已阅读并同意用户服务协议与付款说明"
   },
   "pricing.agreeRequired": {
     "en": "Accept the terms before topping up.",
     "zh": "请先同意服务条款后再充值。"
   },
   "pricing.alipayButton": {
-    "en": "Alipay (sandbox / test)",
-    "zh": "支付宝 (Alipay 沙箱/测试)"
+    "en": "Alipay",
+    "zh": "支付宝"
   },
   "pricing.checkoutFailed": {
     "en": "Could not create checkout: {error}",
     "zh": "创建结账会话失败：{error}"
   },
   "pricing.creemButton": {
-    "en": "Creem (intl cards / test)",
-    "zh": "Creem (国际卡/测试)"
+    "en": "Creem (international cards)",
+    "zh": "Creem（国际卡）"
   },
   "pricing.fallbackFreeDesc": {
     "en": "Personal Q&A and a light start",
@@ -2996,16 +3035,16 @@
     "zh": "请先登录后进行充值"
   },
   "pricing.payDialog": {
-    "en": "Scan to pay",
-    "zh": "扫码支付"
+    "en": "Complete payment",
+    "zh": "完成付款"
   },
   "pricing.payHint": {
     "en": "Complete payment with the selected method.",
     "zh": "请使用所选支付方式完成付款。"
   },
   "pricing.payLink": {
-    "en": "Open the payment gateway (test) →",
-    "zh": "点击前往支付网关（测试模式）→"
+    "en": "Open payment page →",
+    "zh": "前往付款页面 →"
   },
   "pricing.plansFallback": {
     "en": "Plans are temporarily unavailable. Showing product copy.",

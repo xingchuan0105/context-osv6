@@ -71,7 +71,8 @@ test.describe('公开知识库与分享者主页（E3.3）', () => {
     // 2. 失效 Token 访问
     await gotoShare(page, '/shared/kb/tok-expired');
     await expect(page.getByTestId('share-expired')).toBeVisible();
-    await expect(page.getByTestId('share-expired')).toContainText('已失效或不存在');
+    await expect(page.getByTestId('share-expired')).toContainText('分享可能已失效，或暂时无法加载');
+    await expect(page.getByTestId('share-expired').getByRole('button', { name: '重试' })).toBeVisible();
 
     expect(errors).toEqual([]);
   });

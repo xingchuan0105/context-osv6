@@ -1275,25 +1275,9 @@ fn web_sources_dialog(
     let count_s = sources.len().to_string();
     let heading = i18n.tf("chat.webSources", &[("count", count_s.as_str())]);
     view! {
-        <div class="chat-web-sources-backdrop">
-            <div
-                class="chat-web-sources-dialog"
-                role="dialog"
-                aria-label=move || i18n.t("chat.webSourcesLabel")
-                data-testid="workspace-web-sources-modal"
-            >
-                <header>
-                    <h2>{heading}</h2>
-                    <button
-                        type="button"
-                        class="chat-action-button"
-                        data-testid="web-sources-close"
-                        on:click=move |_| open.set(false)
-                    >
-                        {move || use_i18n().t("appModal.close")}
-                    </button>
-                </header>
-                <ul data-testid="workspace-web-sources-list">
+        <crate::components::ui::AppDialog open=Signal::derive(move || open.get()) title_key="chat.webSourcesLabel" test_id="workspace-web-sources-modal" on_close=Callback::new(move |_| open.set(false))>
+                <p>{heading}</p>
+                <ul class="chat-web-source-list" data-testid="workspace-web-sources-list">
                     {sources
                         .into_iter()
                         .map(|(title, url, snippet)| {
@@ -1310,8 +1294,7 @@ fn web_sources_dialog(
                         })
                         .collect_view()}
                 </ul>
-            </div>
-        </div>
+        </crate::components::ui::AppDialog>
     }
 }
 

@@ -870,41 +870,7 @@
     background: var(--cos-bg-secondary);
 }
 
-.chat-web-sources-backdrop {
-    position: fixed;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: hsl(var(--foreground) / 0.28);
-    z-index: var(--z-modal);
-}
-
-.chat-web-sources-dialog {
-    width: min(32rem, calc(100vw - 2rem));
-    max-height: min(32rem, calc(100vh - 4rem));
-    overflow: auto;
-    background: var(--cos-surface);
-    border: 1px solid var(--cos-border);
-    border-radius: var(--cos-radius-md);
-    padding: 1rem;
-    animation: cos-modal-enter var(--duration-slow) var(--ease-standard);
-}
-
-.chat-web-sources-dialog header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-    margin-bottom: 0.75rem;
-}
-
-.chat-web-sources-dialog h2 {
-    margin: 0;
-    font-size: 1rem;
-}
-
-.chat-web-sources-dialog ul {
+.chat-web-source-list {
     list-style: none;
     margin: 0;
     padding: 0;
@@ -981,4 +947,3 @@
     margin: 0 auto;
     padding: 3rem 1rem;
 }
-

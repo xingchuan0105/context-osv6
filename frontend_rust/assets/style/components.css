@@ -186,7 +186,6 @@ select {
 .mkt-lang-btn:hover,
 .pub-btn:hover,
 .app-notify-item-btn:hover,
-.dashboard-modal-close:hover,
 .admin-table-danger:hover,
 .chat-cite-card:hover,
 .chat-file-item:hover,
@@ -345,7 +344,6 @@ summary:hover {
 .app-notify-item-btn:focus-visible,
 .rail-doc-delete:focus-visible,
 .rail-note-delete:focus-visible,
-.dashboard-modal-close:focus-visible,
 .admin-table-danger:focus-visible {
     outline: none;
     box-shadow: var(--shadow-focus-ring);
@@ -392,7 +390,6 @@ select:focus-visible {
 .admin-pager-btn:active:not(:disabled),
 .pub-btn:active:not(:disabled),
 .mkt-nav-enter:active,
-.dashboard-modal-close:active,
 .admin-table-danger:active {
     transform: translateY(1px);
 }
@@ -426,17 +423,9 @@ select:focus-visible {
     background: var(--cos-surface-hover);
 }
 
-.app-dialog-backdrop {
-    position: fixed;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: hsl(var(--foreground) / 0.28);
-    z-index: var(--z-modal);
-}
-
 .app-dialog {
+    margin: auto;
+    color: var(--cos-text);
     width: min(32rem, calc(100vw - 2rem));
     max-height: min(36rem, calc(100vh - 4rem));
     overflow: auto;
@@ -445,6 +434,16 @@ select:focus-visible {
     border-radius: var(--cos-radius-md);
     padding: 1rem;
     animation: cos-modal-enter var(--duration-slow) var(--ease-standard);
+}
+
+dialog.app-dialog::backdrop {
+    background: hsl(var(--foreground) / 0.28);
+}
+
+.source-preview-text {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font: inherit;
 }
 
 .app-dialog-header {

@@ -9,6 +9,7 @@ pub fn AccountMenu() -> impl IntoView {
     let token = expect_context::<RwSignal<String>>();
     let i18n = use_i18n();
     let open = RwSignal::new(false);
+    let trigger = NodeRef::<leptos::html::Button>::new();
     let show_admin = RwSignal::new(false);
     let flyout = RwSignal::new(None::<&'static str>);
 
@@ -34,11 +35,17 @@ pub fn AccountMenu() -> impl IntoView {
     };
 
     view! {
-        <div class="app-menu">
+        <div class="app-menu" on:keydown=move |event: leptos::ev::KeyboardEvent| {
+            if event.key() == "Escape" && open.get_untracked() {
+                event.prevent_default(); open.set(false);
+                #[cfg(target_arch = "wasm32")]
+                if let Some(button) = trigger.get_untracked() { let _ = button.focus(); }
+            }
+        }>
             <button
                 type="button"
                 class="app-top-bar-capsule"
-                aria-haspopup="menu"
+                node_ref=trigger
                 aria-expanded=move || open.get()
                 aria-label=move || i18n.t("dashboardAccountLink")
                 data-testid="dashboard-account-menu-trigger"
@@ -57,13 +64,14 @@ pub fn AccountMenu() -> impl IntoView {
                 <button
                     type="button"
                     class="app-menu-dismiss"
+                    tabindex="-1"
                     aria-label=move || i18n.t("commonMenuClose")
                     on:click=move |_| {
                         open.set(false);
                         flyout.set(None);
                     }
                 />
-                <div class="app-menu-panel" role="menu" data-testid="dashboard-account-menu">
+                <div class="app-menu-panel"  data-testid="dashboard-account-menu">
                     {move || {
                         let signed_in = !token.get().is_empty() || read_browser_auth().is_some();
                         let auth = read_browser_auth();
@@ -94,7 +102,7 @@ pub fn AccountMenu() -> impl IntoView {
                             <a
                                 class="app-menu-item"
                                 href=dest::PRICING
-                                role="menuitem"
+
                                 data-testid="account-membership-cta"
                                 on:click=move |_| open.set(false)
                             >
@@ -103,7 +111,7 @@ pub fn AccountMenu() -> impl IntoView {
                             <a
                                 class="app-menu-item"
                                 href=dest::SETTINGS
-                                role="menuitem"
+
                                 data-testid="account-settings-link"
                                 on:click=move |_| open.set(false)
                             >
@@ -112,7 +120,7 @@ pub fn AccountMenu() -> impl IntoView {
                             <a
                                 class="app-menu-item"
                                 href=dest::HELP
-                                role="menuitem"
+
                                 data-testid="account-help-link"
                                 on:click=move |_| open.set(false)
                             >
@@ -122,7 +130,7 @@ pub fn AccountMenu() -> impl IntoView {
                                 <a
                                     class="app-menu-item"
                                     href="/admin"
-                                    role="menuitem"
+
                                     data-testid="account-admin-link"
                                     on:click=move |_| open.set(false)
                                 >
@@ -132,8 +140,8 @@ pub fn AccountMenu() -> impl IntoView {
                             <button
                                 type="button"
                                 class="app-menu-item"
-                                role="menuitem"
-                                data-testid="account-theme-toggle"
+
+                                data-testid="account-theme-toggle" aria-expanded=move || flyout.get() == Some("theme")
                                 on:click=move |_| {
                                     flyout.update(|current| {
                                         *current = if *current == Some("theme") { None } else { Some("theme") };
@@ -143,7 +151,7 @@ pub fn AccountMenu() -> impl IntoView {
                                 {move || format!("{} ▸", i18n.t("settings.appearance.themeLabel"))}
                             </button>
                             <Show when=move || flyout.get() == Some("theme")>
-                                <div class="app-menu-flyout" role="menu" data-testid="account-theme-menu">
+                                <div class="app-menu-flyout"  data-testid="account-theme-menu">
                                     <button
                                         type="button"
                                         class="app-menu-item"
@@ -151,6 +159,9 @@ pub fn AccountMenu() -> impl IntoView {
                                         on:click=move |_| {
                                             i18n.set_theme(UiTheme::System);
                                             flyout.set(None);
+                                            open.set(false);
+                                            #[cfg(target_arch = "wasm32")]
+                                            if let Some(button) = trigger.get_untracked() { let _ = button.focus(); }
                                         }
                                     >
                                         {move || theme_item(i18n, UiTheme::System, "settings.appearance.theme.system")}
@@ -162,6 +173,9 @@ pub fn AccountMenu() -> impl IntoView {
                                         on:click=move |_| {
                                             i18n.set_theme(UiTheme::Light);
                                             flyout.set(None);
+                                            open.set(false);
+                                            #[cfg(target_arch = "wasm32")]
+                                            if let Some(button) = trigger.get_untracked() { let _ = button.focus(); }
                                         }
                                     >
                                         {move || theme_item(i18n, UiTheme::Light, "settings.appearance.theme.light")}
@@ -173,6 +187,9 @@ pub fn AccountMenu() -> impl IntoView {
                                         on:click=move |_| {
                                             i18n.set_theme(UiTheme::Dark);
                                             flyout.set(None);
+                                            open.set(false);
+                                            #[cfg(target_arch = "wasm32")]
+                                            if let Some(button) = trigger.get_untracked() { let _ = button.focus(); }
                                         }
                                     >
                                         {move || theme_item(i18n, UiTheme::Dark, "settings.appearance.theme.dark")}
@@ -182,8 +199,8 @@ pub fn AccountMenu() -> impl IntoView {
                             <button
                                 type="button"
                                 class="app-menu-item"
-                                role="menuitem"
-                                data-testid="account-locale-toggle"
+
+                                data-testid="account-locale-toggle" aria-expanded=move || flyout.get() == Some("locale")
                                 on:click=move |_| {
                                     flyout.update(|current| {
                                         *current = if *current == Some("locale") { None } else { Some("locale") };
@@ -193,7 +210,7 @@ pub fn AccountMenu() -> impl IntoView {
                                 {move || format!("{} ▸", i18n.t("settings.appearance.localeLabel"))}
                             </button>
                             <Show when=move || flyout.get() == Some("locale")>
-                                <div class="app-menu-flyout" role="menu" data-testid="account-locale-menu">
+                                <div class="app-menu-flyout"  data-testid="account-locale-menu">
                                     <button
                                         type="button"
                                         class="app-menu-item"
@@ -201,6 +218,9 @@ pub fn AccountMenu() -> impl IntoView {
                                         on:click=move |_| {
                                             i18n.set_locale(UiLocale::ZhCn);
                                             flyout.set(None);
+                                            open.set(false);
+                                            #[cfg(target_arch = "wasm32")]
+                                            if let Some(button) = trigger.get_untracked() { let _ = button.focus(); }
                                         }
                                     >
                                         {move || locale_item(i18n, UiLocale::ZhCn, "workspaceLanguageChinese")}
@@ -212,6 +232,9 @@ pub fn AccountMenu() -> impl IntoView {
                                         on:click=move |_| {
                                             i18n.set_locale(UiLocale::En);
                                             flyout.set(None);
+                                            open.set(false);
+                                            #[cfg(target_arch = "wasm32")]
+                                            if let Some(button) = trigger.get_untracked() { let _ = button.focus(); }
                                         }
                                     >
                                         {move || locale_item(i18n, UiLocale::En, "workspaceLanguageEnglish")}
@@ -222,7 +245,7 @@ pub fn AccountMenu() -> impl IntoView {
                                 <button
                                     type="button"
                                     class="app-menu-item"
-                                    role="menuitem"
+
                                     data-testid="account-logout"
                                     on:click=move |_| {
                                         clear_browser_auth();
@@ -242,7 +265,7 @@ pub fn AccountMenu() -> impl IntoView {
                                 <a
                                     class="app-menu-item"
                                     href="/login"
-                                    role="menuitem"
+
                                     data-testid="account-login-link"
                                     on:click=move |_| open.set(false)
                                 >

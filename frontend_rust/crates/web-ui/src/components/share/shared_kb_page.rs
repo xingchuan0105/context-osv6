@@ -13,6 +13,8 @@ struct SharedKbParams {
 
 #[component]
 pub fn SharedKbPage() -> impl IntoView {
+    let i18n = crate::i18n::use_i18n();
+    let retry = RwSignal::new(0_u64);
     let params = use_params::<SharedKbParams>();
     let token = Signal::derive(move || {
         params
@@ -29,6 +31,7 @@ pub fn SharedKbPage() -> impl IntoView {
     let challenge = super::turnstile::ShareChallenge::new();
 
     Effect::new(move |_| {
+        let _ = retry.get();
         let tok = token.get();
         if tok.is_empty() {
             return;
@@ -55,11 +58,13 @@ pub fn SharedKbPage() -> impl IntoView {
 
     view! {
         <div class="shared-kb-shell" data-testid="shared-kb-page">
+            <p role="status" hidden=move || !loading.get()>{move || i18n.t("common.loading")}</p>
             <Show when=move || error.get().is_some()>
                 <div class="shared-kb-error-box" role="alert" data-testid="share-expired">
-                    <h2>"分享不可用"</h2>
-                    <p>"该知识库分享链接已失效或不存在。"</p>
-                    <a href="/login" class="dashboard-chat-link">"返回首页登录"</a>
+                    <h2>{move || i18n.t("share.unavailable")}</h2>
+                    <p>{move || i18n.t("share.unavailableBody")}</p><p>{move || error.get()}</p>
+                    <button type="button" on:click=move |_| retry.update(|n| *n += 1)>{move || i18n.t("common.retry")}</button>
+                    <a href="/login" class="dashboard-chat-link">{move || i18n.t("share.signIn")}</a>
                 </div>
             </Show>
 
@@ -72,14 +77,14 @@ pub fn SharedKbPage() -> impl IntoView {
                         view! {
                             <header class="shared-kb-header" data-testid="shared-kb-header">
                                 <div class="shared-kb-meta">
-                                    <span class="shared-kb-badge">"公开知识库"</span>
+                                    <span class="shared-kb-badge">{move || i18n.t("share.publicKnowledge")}</span>
                                     <h1 class="shared-kb-title">{kb.title}</h1>
                                     <p class="shared-kb-desc">{kb.description.unwrap_or_default()}</p>
                                 </div>
                                 {owner.map(|o| {
                                     view! {
                                         <div class="shared-owner-card" data-testid="owner-card">
-                                            <span class="shared-owner-label">"分享者"</span>
+                                            <span class="shared-owner-label">{move || i18n.t("share.owner")}</span>
                                             <span class="shared-owner-name">{o.display_name}</span>
                                             {o.bio.map(|bio| view! { <p class="shared-owner-bio">{bio}</p> })}
                                         </div>
@@ -89,7 +94,7 @@ pub fn SharedKbPage() -> impl IntoView {
 
                             <div class="shared-kb-body">
                                 <aside class="shared-kb-sources">
-                                    <h3>"包含资料 (只读)"</h3>
+                                    <h3>{move || i18n.t("share.sources")}</h3>
                                     <ul class="shared-source-list">
                                         {sources.into_iter().map(|s| {
                                             view! {

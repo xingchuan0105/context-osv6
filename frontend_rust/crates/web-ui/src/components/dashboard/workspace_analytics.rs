@@ -57,7 +57,9 @@ pub fn GlobalAnalyticsPage() -> impl IntoView {
     let loading = RwSignal::new(true);
     let error = RwSignal::new(None::<String>);
 
+    let retry = RwSignal::new(0_u64);
     Effect::new(move |_| {
+        let generation = retry.get();
         let tok = if token.get().is_empty() {
             web_sdk::read_browser_auth().map(|a| a.token).unwrap_or_default()
         } else {
@@ -79,6 +81,8 @@ pub fn GlobalAnalyticsPage() -> impl IntoView {
                         let analytics = client.get_share_analytics(&workspace.id).await.ok();
                         collected.push((workspace, analytics));
                     }
+                    if retry.try_get_untracked() != Some(generation) { return; }
+                    if collected.iter().any(|(_, result)| result.is_none()) { error.set(Some(t_now("analytics.incomplete"))); }
                     rows.set(collected);
                     loading.set(false);
                 }
@@ -115,6 +119,7 @@ pub fn GlobalAnalyticsPage() -> impl IntoView {
                     <h1 class="dashboard-title">{move || i18n.t("analytics.globalTitle")}</h1>
                 </div>
             </header>
+            <button type="button" hidden=move || error.get().is_none() on:click=move |_| retry.update(|n| *n += 1)>{move || i18n.t("common.retry")}</button>
             <PageStatus
                 loading=Signal::derive(move || loading.get())
                 error=Signal::derive(move || error.get())
@@ -131,13 +136,13 @@ pub fn GlobalAnalyticsPage() -> impl IntoView {
                             </span>
                         </div>
                         <div class="settings-usage-card">
-                            <span class="settings-usage-label">{move || i18n.t("analytics.visitors")}</span>
+                            <span class="settings-usage-label">{move || i18n.t("analytics.visitorsSum")}</span>
                             <span class="settings-usage-value" data-testid="analytics-visitors">
                                 {move || totals.get().1.to_string()}
                             </span>
                         </div>
                         <div class="settings-usage-card">
-                            <span class="settings-usage-label">{move || i18n.t("analytics.sharedWorkspaces")}</span>
+                            <span class="settings-usage-label">{move || i18n.t("analytics.countedWorkspaces")}</span>
                             <span class="settings-usage-value">
                                 {move || {
                                     rows.get()

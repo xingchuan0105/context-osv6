@@ -72,7 +72,8 @@ test.describe('工作区工作台控制台与持久资料/笔记（E3.2）', () 
     // 2. 验证持久文件列表与删除操作
     const docItem = page.getByTestId('workspace-doc-item').filter({ hasText: 'titanium-spec.pdf' });
     await expect(docItem).toBeVisible({ timeout: 15_000 });
-    await expect(docItem).toContainText('completed');
+    await expect(docItem).toHaveAttribute('data-status', 'completed');
+    await expect(docItem).toContainText('就绪');
 
     await docItem.getByTestId('delete-doc-btn').click();
     await expect(page.getByTestId('workspace-doc-item')).toHaveCount(0, { timeout: 15_000 });

@@ -6,12 +6,19 @@ use leptos::prelude::*;
 pub fn ShareAccessMenu() -> impl IntoView {
     let i18n = use_i18n();
     let open = RwSignal::new(false);
+    let trigger = NodeRef::<leptos::html::Button>::new();
     view! {
-        <div class="app-menu">
+        <div class="app-menu" on:keydown=move |event: leptos::ev::KeyboardEvent| {
+            if event.key() == "Escape" && open.get_untracked() {
+                event.prevent_default(); open.set(false);
+                #[cfg(target_arch = "wasm32")]
+                if let Some(button) = trigger.get_untracked() { let _ = button.focus(); }
+            }
+        }>
             <button
                 type="button"
                 class="app-top-bar-capsule"
-                aria-haspopup="menu"
+                node_ref=trigger
                 aria-expanded=move || open.get()
                 data-testid="app-topbar-share-menu"
                 on:click=move |_| open.update(|v| *v = !*v)
@@ -22,14 +29,15 @@ pub fn ShareAccessMenu() -> impl IntoView {
                 <button
                     type="button"
                     class="app-menu-dismiss"
+                    tabindex="-1"
                     aria-label=move || i18n.t("commonMenuClose")
                     on:click=move |_| open.set(false)
                 />
-                <div class="app-menu-panel" role="menu" data-testid="app-topbar-share-menu-panel">
+                <div class="app-menu-panel"  data-testid="app-topbar-share-menu-panel">
                     <a
                         class="app-menu-item"
                         href=dest::SHARE_TRAFFIC
-                        role="menuitem"
+
                         data-testid="app-topbar-share-traffic"
                         on:click=move |_| open.set(false)
                     >
@@ -38,7 +46,7 @@ pub fn ShareAccessMenu() -> impl IntoView {
                     <a
                         class="app-menu-item"
                         href=dest::API_ACCESS
-                        role="menuitem"
+
                         data-testid="app-topbar-share-api"
                         on:click=move |_| open.set(false)
                     >
@@ -47,7 +55,7 @@ pub fn ShareAccessMenu() -> impl IntoView {
                     <a
                         class="app-menu-item"
                         href=dest::PRICING
-                        role="menuitem"
+
                         data-testid="app-topbar-share-upgrade"
                         on:click=move |_| open.set(false)
                     >

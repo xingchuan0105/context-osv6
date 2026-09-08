@@ -124,21 +124,7 @@ pub fn DashboardOverviewPage() -> impl IntoView {
                 </div>
             </header>
 
-            <div
-                class="dashboard-modal-backdrop"
-                hidden=move || !show_create.get()
-            >
-                <div class="dashboard-modal" role="dialog" aria-label=move || i18n.t("workspaceCreateDialogLabel")>
-                    <header class="dashboard-modal-header">
-                        <h2>{move || i18n.t("workspaceCreateDialogLabel")}</h2>
-                        <button
-                            type="button"
-                            class="dashboard-modal-close"
-                            on:click=move |_| show_create.set(false)
-                        >
-                            "×"
-                        </button>
-                    </header>
+            <AppDialog open=Signal::derive(move || show_create.get()) title_key="workspaceCreateDialogLabel" test_id="create-workspace-dialog" on_close=Callback::new(move |_| show_create.set(false))>
                     <form on:submit=on_create class="dashboard-modal-form">
                         <div class="auth-field">
                             <label for="ws-name">{move || i18n.t("dashboard.workspaceName")}</label>
@@ -187,8 +173,7 @@ pub fn DashboardOverviewPage() -> impl IntoView {
                             </button>
                         </div>
                     </form>
-                </div>
-            </div>
+            </AppDialog>
 
             <nav class="dashboard-toolbar" aria-label=move || i18n.t("dashboard.filterLabel")>
                 <button type="button" class=move || if tab.get() == "all" { "settings-nav-item is-active" } else { "settings-nav-item" } data-testid="dash-tab-all" on:click=move |_| tab.set("all".into())>{move || i18n.t("dashboardTabAll")}</button>

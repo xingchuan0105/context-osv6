@@ -80,6 +80,7 @@ fn shell_and_chat_have_no_hardcoded_chinese_literals() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/components");
     let mut files = collect_rs(&root.join("shell"));
     files.extend(collect_rs(&root.join("chat")));
+    files.extend(collect_rs(&root.join("share")));
     let mut leftovers = Vec::new();
     for file in files {
         let raw = fs::read_to_string(&file).unwrap_or_default();

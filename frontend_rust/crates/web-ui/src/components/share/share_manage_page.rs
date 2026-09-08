@@ -40,7 +40,15 @@ pub fn WorkspaceSharePage() -> impl IntoView {
         copied.set(false);
     });
 
+    let loading = RwSignal::new(true);
+    let retry = RwSignal::new(0_u64);
+    let load_sequence = RwSignal::new(0_u64);
     Effect::new(move |_| {
+        let _ = retry.get();
+        load_sequence.update(|n| *n += 1);
+        let generation = load_sequence.get_untracked();
+        loading.set(true); error.set(None);
+        current_token.set(None); share_settings.set(None); busy.set(false);
         let wid = workspace_id.get();
         if wid.is_empty() {
             return;
@@ -50,16 +58,20 @@ pub fn WorkspaceSharePage() -> impl IntoView {
         } else {
             token.get_untracked()
         };
-        if tok.is_empty() {
-            return;
-        }
+        if tok.is_empty() { loading.set(false); error.set(Some(i18n.t("pricing.loginRequired"))); return; }
 
         leptos::task::spawn_local(async move {
             let client = BrowserRestClient::new(&poc_api_base(), Some(tok));
-            if let Ok(settings) = client.get_share_settings(&wid).await {
-                current_token.set(Some(settings.share_token.clone()));
-                share_settings.set(Some(settings));
+            let result = client.get_share_settings(&wid).await;
+            if workspace_id.try_get_untracked().as_deref() != Some(wid.as_str()) || load_sequence.try_get_untracked() != Some(generation) { return; }
+            match result {
+                Ok(settings) => {
+                    current_token.set((!settings.share_token.is_empty()).then(|| settings.share_token.clone()));
+                    share_settings.set(Some(settings));
+                }
+                Err(err) => error.set(Some(err.to_string())),
             }
+            loading.set(false);
         });
     });
 
@@ -77,12 +89,14 @@ pub fn WorkspaceSharePage() -> impl IntoView {
         busy.set(true);
         leptos::task::spawn_local(async move {
             let client = BrowserRestClient::new(&poc_api_base(), Some(tok));
-            match client.create_share(&wid).await {
+            let result = client.create_share(&wid).await;
+            if workspace_id.try_get_untracked().as_deref() != Some(wid.as_str()) { return; }
+            match result {
                 Ok(resp) => {
                     current_token.set(Some(resp.share_token));
                 }
                 Err(err) => {
-                    error.set(Some(format!("创建分享失败：{err}")));
+                    error.set(Some(err.to_string()));
                 }
             }
             busy.set(false);
@@ -106,10 +120,9 @@ pub fn WorkspaceSharePage() -> impl IntoView {
         busy.set(true);
         leptos::task::spawn_local(async move {
             let client = BrowserRestClient::new(&poc_api_base(), Some(tok));
-            if client.revoke_share(&wid, &stok).await.is_ok() {
-                current_token.set(None);
-                share_settings.set(None);
-            }
+            let result = client.revoke_share(&wid, &stok).await;
+            if workspace_id.try_get_untracked().as_deref() != Some(wid.as_str()) { return; }
+            match result { Ok(()) => { current_token.set(None); share_settings.set(None); }, Err(err) => error.set(Some(err.to_string())) }
             busy.set(false);
         });
     };
@@ -141,29 +154,31 @@ pub fn WorkspaceSharePage() -> impl IntoView {
             <header class="settings-header">
                 <div class="settings-header-left">
                     <a href=move || format!("/dashboard/{}", workspace_id.get()) class="settings-back-link">
-                        "← 返回工作台"
+                        {move || i18n.t("share.backWorkbench")}
                     </a>
-                    <h1 class="settings-title">"工作区公开分享中心"</h1>
+                    <h1 class="settings-title">{move || i18n.t("share.centerTitle")}</h1>
                 </div>
             </header>
 
-            <nav class="settings-nav" aria-label="分享导航">
+            <nav class="settings-nav" aria-label={move || i18n.t("share.navLabel")}>
                 <a href=move || format!("/dashboard/{}/share", workspace_id.get()) class="settings-nav-item is-active">
-                    "分享链接设置"
+                    {move || i18n.t("share.linkSettings")}
                 </a>
                 <a href=move || format!("/dashboard/{}/share/access-logs", workspace_id.get()) class="settings-nav-item">
-                    "访问审计日志"
+                    {move || i18n.t("share.logsTitle")}
                 </a>
                 <a href=move || format!("/dashboard/{}/share/analytics", workspace_id.get()) class="settings-nav-item">
-                    "互动与流量分析"
+                    {move || i18n.t("share.analyticsNav")}
                 </a>
             </nav>
 
             <main class="settings-content">
+                <p role="status" hidden=move || !loading.get()>{move || i18n.t("common.loading")}</p>
+                <div hidden=move || error.get().is_none()><p role="alert" data-testid="share-error">{move || error.get()}</p><button type="button" on:click=move |_| retry.update(|n| *n += 1)>{move || i18n.t("common.retry")}</button></div>
                 <section class="settings-panel" data-testid="share-panel">
-                    <h2>"只读公开分享"</h2>
+                    <h2>{move || i18n.t("share.readOnly")}</h2>
                     <p class="settings-panel-desc">
-                        "生成公开链接后，外部访客可以通过只读 Token 访问该知识库并提问，无法修改资料或查看其他工作区。"
+                        {move || i18n.t("share.readOnlyBody")}
                     </p>
                     {move || {
                         if let Some(tok) = current_token.get() {
@@ -184,10 +199,10 @@ pub fn WorkspaceSharePage() -> impl IntoView {
                                         type="button"
                                         class="settings-btn-revoke"
                                         data-testid="revoke-share-btn"
-                                        disabled=move || busy.get()
+                                        disabled=move || busy.get() || loading.get()
                                         on:click=on_revoke_share
                                     >
-                                        "关闭公开分享"
+                                        {move || i18n.t("share.revoke")}
                                     </button>
                                 </div>
                             }
@@ -202,14 +217,13 @@ pub fn WorkspaceSharePage() -> impl IntoView {
                                         disabled=move || busy.get()
                                         on:click=on_create_share
                                     >
-                                        "生成公开分享链接"
+                                        {move || i18n.t("share.create")}
                                     </button>
                                 </div>
                             }
                             .into_any()
                         }
                     }}
-                    {move || error.get().map(|message| view! { <p role="alert" class="settings-error" data-testid="share-error">{message}</p> })}
                 </section>
             </main>
         </div>
@@ -219,6 +233,8 @@ pub fn WorkspaceSharePage() -> impl IntoView {
 
 #[component]
 pub fn WorkspaceShareLogsPage() -> impl IntoView {
+    let i18n = crate::i18n::use_i18n();
+    let error = RwSignal::new(None::<String>);
     let token = expect_context::<RwSignal<String>>();
     let params = use_params::<ShareParams>();
     let workspace_id = Signal::derive(move || {
@@ -232,22 +248,28 @@ pub fn WorkspaceShareLogsPage() -> impl IntoView {
 
     let logs = RwSignal::new(Vec::<AccessLogEntry>::new());
 
+    let loading = RwSignal::new(true);
+    let retry = RwSignal::new(0_u64);
+    let load_sequence = RwSignal::new(0_u64);
     Effect::new(move |_| {
+        let _ = retry.get();
+        load_sequence.update(|n| *n += 1);
+        let generation = load_sequence.get_untracked();
+        loading.set(true); error.set(None);
         let wid = workspace_id.get();
         let tok = if token.get_untracked().is_empty() {
             web_sdk::read_browser_auth().map(|a| a.token).unwrap_or_default()
         } else {
             token.get_untracked()
         };
-        if wid.is_empty() || tok.is_empty() {
-            return;
-        }
+        if wid.is_empty() || tok.is_empty() { loading.set(false); error.set(Some(i18n.t("pricing.loginRequired"))); return; }
 
         leptos::task::spawn_local(async move {
             let client = BrowserRestClient::new(&poc_api_base(), Some(tok));
-            if let Ok(resp) = client.get_share_access_logs(&wid).await {
-                logs.set(resp.logs);
-            }
+            let result = client.get_share_access_logs(&wid).await;
+            if workspace_id.try_get_untracked().as_deref() != Some(wid.as_str()) || load_sequence.try_get_untracked() != Some(generation) { return; }
+            match result { Ok(resp) => logs.set(resp.logs), Err(err) => error.set(Some(err.to_string())) }
+            loading.set(false);
         });
     });
 
@@ -257,14 +279,17 @@ pub fn WorkspaceShareLogsPage() -> impl IntoView {
             <header class="settings-header">
                 <div class="settings-header-left">
                     <a href=move || format!("/dashboard/{}/share", workspace_id.get()) class="settings-back-link">
-                        "← 返回分享中心"
+                        {move || i18n.t("share.backCenter")}
                     </a>
-                    <h1 class="settings-title">"访问审计日志"</h1>
+                    <h1 class="settings-title">{move || i18n.t("share.logsTitle")}</h1>
                 </div>
             </header>
             <main class="settings-content">
+                <p role="status" hidden=move || !loading.get()>{move || i18n.t("common.loading")}</p>
+                <div hidden=move || error.get().is_none()><p role="alert">{move || error.get()}</p><button type="button" on:click=move |_| retry.update(|n| *n += 1)>{move || i18n.t("common.retry")}</button></div>
                 <section class="settings-panel">
-                    <ul class="share-log-list">
+                    <p hidden=move || loading.get() || error.get().is_some() || !logs.get().is_empty()>{move || i18n.t("share.logsEmpty")}</p>
+                    <ul class="share-log-list" hidden=move || loading.get() || error.get().is_some()>
                         <For
                             each=move || logs.get()
                             key=|log| log.id.clone()
@@ -273,7 +298,7 @@ pub fn WorkspaceShareLogsPage() -> impl IntoView {
                                     <li class="share-log-item">
                                         <span>{log.accessed_at}</span>
                                         <span>{log.action}</span>
-                                        <span>{format!("访客: {}", log.visitor_id)}</span>
+                                        <span>{i18n.tf("share.visitor", &[("id", log.visitor_id.as_str())])}</span>
                                     </li>
                                 }
                             }
@@ -288,6 +313,8 @@ pub fn WorkspaceShareLogsPage() -> impl IntoView {
 
 #[component]
 pub fn WorkspaceShareAnalyticsPage() -> impl IntoView {
+    let i18n = crate::i18n::use_i18n();
+    let error = RwSignal::new(None::<String>);
     let token = expect_context::<RwSignal<String>>();
     let params = use_params::<ShareParams>();
     let workspace_id = Signal::derive(move || {
@@ -301,22 +328,28 @@ pub fn WorkspaceShareAnalyticsPage() -> impl IntoView {
 
     let analytics = RwSignal::new(None::<ShareAnalyticsResponse>);
 
+    let loading = RwSignal::new(true);
+    let retry = RwSignal::new(0_u64);
+    let load_sequence = RwSignal::new(0_u64);
     Effect::new(move |_| {
+        let _ = retry.get();
+        load_sequence.update(|n| *n += 1);
+        let generation = load_sequence.get_untracked();
+        loading.set(true); error.set(None);
         let wid = workspace_id.get();
         let tok = if token.get_untracked().is_empty() {
             web_sdk::read_browser_auth().map(|a| a.token).unwrap_or_default()
         } else {
             token.get_untracked()
         };
-        if wid.is_empty() || tok.is_empty() {
-            return;
-        }
+        if wid.is_empty() || tok.is_empty() { loading.set(false); error.set(Some(i18n.t("pricing.loginRequired"))); return; }
 
         leptos::task::spawn_local(async move {
             let client = BrowserRestClient::new(&poc_api_base(), Some(tok));
-            if let Ok(resp) = client.get_share_analytics(&wid).await {
-                analytics.set(Some(resp));
-            }
+            let result = client.get_share_analytics(&wid).await;
+            if workspace_id.try_get_untracked().as_deref() != Some(wid.as_str()) || load_sequence.try_get_untracked() != Some(generation) { return; }
+            match result { Ok(resp) => analytics.set(Some(resp)), Err(err) => error.set(Some(err.to_string())) }
+            loading.set(false);
         });
     });
 
@@ -326,24 +359,26 @@ pub fn WorkspaceShareAnalyticsPage() -> impl IntoView {
             <header class="settings-header">
                 <div class="settings-header-left">
                     <a href=move || format!("/dashboard/{}/share", workspace_id.get()) class="settings-back-link">
-                        "← 返回分享中心"
+                        {move || i18n.t("share.backCenter")}
                     </a>
-                    <h1 class="settings-title">"分享互动分析"</h1>
+                    <h1 class="settings-title">{move || i18n.t("share.analyticsTitle")}</h1>
                 </div>
             </header>
             <main class="settings-content">
+                <p role="status" hidden=move || !loading.get()>{move || i18n.t("common.loading")}</p>
+                <div hidden=move || error.get().is_none()><p role="alert">{move || error.get()}</p><button type="button" on:click=move |_| retry.update(|n| *n += 1)>{move || i18n.t("common.retry")}</button></div>
                 <section class="settings-panel">
                     <div class="settings-usage-cards">
                         <div class="settings-usage-card">
-                            <span class="settings-usage-label">"总浏览量 (Views)"</span>
+                            <span class="settings-usage-label">{move || i18n.t("analytics.totalViews")}</span>
                             <span class="settings-usage-value">
-                                {move || analytics.get().map(|a| a.total_views).unwrap_or(0).to_string()}
+                                {move || if loading.get() || error.get().is_some() { i18n.t("common.unknown") } else { analytics.get().map(|a| a.total_views.to_string()).unwrap_or_else(|| i18n.t("common.unknown")) }}
                             </span>
                         </div>
                         <div class="settings-usage-card">
-                            <span class="settings-usage-label">"独立访客 (UV)"</span>
+                            <span class="settings-usage-label">{move || i18n.t("analytics.visitors")}</span>
                             <span class="settings-usage-value">
-                                {move || analytics.get().map(|a| a.total_unique_visitors).unwrap_or(0).to_string()}
+                                {move || if loading.get() || error.get().is_some() { i18n.t("common.unknown") } else { analytics.get().map(|a| a.total_unique_visitors.to_string()).unwrap_or_else(|| i18n.t("common.unknown")) }}
                             </span>
                         </div>
                     </div>

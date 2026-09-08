@@ -1,5 +1,6 @@
 use crate::api_base::poc_api_base;
 use crate::components::shell::{MarketingChrome, ProductChromeFooter};
+use crate::components::ui::AppDialog;
 use crate::i18n::{UiLocale, interpolate, lookup, use_i18n};
 use leptos::prelude::*;
 use web_sdk::{
@@ -15,17 +16,22 @@ pub fn PricingPage(#[prop(optional)] locale_override: Option<UiLocale>) -> impl 
     let plans = RwSignal::new(Vec::<BillingPlan>::new());
     let wallet = RwSignal::new(None::<WalletBalanceResponse>);
     let topup_packs = RwSignal::new(Vec::<TopupPack>::new());
-    let selected_pack = RwSignal::new("topup_50".to_string());
+    let selected_pack = RwSignal::new(String::new());
     let selected_provider = RwSignal::new("alipay".to_string());
     let checkout_url = RwSignal::new(None::<String>);
     let error = RwSignal::new(None::<String>);
     let loading = RwSignal::new(false);
+    let refresh = RwSignal::new(0_u64);
+    let catalog_loading = RwSignal::new(true);
     let plans_failed = RwSignal::new(false);
     let interval = RwSignal::new("month".to_string());
     let agreed = RwSignal::new(false);
     let show_pay = RwSignal::new(false);
 
     Effect::new(move |_| {
+        let generation = refresh.get();
+        catalog_loading.set(true);
+        error.set(None);
         let tok = if token.get_untracked().is_empty() {
             web_sdk::read_browser_auth().map(|a| a.token)
         } else {
@@ -36,23 +42,27 @@ pub fn PricingPage(#[prop(optional)] locale_override: Option<UiLocale>) -> impl 
             let client = BrowserRestClient::new(&poc_api_base(), tok.clone());
             match client.get_billing_plans().await {
                 Ok(resp) => {
-                    plans.set(resp.plans);
+                    plans.set(resp.plans.into_iter().map(|mut plan| { plan.current |= resp.current_plan_id == plan.plan_id; plan }).collect());
                     plans_failed.set(false);
                 }
-                Err(_) => plans_failed.set(true),
+                Err(_) => { plans.set(Vec::new()); plans_failed.set(true); },
             }
             if tok.is_some() {
-                if let Ok(w) = client.get_wallet_balance().await {
-                    wallet.set(Some(w));
+                match client.get_wallet_balance().await {
+                    Ok(w) => wallet.set(Some(w)),
+                    Err(err) => { wallet.set(None); error.set(Some(err.to_string())); }
                 }
-                if let Ok(packs) = client.list_topup_packs().await {
-                    topup_packs.set(packs);
+                match client.list_topup_packs().await {
+                    Ok(packs) => { selected_pack.set(packs.first().map(|p| p.pack_id.clone()).unwrap_or_default()); topup_packs.set(packs); },
+                    Err(err) => { topup_packs.set(Vec::new()); error.set(Some(err.to_string())); }
                 }
             }
+            if refresh.try_get_untracked() == Some(generation) { catalog_loading.set(false); }
         });
     });
 
-    let on_topup_checkout = move |_| {
+    let checkout = move |plan_id: Option<String>| {
+        if loading.get_untracked() { return; }
         let tok = if token.get_untracked().is_empty() {
             web_sdk::read_browser_auth().map(|a| a.token).unwrap_or_default()
         } else {
@@ -75,11 +85,12 @@ pub fn PricingPage(#[prop(optional)] locale_override: Option<UiLocale>) -> impl 
 
         leptos::task::spawn_local(async move {
             let client = BrowserRestClient::new(&poc_api_base(), Some(tok));
+            let membership = plan_id.is_some();
             let req = CheckoutRequest {
-                plan_id: None,
+                plan_id,
                 provider: Some(provider),
-                kind: Some("wallet_topup".to_string()),
-                topup_pack_id: Some(pack_id),
+                kind: Some(if membership { "subscription" } else { "wallet_topup" }.into()),
+                topup_pack_id: if membership { None } else { Some(pack_id) },
             };
             match client.create_checkout_session(&req).await {
                 Ok(resp) => {
@@ -127,116 +138,10 @@ pub fn PricingPage(#[prop(optional)] locale_override: Option<UiLocale>) -> impl 
                     </button>
                 </div>
                 <p class="settings-error" role="status" hidden=move || !plans_failed.get() data-testid="plans-fallback">
-                    {move || t("pricing.plansFallback")}
+                    {move || t("pricing.catalogFailed")}
                 </p>
-                <section class="pricing-plans-section">
-                    <div class="pricing-plans-grid" data-testid="plans-grid">
-                        {move || {
-                            let live = plans.get();
-                            let selected = interval.get();
-                            let cards = if live.is_empty() {
-                                vec![
-                                    ("free".into(), t("pricing.fallbackFreeName"), "¥0".into(), t("pricing.fallbackFreeDesc"), false),
-                                    ("pro".into(), t("pricing.fallbackProName"), if selected == "year" { t("pricing.fallbackPriceYear") } else { t("pricing.fallbackPriceMonth") }, t("pricing.fallbackProDesc"), true),
-                                ]
-                            } else {
-                                live.into_iter()
-                                    .filter(|plan| plan.interval == selected || plan.plan_id == "free")
-                                    .map(|plan| {
-                                        let popular = plan.plan_id == "pro";
-                                        (plan.plan_id, plan.name, plan.price_label_cny, plan.description, popular)
-                                    })
-                                    .collect()
-                            };
-                            cards
-                                .into_iter()
-                                .map(|(id, name, price, desc, popular)| {
-                                    let test_id = format!("plan-{id}");
-                                    view! {
-                                        <div
-                                            class=if popular { "pricing-plan-card is-popular" } else { "pricing-plan-card" }
-                                            data-testid=test_id
-                                        >
-                                            <Show when=move || popular>
-                                                <span class="pricing-popular-badge">{t("pricingTierPlusBadge")}</span>
-                                            </Show>
-                                            <h2 class="pricing-plan-name">{name}</h2>
-                                            <div class="pricing-plan-price">{price}</div>
-                                            <p class="pricing-plan-desc">{desc}</p>
-                                        </div>
-                                    }
-                                })
-                                .collect_view()
-                        }}
-                    </div>
-                </section>
-
-                <section id="topup" class="settings-panel pricing-topup-section" data-testid="topup-panel">
-                    <header class="settings-panel-header">
-                        <h2 class="settings-panel-title">{move || t("pricingTopupTitle")}</h2>
-                        <p class="settings-panel-desc">
-                            {move || t("pricingTopupBody")}
-                        </p>
-                    </header>
-
-                    <div class="settings-usage-cards">
-                        <div class="settings-usage-card">
-                            <span class="settings-usage-label">{move || t("pricingWalletBalance").replace("{balance}", "")}</span>
-                            <span class="settings-usage-value" data-testid="wallet-balance">
-                                {move || {
-                                    wallet
-                                        .get()
-                                        .map(|w| format!("¥{:.2}", (w.balance_fen as f64) / 100.0))
-                                        .unwrap_or_else(|| "¥0.00".to_string())
-                                }}
-                            </span>
-                        </div>
-                    </div>
-
-                    <div class="topup-pack-selector">
-                        <label class="topup-label">{move || t("pricingTopupPacksLabel")}</label>
-                        <div class="topup-packs-row">
-                            {move || {
-                                let packs = topup_packs.get();
-                                let items = if packs.is_empty() {
-                                    vec![
-                                        ("topup_50".into(), 50_i64),
-                                        ("topup_100".into(), 100),
-                                        ("topup_200".into(), 200),
-                                    ]
-                                } else {
-                                    packs
-                                        .into_iter()
-                                        .map(|pack| (pack.pack_id, pack.amount_yuan))
-                                        .collect()
-                                };
-                                items
-                                    .into_iter()
-                                    .map(|(id, yuan)| {
-                                        let id_click = id.clone();
-                                        let test_id = format!("pack-{yuan}");
-                                        view! {
-                                            <button
-                                                type="button"
-                                                class=move || {
-                                                    if selected_pack.get() == id {
-                                                        "topup-pack-btn is-active"
-                                                    } else {
-                                                        "topup-pack-btn"
-                                                    }
-                                                }
-                                                data-testid=test_id
-                                                on:click=move |_| selected_pack.set(id_click.clone())
-                                            >
-                                                {format!("¥{yuan}")}
-                                            </button>
-                                        }
-                                    })
-                                    .collect_view()
-                            }}
-                        </div>
-                    </div>
-
+                <p role="status" hidden=move || !catalog_loading.get()>{move || t("common.loading")}</p>
+                <button type="button" data-testid="pricing-retry" disabled=move || catalog_loading.get() on:click=move |_| refresh.update(|n| *n += 1)>{move || t("common.retry")}</button>
                     <div class="topup-provider-selector">
                         <label class="topup-label">{move || t("pricingPayMethodLabel")}</label>
                         <div class="topup-providers-row">
@@ -282,13 +187,102 @@ pub fn PricingPage(#[prop(optional)] locale_override: Option<UiLocale>) -> impl 
                         {move || t("pricing.agreeLabel")}
                     </label>
 
+
+                <section class="pricing-plans-section">
+                    <div class="pricing-plans-grid" data-testid="plans-grid">
+                        {move || {
+                            let live = plans.get();
+                            let selected = interval.get();
+                            let cards: Vec<_> = live.into_iter()
+                                .filter(|plan| plan.interval == selected || plan.plan_id == "free")
+                                .map(|plan| (plan.plan_id, plan.name, plan.price_label_cny, plan.description, plan.current))
+                                .collect();
+                            cards
+                                .into_iter()
+                                .map(|(id, name, price, desc, current)| {
+                                    let free = id == "free";
+                                    let purchase_id = id.clone();
+                                    let test_id = format!("plan-{id}");
+                                    view! {
+                                        <div
+                                            class="pricing-plan-card"
+                                            data-testid=test_id
+                                        >
+                                            <h2 class="pricing-plan-name">{name}</h2>
+                                            <div class="pricing-plan-price">{price}</div>
+                                            <p class="pricing-plan-desc">{desc}</p>
+                                            <button type="button" data-testid="subscribe-plan" disabled=move || current || free || catalog_loading.get() aria-disabled=move || loading.get() on:click=move |_| checkout(Some(purchase_id.clone()))>{move || t(if current { "pricing.currentPlan" } else if free { "pricing.freePlan" } else if loading.get() { "common.saving" } else { "pricing.subscribe" })}</button>
+                                        </div>
+                                    }
+                                })
+                                .collect_view()
+                        }}
+                    </div>
+                </section>
+
+                <section id="topup" class="settings-panel pricing-topup-section" data-testid="topup-panel">
+                    <header class="settings-panel-header">
+                        <h2 class="settings-panel-title">{move || t("pricingTopupTitle")}</h2>
+                        <p class="settings-panel-desc">
+                            {move || t("pricingTopupBody")}
+                        </p>
+                    </header>
+
+                    <div class="settings-usage-cards">
+                        <div class="settings-usage-card">
+                            <span class="settings-usage-label">{move || t("pricingWalletBalance").replace("{balance}", "")}</span>
+                            <span class="settings-usage-value" data-testid="wallet-balance">
+                                {move || {
+                                    wallet
+                                        .get()
+                                        .map(|w| format!("¥{:.2}", (w.balance_fen as f64) / 100.0))
+                                        .unwrap_or_else(|| t("common.unknown"))
+                                }}
+                            </span>
+                        </div>
+                    </div>
+
+                    <div class="topup-pack-selector">
+                        <label class="topup-label">{move || t("pricingTopupPacksLabel")}</label>
+                        <div class="topup-packs-row">
+                            {move || {
+                                let packs = topup_packs.get();
+                                let items: Vec<_> = packs.into_iter().map(|pack| (pack.pack_id, pack.amount_yuan)).collect();
+                                items
+                                    .into_iter()
+                                    .map(|(id, yuan)| {
+                                        let id_click = id.clone();
+                                        let test_id = format!("pack-{yuan}");
+                                        view! {
+                                            <button
+                                                type="button"
+                                                class=move || {
+                                                    if selected_pack.get() == id {
+                                                        "topup-pack-btn is-active"
+                                                    } else {
+                                                        "topup-pack-btn"
+                                                    }
+                                                }
+                                                data-testid=test_id
+                                                on:click=move |_| selected_pack.set(id_click.clone())
+                                            >
+                                                {format!("¥{yuan}")}
+                                            </button>
+                                        }
+                                    })
+                                    .collect_view()
+                            }}
+                        </div>
+                    </div>
+
                     <div class="topup-action-row">
                         <button
                             type="button"
                             class="auth-submit-btn"
                             data-testid="btn-start-topup"
-                            disabled=move || loading.get()
-                            on:click=on_topup_checkout
+                            disabled=move || catalog_loading.get() || selected_pack.get().is_empty()
+                            aria-disabled=move || loading.get()
+                            on:click=move |_| checkout(None)
                         >
                             {move || if loading.get() { t("pricingTopupLoading") } else { t("pricing.topupNow") }}
                         </button>
@@ -306,12 +300,7 @@ pub fn PricingPage(#[prop(optional)] locale_override: Option<UiLocale>) -> impl 
                         </details>
                     </section>
 
-                    <div class="app-dialog-backdrop" hidden=move || !show_pay.get()>
-                        <div class="app-dialog" role="dialog" aria-label=move || t("pricing.payDialog") data-testid="pay-qr-dialog">
-                            <header class="app-dialog-header">
-                                <h2>{move || t("pricing.payDialog")}</h2>
-                                <button type="button" class="app-dialog-close" on:click=move |_| show_pay.set(false)>{move || t("appModal.close")}</button>
-                            </header>
+                    <AppDialog open=Signal::derive(move || show_pay.get()) title_key="pricing.payDialog" test_id="pay-qr-dialog" on_close=Callback::new(move |_| show_pay.set(false))>
                             {move || {
                                 checkout_url.get().map(|url| {
                                     view! {
@@ -324,8 +313,7 @@ pub fn PricingPage(#[prop(optional)] locale_override: Option<UiLocale>) -> impl 
                                     }
                                 })
                             }}
-                        </div>
-                    </div>
+                    </AppDialog>
                 </section>
             </main>
         </div>

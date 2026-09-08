@@ -231,6 +231,10 @@ impl BrowserRestClient {
         self.unavailable()
     }
 
+    pub async fn get_document_content(&self, _document_id: &str) -> Result<contracts::documents::DocumentContentResponse, TransportError> {
+        Err(TransportError::Unavailable("Browser-only request".into()))
+    }
+
     pub async fn list_workspace_documents(
         &self,
         _workspace_id: &str,
@@ -936,6 +940,11 @@ impl BrowserRestClient {
             )
             .await?,
         )
+    }
+
+    pub async fn get_document_content(&self, document_id: &str) -> Result<contracts::documents::DocumentContentResponse, TransportError> {
+        let url = format!("{}/api/v1/documents/{}/content", self.base_url.trim_end_matches('/'), crate::conversation_api::encode_path_segment(document_id));
+        Ok(serde_json::from_slice(&wasm_request::get_bytes(self, &url).await?)?)
     }
 
     pub async fn list_workspace_documents(
