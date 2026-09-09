@@ -50,7 +50,7 @@ pub fn SettingsPage() -> impl IntoView {
 
             <main class="settings-content"><a class="category-back" href="/settings">{move || i18n.t("settings.backCategories")}</a>
                 <Show when=move || token.get().is_empty()>
-                    <a href="/login?next=/settings" data-testid="settings-login-required">{move || i18n.t("pricing.loginRequired")}</a>
+                    <a href="/login?next=/settings" data-testid="settings-login-required">{move || i18n.t("settings.loginRequired")}</a>
                 </Show>
                 {move || {
                     match current_tab.get().as_str() {

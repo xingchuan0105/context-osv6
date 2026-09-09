@@ -1,4 +1,5 @@
 {
+  "settings.loginRequired": { "en": "Sign in to manage account settings", "zh": "登录后管理账户设置" },
   "settings.backCategories": { "en": "All settings", "zh": "全部设置" },
   "navigation.sources": { "en": "Sources", "zh": "资料" },
   "navigation.notes": { "en": "Notes", "zh": "笔记" },

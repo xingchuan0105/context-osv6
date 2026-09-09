@@ -94,5 +94,6 @@ test('signed-out settings provide login instead of a logout action', async ({bro
   await page.goto(`http://127.0.0.1:${Number(process.env.POC_WEB_PORT || 3200)}/settings?tab=profile`);
   await expect(page.getByTestId('settings-logout')).toBeHidden();
   await expect(page.getByTestId('settings-login-required')).toHaveAttribute('href', '/login?next=/settings');
+  await expect(page.getByTestId('settings-login-required')).toHaveText('登录后管理账户设置');
   await context.close();
 });
