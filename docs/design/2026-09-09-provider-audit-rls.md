@@ -17,3 +17,5 @@
 日志：`/tmp/context-provider-audit-lib.log`、`/tmp/context-provider-audit-db.log`、`/tmp/context-provider-audit-build.log`，同时保存到 `frontend_rust/target/acceptance/evidence/provider-audit/`。
 
 本批验证为真实数据库的产品写入函数回归，没有重新发起真实模型 RAG 调用或全站浏览器回归；未执行部署、支付。其他未提交的 Subtex / transport-http 改动保持原状，本地构建使用当前工作区。
+
+后续真实浏览器 RAG 复验已通过，并核对新增 llm/resolve 审计记录及无写入告警；见 [Web 验收基线](2026-09-09-web-acceptance-baseline.md)。上文未重跑 RAG 的描述仅指修复批次。
