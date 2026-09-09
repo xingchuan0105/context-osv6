@@ -80,7 +80,13 @@ impl ReActLoop {
         iter_start: std::time::Instant,
         hooks: &dyn LoopHooks,
     ) -> Result<IterationOutcome, AppError> {
-        let validated = validate_skill_request(mode, &llm_response.content);
+        let framed_answer = mode.id == "chat"
+            && llm_response.content.trim_start().starts_with(super::host_markers::CHAT_ANSWER_OPEN);
+        let validated = if framed_answer {
+            Vec::new()
+        } else {
+            validate_skill_request(mode, &llm_response.content)
+        };
         if !validated.is_empty() {
             state.disclosed.last_skill_request = Some(validated);
         }
@@ -94,7 +100,11 @@ impl ReActLoop {
         // Applied again after tools so same-turn KEEP can resolve new aliases.
         Self::apply_ews_from_model_text(state, &llm_response.content);
 
-        let parsed = parse_llm_output(llm_response);
+        let parsed = if framed_answer {
+            LlmOutput::Content(llm_response.content.clone())
+        } else {
+            parse_llm_output(llm_response)
+        };
 
         match parsed {
             LlmOutput::NativeToolCalls(calls) => {

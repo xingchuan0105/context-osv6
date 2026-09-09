@@ -30,6 +30,13 @@ Filenames such as `codegen-no-output.nudge.md` refer to the **sandbox execution 
 
 ## Files (live) — model channel
 
+`chat-answer-channel.md` describes the pure-chat final-answer boundary. Only
+explicitly framed answer prose is streamed to the user; tool/skill requests stay
+outside that channel. Boundary markers are registered in `host_markers.rs` and
+removed by `chat_answer_channel.rs` before display and persistence.
+`chat-answer-channel-repair.md` reports a missing boundary for one bounded
+format retry, only before any answer text has been displayed.
+
 | File | When used |
 |------|-----------|
 | `blocks-skipped.nudge.md` | Extra code blocks in one turn (`{n_blocks}`, `{n_skipped}`) |

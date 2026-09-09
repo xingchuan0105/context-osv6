@@ -9,6 +9,7 @@ pub use policy::config;
 pub use policy::disclosure_plan;
 pub use policy::exit_policy;
 pub mod cancellation;
+mod chat_answer_channel;
 pub use cancellation::DegradeReason;
 pub(crate) use cancellation::cancellation_error;
 pub mod deps;
@@ -72,26 +73,29 @@ pub use sdk_gate::{method_allowed, sdk_primitives_for_caps};
 ///
 /// - **Retrieve / query-card / verify:** thinking **off** (latency; tool rounds).
 /// - **Synthesis:** thinking **on** (DeepSeek → `reasoning_effort: max`).
-/// - Non-three-loop DirectAnswer modes (chat) still use the synthesis client so
-///   the user-facing prose turn keeps thinking max.
+/// - Pure chat honors the selected client's thinking setting, including Quick
+///   Chat's disabled thinking. Tool/retrieval and Lead synthesis retain the split.
 pub struct ReActLoop {
     /// Thinking forced off — retrieve tool rounds, query-card, verify.
     llm: Arc<LlmClient>,
-    /// Thinking forced on (max) — synthesis / chat DirectAnswer path.
+    /// Thinking forced on (max) — Lead / retrieval synthesis.
     synthesis_llm: Arc<LlmClient>,
+    /// Pure-chat model, retaining the selected thinking configuration.
+    chat_llm: Arc<LlmClient>,
     skill_registry: Arc<CapabilityRegistry>,
     deps: LoopRuntimeDeps,
 }
 
 impl ReActLoop {
     pub fn new(llm: Arc<LlmClient>, skill_registry: Arc<CapabilityRegistry>) -> Self {
-        // Phase split: ignore the inbound client's enable_thinking; product
-        // policy is retrieve=off / synthesis=on(max).
+        // Retrieval/Lead synthesis use the phase split; pure chat retains the
+        // configured client instead of silently overriding Quick Chat's choice.
         let retrieve = Arc::new(llm.as_ref().clone().with_enable_thinking(false));
         let synthesis = Arc::new(llm.as_ref().clone().with_enable_thinking(true));
         Self {
             llm: retrieve,
             synthesis_llm: synthesis,
+            chat_llm: llm,
             skill_registry,
             deps: LoopRuntimeDeps::default(),
         }
@@ -100,9 +104,11 @@ impl ReActLoop {
     /// LLM for retrieve-phase completions.
     ///
     /// Three-loop modes (`forbid_retrieve_direct_answer`): thinking off.
-    /// Chat / skip-synthesis DirectAnswer: thinking on (answer is the product).
+    /// Pure chat: selected model configuration; other DirectAnswer: thinking on.
     fn llm_for_retrieve(&self, mode: &ModeConfig) -> &LlmClient {
-        if mode.loop_exit.forbid_retrieve_direct_answer {
+        if mode.id == "chat" {
+            &self.chat_llm
+        } else if mode.loop_exit.forbid_retrieve_direct_answer {
             &self.llm
         } else {
             &self.synthesis_llm

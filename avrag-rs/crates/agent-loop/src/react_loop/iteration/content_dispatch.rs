@@ -26,6 +26,13 @@ impl ReActLoop {
         content: String,
     ) -> Result<IterationOutcome, AppError> {
         let llm_usage = iteration_llm_usage(llm_response);
+        let framed = if mode.id == "chat" {
+            super::super::chat_answer_channel::decode(&content).map_err(AppError::internal)?
+        } else {
+            None
+        };
+        let answer_selected = framed.is_some();
+        let content = framed.unwrap_or(content);
         state.messages.push(ChatMessage {
             role: "assistant".to_string(),
             content: content.clone(),
@@ -36,7 +43,7 @@ impl ReActLoop {
             reasoning_content: llm_response.reasoning_content.clone(),
         });
 
-        if is_skill_request_message(&content) {
+        if !answer_selected && is_skill_request_message(&content) {
             let exit_reason = "skill_request".to_string();
             return Ok(IterationOutcome {
                 control: IterationControl::Continue,

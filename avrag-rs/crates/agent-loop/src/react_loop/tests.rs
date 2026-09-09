@@ -15,8 +15,8 @@ fn react_loop_splits_thinking_retrieve_off_synthesis_on() {
         timeout_ms: 1000,
         api_style: None,
         dimensions: None,
-        // Inbound default is irrelevant: ReActLoop forces phase policy.
-        enable_thinking: Some(true),
+        // Quick Chat's configured preference survives the loop boundary.
+        enable_thinking: Some(false),
         enable_cache: None,
         rpm_limit: None,
         tpm_limit: None,
@@ -38,9 +38,14 @@ fn react_loop_splits_thinking_retrieve_off_synthesis_on() {
     chat.loop_exit.forbid_retrieve_direct_answer = false;
     assert_eq!(
         loop_.llm_for_retrieve(&chat).config.enable_thinking,
-        Some(true),
-        "chat DirectAnswer path keeps thinking max"
+        Some(false),
+        "chat DirectAnswer path honors the configured thinking preference"
     );
+    let thinking = ReActLoop::new(
+        Arc::new(loop_.chat_llm.as_ref().clone().with_enable_thinking(true)),
+        Arc::new(CapabilityRegistry::standard()),
+    );
+    assert_eq!(thinking.llm_for_retrieve(&chat).config.enable_thinking, Some(true));
 }
 
 #[test]

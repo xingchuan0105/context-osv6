@@ -10,6 +10,10 @@
 //! （`answer_contract::contains_host_observation_shell` 的检测集）。纯格式
 //! 判定，非语义 keyword bar（AGENTS.md stop-decision）。
 
+/// Pure-chat answer framing; stripped before user-facing delivery.
+pub const CHAT_ANSWER_OPEN: &str = "<final_answer>";
+pub const CHAT_ANSWER_CLOSE: &str = "</final_answer>";
+
 /// 一枚已备案的宿主观察标签。
 pub struct HostMarker {
     /// 前缀匹配形态（如 `"<loop_budget"`、`"[retrieval_summary]"`）。
@@ -26,6 +30,16 @@ pub struct HostMarker {
 ///
 /// 新增标签 = 表内加一行；发射端改引用常量；检测器自动覆盖。
 pub const HOST_OBSERVATION_MARKERS: &[HostMarker] = &[
+    HostMarker {
+        tag: CHAT_ANSWER_OPEN,
+        forbidden_in_final: true,
+        emitted_at: "prompts/loop/chat-answer-channel.md",
+    },
+    HostMarker {
+        tag: CHAT_ANSWER_CLOSE,
+        forbidden_in_final: true,
+        emitted_at: "prompts/loop/chat-answer-channel.md",
+    },
     // --- 代码执行 / 沙箱 ---
     HostMarker {
         tag: "<code_execution_result>",

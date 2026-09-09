@@ -20,6 +20,14 @@ macro_rules! loop_prompt {
     };
 }
 
+pub fn chat_answer_channel() -> &'static str {
+    loop_prompt!("chat-answer-channel.md").trim()
+}
+
+pub fn chat_answer_channel_repair() -> &'static str {
+    loop_prompt!("chat-answer-channel-repair.md").trim()
+}
+
 /// Retired host observations (no longer injected on SaC skill-owned grounding).
 macro_rules! loop_prompt_legacy {
     ($file:literal) => {

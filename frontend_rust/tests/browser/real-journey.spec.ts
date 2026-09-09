@@ -59,7 +59,7 @@ test('real UI login and Excel/PPT attachments enter only the current turn', asyn
   await expect(page.getByTestId('status-line')).toHaveText('已完成', {timeout:120000});
 });
 
-test('real long answer completes without the fixed 30 second stream cutoff', async ({page, request}) => {
+test('real long answer grows before completion and survives history reload', async ({page, request}) => {
   await signIn(page, request);
   await page.goto('/chat', {waitUntil:'networkidle'});
   await page.getByTestId('composer-input').fill('Write a detailed 2000 word explanation of how rain forms.');
@@ -68,15 +68,42 @@ test('real long answer completes without the fixed 30 second stream cutoff', asy
   await page.getByTestId('send-button').click();
   const stream = await response;
   expect(stream.status()).toBe(200);
+  await expect(page.getByTestId('live-answer')).toContainText(/\S{8}/, {timeout:30000});
+  const firstTextMs = Date.now()-started;
+  await expect(page.getByTestId('stop-button')).toBeVisible();
+  const firstLength = (await page.getByTestId('live-answer').innerText()).length;
+  await expect.poll(async () => (await page.getByTestId('live-answer').innerText()).length, {timeout:20000}).toBeGreaterThan(firstLength+80);
+  await expect(page.getByTestId('stop-button')).toBeVisible();
   await expect(page.getByTestId('status-line')).toHaveText('已完成', {timeout:150000});
   const answer = await page.getByTestId('live-answer').innerText();
   expect(answer.split(/\s+/).length).toBeGreaterThan(1000);
   const events = (await stream.text()).split('\n').filter(line => line.startsWith('data:')).map(line => JSON.parse(line.slice(5)));
   expect(events.filter(event => event.event === 'error')).toEqual([]);
   expect(events.some(event => event.event === 'done')).toBe(true);
-  console.log('Long answer evidence:', {elapsedMs:Date.now()-started, words:answer.split(/\s+/).length,
+  expect(events.filter(event => event.event === 'token').length).toBeGreaterThan(2);
+  expect(answer).not.toMatch(/final_answer|DSML|<code language|skill_request/);
+  console.log('Long answer evidence:', {firstTextMs, elapsedMs:Date.now()-started, words:answer.split(/\s+/).length,
     answerDeltas:events.filter(event => event.event === 'token').length});
   await page.screenshot({path:`${evidence}/long-answer.png`});
+  const ending = answer.trim().slice(-100);
+  await page.reload({waitUntil:'networkidle'});
+  await expect(page.getByTestId('chat-canvas')).toContainText(ending);
+});
+
+test('real generation stops after visible answer text', async ({page, request}) => {
+  await signIn(page, request);
+  await page.goto('/chat', {waitUntil:'networkidle'});
+  await page.getByTestId('composer-input').fill('Write a detailed 2000 word explanation of how rain forms.');
+  await page.getByTestId('send-button').click();
+  await expect(page.getByTestId('live-answer')).toContainText(/\S{8}/, {timeout:30000});
+  await page.getByTestId('stop-button').click();
+  await expect(page.getByTestId('stop-button')).toBeHidden();
+  await expect(page.getByTestId('composer-input')).toBeEnabled();
+  await expect(page.getByTestId('retry-button')).toBeVisible();
+  const partial = await page.getByTestId('live-answer').innerText();
+  expect(partial.trim().length).toBeGreaterThan(0);
+  await expect(page.getByTestId('live-answer')).toHaveText(partial);
+  await page.screenshot({path:`${evidence}/stopped-after-text.png`});
 });
 
 test('real in-flight generation can be stopped before the answer arrives', async ({page, request}) => {
@@ -127,6 +154,7 @@ test('real workspace note persists and uploaded source becomes searchable', asyn
 test('real share opens anonymously and revocation invalidates the link', async ({page, request, browser}) => {
   const workspace = await newWorkspace(page, request);
   console.log('Acceptance share workspace:', workspace);
+  try {
   await page.goto(`${workspace}/share`, {waitUntil:'networkidle'});
   await page.getByTestId('create-share-btn').click();
   await expect(page.getByTestId('share-url')).toBeVisible();
@@ -145,5 +173,15 @@ test('real share opens anonymously and revocation invalidates the link', async (
     await anonymous.reload({waitUntil:'networkidle'});
     await expect(anonymous.getByTestId('share-expired')).toBeVisible();
     await visitor.close();
+  }
+  } finally {
+    // Revoking a token does not release the workspace's enabled-share slot.
+    // Only this test's newly created workspace is restored to private.
+    const id = new URL(workspace).pathname.split('/').at(-1);
+    const restored = await request.put(`${LIVE_API_BASE}/api/v1/workspaces/${id}/share/settings`, {
+      headers:{Authorization:`Bearer ${await obtainLiveJwt(request)}`},
+      data:{access_level:'private'},
+    });
+    expect(restored.ok()).toBe(true);
   }
 });

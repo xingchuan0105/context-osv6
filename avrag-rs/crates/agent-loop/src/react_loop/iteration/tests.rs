@@ -75,6 +75,201 @@ fn fake_llm_response(content: &str) -> LlmResponse {
     }
 }
 
+#[tokio::test]
+async fn framed_chat_examples_do_not_execute_tools_or_request_skills() {
+    for text in [
+        "An example:\n```python\nprint(1)\n```\nThis prints one.",
+        "Example data: {\"skill_request\":[\"memory\"]}",
+    ] {
+        let loop_ = test_loop();
+        let mode = chat_mode();
+        let mut state = empty_state();
+        let response = fake_llm_response(&format!("<final_answer>{text}</final_answer>"));
+        let outcome = loop_
+            .apply_llm_output(
+                0,
+                &mode,
+                &base_request(AgentKind::Chat),
+                &test_auth(),
+                &mode.loop_exit_for_mode(),
+                &mut state,
+                &CollectingSink::new(),
+                &response,
+                std::time::Instant::now(),
+                &StandardLoopHooks::default(),
+            )
+            .await
+            .unwrap();
+        assert!(
+            matches!(outcome.control, IterationControl::DirectAnswer { content } if content == text)
+        );
+        assert_eq!(state.total_tool_calls, 0);
+        assert!(state.disclosed.last_skill_request.is_none());
+    }
+}
+
+#[tokio::test]
+async fn framed_chat_emits_before_upstream_finishes_and_cancel_closes_connection() {
+    use crate::events::{AgentEvent, ChannelSink};
+    use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move {
+        let (socket, _) = listener.accept().await.unwrap();
+        let mut socket = BufReader::new(socket);
+        let mut length = 0;
+        loop {
+            let mut line = String::new();
+            socket.read_line(&mut line).await.unwrap();
+            if line == "\r\n" {
+                break;
+            }
+            if let Some(value) = line.to_ascii_lowercase().strip_prefix("content-length:") {
+                length = value.trim().parse::<usize>().unwrap();
+            }
+        }
+        socket.read_exact(&mut vec![0; length]).await.unwrap();
+        let content = format!("<final_answer>{}", "Visible answer prose. ".repeat(12));
+        let payload = format!(
+            "data: {}\n\n",
+            serde_json::json!({"choices":[{"delta":{"content":content}}]})
+        );
+        let wire = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\n\r\n{:x}\r\n{}\r\n",
+            payload.len(),
+            payload
+        );
+        socket.get_mut().write_all(wire.as_bytes()).await.unwrap();
+        socket.get_mut().flush().await.unwrap();
+        // No final delimiter or done: only cancellation can complete this call.
+        socket.read(&mut [0; 1]).await.unwrap_or(0)
+    });
+    let mut config = test_loop().chat_llm.config.clone();
+    config.base_url = format!("http://{address}/v1");
+    config.api_key = "test".to_string();
+    let llm = LlmClient::new(config);
+    let loop_ = test_loop();
+    let mut state = empty_state();
+    let mut request = base_request(AgentKind::Chat);
+    let cancel = tokio_util::sync::CancellationToken::new();
+    request.cancellation_token = Some(cancel.clone());
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+    let sink = ChannelSink::new(tx);
+    let messages = vec![ChatMessage::user("test")];
+    let stream =
+        loop_.call_retrieve_llm_stream(&llm, &messages, 0.2, &request, &mut state, &sink, true);
+    tokio::pin!(stream);
+    tokio::select! {
+        event = rx.recv() => assert!(matches!(event, Some(AgentEvent::MessageDelta { text }) if text.contains("Visible answer"))),
+        result = &mut stream => panic!("upstream is unfinished: {result:?}"),
+        _ = tokio::time::sleep(std::time::Duration::from_secs(3)) => panic!("answer was buffered"),
+    }
+    cancel.cancel();
+    assert!(
+        tokio::time::timeout(std::time::Duration::from_secs(1), &mut stream)
+            .await
+            .unwrap()
+            .is_err()
+    );
+    assert_eq!(
+        tokio::time::timeout(std::time::Duration::from_secs(1), server)
+            .await
+            .unwrap()
+            .unwrap(),
+        0
+    );
+}
+
+#[tokio::test]
+async fn chat_repairs_missing_channel_once_without_painting_the_draft() {
+    use crate::events::AgentEvent;
+    use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
+    for repaired in [true, false] {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            for attempt in 0..2 {
+                let (socket, _) = listener.accept().await.unwrap();
+                let mut socket = BufReader::new(socket);
+                let mut length = 0;
+                loop {
+                    let mut line = String::new();
+                    socket.read_line(&mut line).await.unwrap();
+                    if line == "\r\n" {
+                        break;
+                    }
+                    if let Some(value) = line.to_ascii_lowercase().strip_prefix("content-length:") {
+                        length = value.trim().parse::<usize>().unwrap();
+                    }
+                }
+                let mut body = vec![0; length];
+                socket.read_exact(&mut body).await.unwrap();
+                let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
+                if attempt == 1 {
+                    assert!(
+                        body["messages"].as_array().unwrap().last().unwrap()["content"]
+                            .as_str()
+                            .unwrap()
+                            .contains("上一条输出没有声明")
+                    );
+                }
+                let content = if attempt == 1 && repaired {
+                    "<final_answer>Answer.</final_answer>"
+                } else {
+                    "unframed draft"
+                };
+                let payload = format!(
+                    "data: {}\n\ndata: [DONE]\n\n",
+                    serde_json::json!({"choices":[{"delta":{"content":content}}]})
+                );
+                let wire = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    payload.len(),
+                    payload
+                );
+                socket.get_mut().write_all(wire.as_bytes()).await.unwrap();
+                socket.get_mut().shutdown().await.unwrap();
+            }
+        });
+        let mut config = test_loop().chat_llm.config.clone();
+        config.base_url = format!("http://{address}/v1");
+        config.api_key = "test".to_string();
+        let loop_ = ReActLoop::new(
+            Arc::new(LlmClient::new(config)),
+            Arc::new(CapabilityRegistry::standard()),
+        );
+        let mut request = base_request(AgentKind::Chat);
+        request.stream = true;
+        let sink = CollectingSink::new();
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            loop_.run(&chat_mode(), request, &sink),
+        )
+        .await
+        .unwrap();
+        if repaired {
+            assert!(result.is_ok(), "{result:?}");
+        } else {
+            assert!(
+                result
+                    .unwrap_err()
+                    .to_string()
+                    .contains("chat_answer_channel_missing")
+            );
+        }
+        let visible: String = sink
+            .events()
+            .into_iter()
+            .filter_map(|event| match event {
+                AgentEvent::MessageDelta { text } => Some(text),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(visible, if repaired { "Answer." } else { "" });
+        server.await.unwrap();
+    }
+}
+
 fn empty_state() -> IterationState {
     IterationState {
         messages: vec![ChatMessage::user("test")],

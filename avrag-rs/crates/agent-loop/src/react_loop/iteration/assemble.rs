@@ -70,7 +70,12 @@ impl ReActLoop {
         sink: &dyn AgentEventSink,
         hooks: &dyn LoopHooks,
     ) -> Result<LlmResponse, AppError> {
-        let mut round_messages = vec![ChatMessage::system(assembled.system_content.clone())];
+        let mut system = assembled.system_content.clone();
+        if mode.id == "chat" {
+            system.push_str("\n\n");
+            system.push_str(super::super::prompt_assets::chat_answer_channel());
+        }
+        let mut round_messages = vec![ChatMessage::system(system)];
         // Model-visible View (retrieve): history + budget + query_card + plan + claims.
         // Order fixed for prefix-cache; system stays outside the View.
         let visible = super::super::model_visible::build_retrieve_model_visible(
@@ -86,40 +91,66 @@ impl ReActLoop {
         );
         round_messages.extend(visible);
         // B5: LLM boundary transform (default: identity).
-        let round_messages = hooks.convert_to_llm(&round_messages);
+        let mut round_messages = hooks.convert_to_llm(&round_messages);
 
         let temperature = mode.temperature.unwrap_or(0.7);
 
         // Live-stream retrieve when the client asked for stream:
         // - no tools this round, or
         // - pure chat / prose_only: avoid complete_with_tools freeze (A4).
-        // Streamed retrieve tokens go to the **process panel**
-        // (`ReasoningSummaryDelta`), never the main answer bubble — only the
-        // accepted final DirectAnswer / synthesis phase may emit `MessageDelta`.
+        // Retrieval drafts stay on the process channel. Pure chat has an
+        // explicit answer channel; only its framed prose can paint the bubble.
         let prefer_prose_stream = request.stream
             && (assembled.tools.is_empty()
                 || mode.id == "chat"
                 || mode.synthesis_output.contract
                     == super::super::config::AnswerContractKind::ProseOnly);
         let retrieve_llm = self.llm_for_retrieve(mode);
-        let llm_response = if prefer_prose_stream {
-            self.call_retrieve_llm_stream(
-                retrieve_llm,
-                &round_messages,
-                temperature,
-                request,
-                state,
-                sink,
-            )
-            .await?
-        } else {
-            retrieve_llm
-                .complete_with_tools(&round_messages, &assembled.tools, Some(temperature))
-                .await
-                .map_err(|e| AppError::internal(format!("llm completion failed: {e}")))?
-        };
+        let mut channel_repair_used = false;
+        let llm_response = loop {
+            let llm_response = if prefer_prose_stream {
+                self.call_retrieve_llm_stream(
+                    retrieve_llm,
+                    &round_messages,
+                    temperature,
+                    request,
+                    state,
+                    sink,
+                    mode.id == "chat",
+                )
+                .await?
+            } else {
+                retrieve_llm
+                    .complete_with_tools(&round_messages, &assembled.tools, Some(temperature))
+                    .await
+                    .map_err(|e| AppError::internal(format!("llm completion failed: {e}")))?
+            };
+            total_usage.accumulate(&llm_response.usage);
 
-        total_usage.accumulate(&llm_response.usage);
+            if mode.id == "chat" {
+                let answer = super::super::chat_answer_channel::decode(&llm_response.content)
+                    .map_err(AppError::internal)?;
+                if answer.is_none()
+                    && !super::super::skill_request::is_skill_request_message(&llm_response.content)
+                    && matches!(
+                        super::super::parse::parse_llm_output(&llm_response),
+                        super::super::parse::LlmOutput::Content(_)
+                    )
+                {
+                    if !channel_repair_used && !state.answer_deltas_streamed {
+                        channel_repair_used = true;
+                        round_messages.push(ChatMessage::assistant(llm_response.content));
+                        round_messages.push(ChatMessage::user(
+                            super::super::prompt_assets::chat_answer_channel_repair(),
+                        ));
+                        continue;
+                    }
+                    return Err(AppError::internal("chat_answer_channel_missing"));
+                }
+            }
+
+            break llm_response;
+        };
         record_reasoning(
             sink,
             &mut state.reasoning_acc,
@@ -129,14 +160,15 @@ impl ReActLoop {
         Ok(llm_response)
     }
 
-    async fn call_retrieve_llm_stream(
+    pub(super) async fn call_retrieve_llm_stream(
         &self,
         llm: &LlmClient,
         round_messages: &[ChatMessage],
         temperature: f32,
         request: &AgentRequest,
-        _state: &mut IterationState,
+        state: &mut IterationState,
         sink: &dyn AgentEventSink,
+        chat: bool,
     ) -> Result<LlmResponse, AppError> {
         use crate::events::AgentEvent;
 
@@ -159,6 +191,8 @@ impl ReActLoop {
             },
         );
         tokio::pin!(stream);
+        let mut answer = super::super::chat_answer_channel::AnswerChannel::default();
+        state.answer_deltas_streamed = false;
 
         let response = loop {
             tokio::select! {
@@ -166,8 +200,14 @@ impl ReActLoop {
                 _ = cancel.cancelled() => {
                     return Err(AppError::internal("request cancelled during retrieve stream"));
                 }
-                delta = delta_rx.recv() => {
-                    if let Some(delta) = delta {
+                Some(delta) = delta_rx.recv() => {
+                    if chat {
+                        let text = answer.push(&delta).map_err(AppError::internal)?;
+                        if !text.is_empty() {
+                            state.answer_deltas_streamed = true;
+                            let _ = sink.emit(AgentEvent::MessageDelta { text }).await;
+                        }
+                    } else {
                         // Process panel only — retrieve drafts (codegen, scratch)
                         // must not paint the main answer bubble.
                         let _ = sink
@@ -175,12 +215,10 @@ impl ReActLoop {
                             .await;
                     }
                 }
-                reasoning = reasoning_rx.recv() => {
-                    if let Some(reasoning) = reasoning {
+                Some(reasoning) = reasoning_rx.recv() => {
                         let _ = sink
                             .emit(AgentEvent::ReasoningSummaryDelta { text: reasoning })
                             .await;
-                    }
                 }
                 result = &mut stream => {
                     break result.map_err(|e| {
@@ -191,9 +229,26 @@ impl ReActLoop {
         };
 
         while let Ok(delta) = delta_rx.try_recv() {
-            let _ = sink
-                .emit(AgentEvent::ReasoningSummaryDelta { text: delta })
-                .await;
+            if chat {
+                let text = answer.push(&delta).map_err(AppError::internal)?;
+                if !text.is_empty() {
+                    state.answer_deltas_streamed = true;
+                    let _ = sink.emit(AgentEvent::MessageDelta { text }).await;
+                }
+            } else {
+                let _ = sink
+                    .emit(AgentEvent::ReasoningSummaryDelta { text: delta })
+                    .await;
+            }
+        }
+        if chat {
+            if let Some(full) = answer.finish().map_err(AppError::internal)? {
+                let text = full[answer.emitted..].to_string();
+                if !text.is_empty() {
+                    state.answer_deltas_streamed = true;
+                    let _ = sink.emit(AgentEvent::MessageDelta { text }).await;
+                }
+            }
         }
         while let Ok(reasoning) = reasoning_rx.try_recv() {
             let _ = sink
@@ -201,7 +256,7 @@ impl ReActLoop {
                 .await;
         }
 
-        // Do not set answer_deltas_streamed: retrieve never owns the final bubble.
+        // Only explicitly framed chat answers own the final bubble.
         Ok(response)
     }
 }
