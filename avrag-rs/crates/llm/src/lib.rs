@@ -117,6 +117,7 @@ pub struct ModelProviderConfig {
     pub base_url: String,
     pub api_key: String,
     pub model: String,
+    /// Completion connection/read-idle timeout; active streams may run longer.
     pub timeout_ms: u64,
     pub api_style: Option<ApiStyle>,
     pub dimensions: Option<usize>,

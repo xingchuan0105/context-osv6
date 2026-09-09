@@ -364,10 +364,7 @@ fn build_keys(
     let transport = match transport {
         Some(transport) => transport,
         None => {
-            let http_client = reqwest::Client::builder()
-                .timeout(std::time::Duration::from_millis(config.timeout_ms))
-                .build()
-                .expect("reqwest client should build");
+            let http_client = crate::route::completion_http_client(config.timeout_ms);
             Arc::new(ReqwestTransport::new(http_client))
         }
     };

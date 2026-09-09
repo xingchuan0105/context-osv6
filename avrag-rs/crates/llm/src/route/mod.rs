@@ -13,3 +13,4 @@ pub(crate) use client::apply_wafer_zdr_header;
 pub use endpoint::Endpoint;
 pub use framing::SseFramer;
 pub use transport::{ReqwestTransport, Transport, TransportBody};
+pub(crate) use transport::completion_http_client;

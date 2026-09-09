@@ -59,6 +59,26 @@ test('real UI login and Excel/PPT attachments enter only the current turn', asyn
   await expect(page.getByTestId('status-line')).toHaveText('已完成', {timeout:120000});
 });
 
+test('real long answer completes without the fixed 30 second stream cutoff', async ({page, request}) => {
+  await signIn(page, request);
+  await page.goto('/chat', {waitUntil:'networkidle'});
+  await page.getByTestId('composer-input').fill('Write a detailed 2000 word explanation of how rain forms.');
+  const started = Date.now();
+  const response = page.waitForResponse(res => res.request().method() === 'POST' && res.headers()['content-type']?.includes('text/event-stream'));
+  await page.getByTestId('send-button').click();
+  const stream = await response;
+  expect(stream.status()).toBe(200);
+  await expect(page.getByTestId('status-line')).toHaveText('已完成', {timeout:150000});
+  const answer = await page.getByTestId('live-answer').innerText();
+  expect(answer.split(/\s+/).length).toBeGreaterThan(1000);
+  const events = (await stream.text()).split('\n').filter(line => line.startsWith('data:')).map(line => JSON.parse(line.slice(5)));
+  expect(events.filter(event => event.event === 'error')).toEqual([]);
+  expect(events.some(event => event.event === 'done')).toBe(true);
+  console.log('Long answer evidence:', {elapsedMs:Date.now()-started, words:answer.split(/\s+/).length,
+    answerDeltas:events.filter(event => event.event === 'token').length});
+  await page.screenshot({path:`${evidence}/long-answer.png`});
+});
+
 test('real in-flight generation can be stopped before the answer arrives', async ({page, request}) => {
   await signIn(page, request);
   await page.goto('/chat', {waitUntil:'networkidle'});

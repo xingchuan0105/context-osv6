@@ -66,10 +66,7 @@ impl LlmClient {
     /// has members, all completions/streams route through the pool; otherwise
     /// behavior is identical to [`Self::new`].
     pub fn new_with_pool(config: ModelProviderConfig, pool_config: LlmPoolConfig) -> Self {
-        let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_millis(config.timeout_ms))
-            .build()
-            .expect("reqwest client should build");
+        let client = crate::route::completion_http_client(config.timeout_ms);
         let transport: Arc<dyn crate::route::Transport> =
             Arc::new(crate::route::ReqwestTransport::new(client));
         Self::new_with_pool_and_transport(config, pool_config, transport)

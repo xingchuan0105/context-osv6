@@ -362,6 +362,22 @@ mod tests {
     use super::*;
     use chrono::TimeZone;
 
+    #[test]
+    fn configured_embedding_example_uses_provider_scoped_fen_rates() {
+        let raw = include_str!("../../../.env.example")
+            .lines()
+            .find_map(|line| line.strip_prefix("# PLATFORM_OFFICIAL_RATES_JSON='"))
+            .unwrap()
+            .strip_suffix('\'')
+            .unwrap();
+        let rows: Vec<RateRow> = serde_json::from_str(raw).unwrap();
+        let model = "tongyi-embedding-vision-plus-2026-03-06";
+        let rate = resolve_in(&rows, "dashscope", model, 26, peak_time()).unwrap();
+        assert_eq!(rate.input_fen_per_mtok, 50.0);
+        assert_eq!(rate.output_fen_per_mtok, 0.0);
+        assert!(resolve_in(&rows, "other-provider", model, 26, peak_time()).is_none());
+    }
+
     /// Mirror of the ops JSON shapes (values = the 2026-08-17 vendor prices).
     fn test_rows() -> Vec<RateRow> {
         serde_json::from_str(
