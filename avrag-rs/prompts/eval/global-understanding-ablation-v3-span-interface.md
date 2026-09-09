@@ -1,0 +1,1 @@
+本次使用编号引用接口，评分规则仍是前述规则。answer_spans列出了model_answer中原有的段落及编号。points与claims中的answer_quote字符串改为answer_span_ids列表（例如["A2"]）；所选段落包含该要点或主张，未回答点的列表为空。source_id仍是原有S/O编号；evidence_quote字段由脚本从对应来源原文回填，输出中不需要该字段。其余correctness、refusal、points、claims、issues字段以及事实判断标准保持不变。每条claim选择最直接支持其主要事实的来源；缺乏支持时仍是unsupported或unverified。不存在的要点不能因为选择了一个含背景文字的段落就变成已回答。输出不需要抄写任何原文段落。
