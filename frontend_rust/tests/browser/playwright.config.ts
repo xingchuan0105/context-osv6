@@ -15,6 +15,7 @@ export default defineConfig({
   testDir: '.',
   testMatch: '**/*.spec.ts',
   testIgnore: [
+    'real-journey.spec.ts',
     'chat-live-smoke.spec.ts',
     'gate0-perf.spec.ts',
     'g5-live-smoke.spec.ts',

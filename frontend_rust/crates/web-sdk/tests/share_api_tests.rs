@@ -38,7 +38,7 @@ fn parse_share_payloads() {
     let tok_resp = parse_share_token(tok_raw).expect("token");
     assert_eq!(tok_resp.share_token, "token-abc");
 
-    let kb_raw = r#"{
+    let kb_raw = r#"{"success":true,"data":{
         "knowledge_base": {
             "id": "ws-1",
             "title": "公开知识库",
@@ -60,11 +60,17 @@ fn parse_share_payloads() {
             "display_name": "张工",
             "profile_enabled": true
         }
-    }"#;
+    }}"#;
     let kb_resp = parse_shared_workspace(kb_raw.as_bytes()).expect("kb");
     assert_eq!(kb_resp.knowledge_base.title, "公开知识库");
     assert_eq!(kb_resp.sources.len(), 1);
     assert!(kb_resp.owner.unwrap().profile_enabled);
+}
+
+#[test]
+fn shared_workspace_requires_a_successful_envelope() {
+    assert!(matches!(parse_shared_workspace(br#"{"success":false,"error":"Invalid or expired share token"}"#), Err(TransportError::Unavailable(_))));
+    assert!(matches!(parse_shared_workspace(br#"{"success":true,"data":null}"#), Err(TransportError::EmptyBody)));
 }
 
 #[tokio::test]

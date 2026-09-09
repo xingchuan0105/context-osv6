@@ -102,7 +102,7 @@ pub use share_api::{
 pub use transport::{Cancellation, ChatEventStream, ChatTransport, TransportError};
 pub use workspace_api::{
     create_note_json, create_workspace_json, parse_workspace_documents, parse_workspace_list,
-    parse_workspace_notes, parse_workspace_response, workspace_document_url,
+    parse_workspace_notes, parse_workspace_response, document_url, workspace_document_upload_url,
     workspace_documents_url, workspace_note_url, workspace_notes_url, workspace_url,
     workspaces_url,
 };

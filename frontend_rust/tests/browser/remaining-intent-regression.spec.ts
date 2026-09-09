@@ -42,7 +42,7 @@ test('failed price and wallet reads do not fabricate prices or zero balance', as
 
 test('workspace load failure is recoverable and does not claim an empty knowledge base', async ({ page }) => {
   let fail = true;
-  await page.route('**/api/v1/workspaces/ws-materials/documents', route => fail
+  await page.route('**/api/v1/documents?workspace_id=ws-materials', route => fail
     ? route.fulfill({ status: 503, body: 'documents unavailable' }) : route.continue());
   await page.goto('/dashboard/ws-materials');
   await expect(page.getByTestId('workbench-load-error')).toBeVisible();

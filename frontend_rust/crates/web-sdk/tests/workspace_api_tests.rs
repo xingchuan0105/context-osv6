@@ -1,6 +1,6 @@
 use web_sdk::{
     BrowserRestClient, TransportError, create_note_json, create_workspace_json,
-    parse_workspace_list, workspace_document_url, workspace_documents_url, workspace_note_url,
+    parse_workspace_list, document_url, workspace_document_upload_url, workspace_documents_url, workspace_note_url,
     workspace_notes_url, workspace_url, workspaces_url,
 };
 
@@ -16,11 +16,15 @@ fn workspace_urls_are_canonical() {
     );
     assert_eq!(
         workspace_documents_url("http://x", "ws-1"),
+        "http://x/api/v1/documents?workspace_id=ws-1"
+    );
+    assert_eq!(
+        workspace_document_upload_url("http://x", "ws-1"),
         "http://x/api/v1/workspaces/ws-1/documents"
     );
     assert_eq!(
-        workspace_document_url("http://x", "ws-1", "doc-1"),
-        "http://x/api/v1/workspaces/ws-1/documents/doc-1"
+        document_url("http://x", "doc-1"),
+        "http://x/api/v1/documents/doc-1"
     );
     assert_eq!(
         workspace_notes_url("http://x", "ws-1"),

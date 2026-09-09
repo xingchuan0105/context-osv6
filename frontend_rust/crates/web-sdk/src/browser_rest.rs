@@ -242,9 +242,8 @@ impl BrowserRestClient {
         self.unavailable()
     }
 
-    pub async fn delete_workspace_document(
+    pub async fn delete_document(
         &self,
-        _workspace_id: &str,
         _document_id: &str,
     ) -> Result<(), TransportError> {
         self.unavailable()
@@ -662,9 +661,12 @@ mod wasm_request {
         if status == 204 || status == 205 {
             return Ok(Vec::new());
         }
-        let body_text = read_bounded_text(&response).await;
+        let body_text = read_text(&response).await?;
         if !(200..=299).contains(&status) {
-            return Err(TransportError::from_http_status(status, body_text));
+            return Err(TransportError::from_http_status(
+                status,
+                body_text.chars().take(MAX_ERROR_BODY_BYTES).collect(),
+            ));
         }
         if body_text.is_empty() {
             if method == "GET" {
@@ -675,16 +677,12 @@ mod wasm_request {
         Ok(body_text.into_bytes())
     }
 
-    async fn read_bounded_text(response: &Response) -> String {
-        let Ok(promise) = response.text() else {
-            return String::new();
-        };
+    async fn read_text(response: &Response) -> Result<String, TransportError> {
+        let promise = response.text().map_err(network_error)?;
         let text = JsFuture::from(promise)
             .await
-            .ok()
-            .and_then(|value| value.as_string())
-            .unwrap_or_default();
-        text.chars().take(MAX_ERROR_BODY_BYTES).collect()
+            .map_err(network_error)?;
+        text.as_string().ok_or_else(|| TransportError::Network("response body was not text".into()))
     }
 
     fn network_error(value: wasm_bindgen::JsValue) -> TransportError {
@@ -960,17 +958,15 @@ impl BrowserRestClient {
         )
     }
 
-    pub async fn delete_workspace_document(
+    pub async fn delete_document(
         &self,
-        workspace_id: &str,
         document_id: &str,
     ) -> Result<(), TransportError> {
         wasm_request::request_bytes(
             self,
             "DELETE",
-            &crate::workspace_api::workspace_document_url(
+            &crate::workspace_api::document_url(
                 &self.base_url,
-                workspace_id,
                 document_id,
             ),
             None,
@@ -1039,8 +1035,8 @@ impl BrowserRestClient {
                 self,
                 "POST",
                 &crate::share_api::share_url(&self.base_url, workspace_id),
-                None,
-                None,
+                Some(br#"{"role":"viewer"}"#),
+                Some("application/json"),
                 true,
             )
             .await?,
@@ -1608,7 +1604,7 @@ impl BrowserRestClient {
             &wasm_request::request_bytes(
                 self,
                 "POST",
-                &crate::workspace_api::workspace_documents_url(&self.base_url, workspace_id),
+                &crate::workspace_api::workspace_document_upload_url(&self.base_url, workspace_id),
                 Some(&body),
                 Some("application/json"),
                 true,

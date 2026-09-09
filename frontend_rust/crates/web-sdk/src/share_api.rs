@@ -70,5 +70,15 @@ pub fn parse_access_logs(body: &[u8]) -> Result<AccessLogsResponse, TransportErr
 }
 
 pub fn parse_shared_workspace(body: &[u8]) -> Result<SharedWorkspacePayload, TransportError> {
-    serde_json::from_slice(body).map_err(TransportError::from)
+    #[derive(serde::Deserialize)]
+    struct SharedResponse {
+        success: bool,
+        data: Option<SharedWorkspacePayload>,
+        error: Option<String>,
+    }
+    let response: SharedResponse = serde_json::from_slice(body)?;
+    if !response.success {
+        return Err(TransportError::Unavailable(response.error.unwrap_or_else(|| "Share unavailable".into())));
+    }
+    response.data.ok_or(TransportError::EmptyBody)
 }

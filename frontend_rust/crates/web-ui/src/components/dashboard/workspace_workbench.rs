@@ -55,6 +55,10 @@ pub fn WorkspaceWorkbenchPage() -> impl IntoView {
     let i18n = use_i18n();
     let navigate = use_navigate();
     let (session_query, set_session_query) = query_signal::<String>("session");
+    Effect::new(move |_| {
+        let _ = session_query.get();
+        refresh_gen.update(|generation| *generation += 1);
+    });
     let (source_query, set_source_query) = query_signal::<String>("source");
     let preview = RwSignal::new(None::<String>);
     let preview_error = RwSignal::new(None::<String>);
@@ -177,7 +181,7 @@ pub fn WorkspaceWorkbenchPage() -> impl IntoView {
         }
 
         run_workbench_action(workspace_id, busy, action_error, refresh_gen, async move {
-            BrowserRestClient::new(&poc_api_base(), Some(tok)).delete_workspace_document(&wid, &doc_id).await
+            BrowserRestClient::new(&poc_api_base(), Some(tok)).delete_document(&doc_id).await
         }, Callback::new(move |_| ()));
 
     };

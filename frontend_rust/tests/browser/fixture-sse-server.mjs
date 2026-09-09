@@ -831,11 +831,12 @@ const server = http.createServer((req, res) => {
     if (sharedKbMatch) {
       const tok = decodeURIComponent(sharedKbMatch[1]);
       if (tok === 'tok-expired') {
-        res.writeHead(404, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'not_found', message: 'share expired' }));
+        jsonOk(res, {success:false, error:'Invalid or expired share token'});
         return;
       }
       jsonOk(res, {
+        success: true,
+        data: {
         knowledge_base: {
           id: 'ws-materials',
           title: '公开材料知识库',
@@ -858,6 +859,7 @@ const server = http.createServer((req, res) => {
           display_name: '公开分享者',
           bio: '材料科学专家',
           profile_enabled: true,
+        },
         },
       });
       return;
@@ -1014,8 +1016,7 @@ const server = http.createServer((req, res) => {
       });
       return;
     }
-    const wsDocsMatch = pathname.match(/\/api\/v1\/workspaces\/([^/]+)\/documents$/);
-    if (wsDocsMatch) {
+    if (pathname.endsWith('/api/v1/documents') && url.searchParams.has('workspace_id')) {
       jsonOk(res, { documents: workspaceDocsState });
       return;
     }
@@ -1360,9 +1361,9 @@ const server = http.createServer((req, res) => {
       res.end();
       return;
     }
-    const wsDocMatch = url.pathname.match(/\/api\/v1\/workspaces\/([^/]+)\/documents\/([^/]+)$/);
+    const wsDocMatch = url.pathname.match(/\/api\/v1\/documents\/([^/]+)$/);
     if (wsDocMatch) {
-      const docId = decodeURIComponent(wsDocMatch[2]);
+      const docId = decodeURIComponent(wsDocMatch[1]);
       workspaceDocsState = workspaceDocsState.filter((d) => d.id !== docId);
       res.writeHead(204);
       res.end();
