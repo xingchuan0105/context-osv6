@@ -5,7 +5,7 @@
 
 use std::sync::Arc;
 
-use crate::adapters::pg_session::begin_super_admin_tx_sqlx;
+use crate::adapters::pg_session::{begin_super_admin_tx_sqlx, set_current_user_sqlx};
 use app_core::{
     ByokMasterKey, ProviderSecretPurpose, ProviderSecretStorePort, ProviderSecretView,
     ResolvedProviderSecret, UpsertProviderSecretInput, key_fingerprint,
@@ -317,17 +317,14 @@ impl ProviderSecretStorePort for PgProviderSecretStoreAdapter {
         let provider: String = row.try_get("provider").map_err(map_sqlx)?;
         let ws: Option<Uuid> = row.try_get("workspace_id").map_err(map_sqlx)?;
         // ADR-0010 §3.2: audit resolve without secret material (best-effort).
-        if let Err(e) = sqlx::query(
-            "INSERT INTO provider_secret_audit \
-             (owner_user_id, secret_id, purpose, provider, action, workspace_id) \
-             VALUES ($1, $2, $3, $4, 'resolve', $5)",
+        if let Err(e) = audit_resolve(
+            self.repo.raw(),
+            owner_user_id,
+            secret_id,
+            purpose_s,
+            &provider,
+            ws,
         )
-        .bind(owner_user_id)
-        .bind(secret_id)
-        .bind(purpose_s)
-        .bind(&provider)
-        .bind(ws)
-        .execute(self.repo.raw())
         .await
         {
             tracing::warn!(error = %e, "provider_secret_audit insert failed");
@@ -365,5 +362,115 @@ impl ProviderSecretStorePort for PgProviderSecretStoreAdapter {
         .map_err(map_sqlx)?;
         tx.commit().await.map_err(map_sqlx)?;
         Ok(exists)
+    }
+}
+
+/// The read transaction has already ended. Audit uses only the owner identity,
+/// scoped to this new transaction so pooled connections cannot retain it.
+async fn audit_resolve(
+    pool: &sqlx::PgPool,
+    owner_user_id: Uuid,
+    secret_id: Uuid,
+    purpose: &str,
+    provider: &str,
+    workspace_id: Option<Uuid>,
+) -> Result<(), sqlx::Error> {
+    let mut tx = pool.begin().await?;
+    set_current_user_sqlx(&mut tx, &owner_user_id.to_string()).await?;
+    sqlx::query(
+        "INSERT INTO provider_secret_audit
+         (owner_user_id, secret_id, purpose, provider, action, workspace_id)
+         VALUES ($1, $2, $3, $4, 'resolve', $5)",
+    )
+    .bind(owner_user_id)
+    .bind(secret_id)
+    .bind(purpose)
+    .bind(provider)
+    .bind(workspace_id)
+    .execute(tx.as_mut())
+    .await?;
+    tx.commit().await
+}
+
+#[cfg(test)]
+mod audit_tests {
+    use super::*;
+
+    #[tokio::test]
+    #[ignore = "requires TEST_DATABASE_URL with migrated database and non-bypass runtime role"]
+    async fn audit_resolve_enforces_owner_rls_and_clears_identity() {
+        let url = std::env::var("TEST_DATABASE_URL").expect("TEST_DATABASE_URL required");
+        let pool = sqlx::postgres::PgPoolOptions::new()
+            .max_connections(1)
+            .connect(&url)
+            .await
+            .unwrap();
+        let bypass: bool = sqlx::query_scalar(
+            "SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname = current_user",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert!(!bypass, "test must exercise RLS, not a privileged role");
+        let owner = Uuid::new_v4();
+        let secret = Uuid::new_v4();
+        audit_resolve(&pool, owner, secret, "agent", "audit-regression", None)
+            .await
+            .unwrap();
+        let current: Option<String> =
+            sqlx::query_scalar("SELECT NULLIF(current_setting('app.current_user', true), '')")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert!(current.is_none(), "owner identity leaked after commit");
+        let mut tx = pool.begin().await.unwrap();
+        set_current_user_sqlx(&mut tx, &Uuid::new_v4().to_string())
+            .await
+            .unwrap();
+        let visible: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM provider_secret_audit WHERE secret_id = $1")
+                .bind(secret)
+                .fetch_one(tx.as_mut())
+                .await
+                .unwrap();
+        assert_eq!(visible, 0, "another user can read the audit");
+        let denied = sqlx::query(
+            "INSERT INTO provider_secret_audit (owner_user_id, purpose, provider, action)
+             VALUES ($1, 'agent', 'audit-regression', 'resolve')",
+        )
+        .bind(owner)
+        .execute(tx.as_mut())
+        .await
+        .unwrap_err();
+        assert_eq!(
+            denied.as_database_error().unwrap().code().as_deref(),
+            Some("42501")
+        );
+        tx.rollback().await.unwrap();
+        let mut tx = pool.begin().await.unwrap();
+        set_current_user_sqlx(&mut tx, &owner.to_string())
+            .await
+            .unwrap();
+        let rows = sqlx::query(
+            "DELETE FROM provider_secret_audit WHERE secret_id = $1
+             RETURNING owner_user_id, purpose, provider, action, workspace_id",
+        )
+        .bind(secret)
+        .fetch_all(tx.as_mut())
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].get::<Uuid, _>("owner_user_id"), owner);
+        assert_eq!(rows[0].get::<String, _>("action"), "resolve");
+        assert_eq!(rows[0].get::<String, _>("purpose"), "agent");
+        assert_eq!(rows[0].get::<String, _>("provider"), "audit-regression");
+        assert!(rows[0].get::<Option<Uuid>, _>("workspace_id").is_none());
+        let current: Option<String> =
+            sqlx::query_scalar("SELECT NULLIF(current_setting('app.current_user', true), '')")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert!(current.is_none());
     }
 }
