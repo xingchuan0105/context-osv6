@@ -5,5 +5,10 @@ include = [{ path = "local-machine.toml", optional = true }]
 [build]
 jobs = 2
 
+[env]
+# DuckDB's bundled C++ unity files exceed standard COFF section limits.
+# Scope the assembler flag to MinGW C++ builds; native/MSVC builds are unchanged.
+CXXFLAGS_x86_64_pc_windows_gnu = "-Wa,-mbig-obj"
+
 [alias]
 test-app = ["test", "-p", "app", "--message-format=short"]
