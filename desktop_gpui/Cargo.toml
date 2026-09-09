@@ -9,13 +9,22 @@ description = "Context-OS desktop UI (GPUI). Independent workspace; not a member
 contracts = { path = "../contracts" }
 web-sdk = { path = "../frontend_rust/crates/web-sdk" }
 serde_json = "1.0.145"
-gpui = { version = "0.2", optional = true }
+desktop-core = { path = "../desktop/core" }
+futures = "0.3"
+tokio = { version = "1", features = ["rt-multi-thread", "time", "macros", "net"] }
+tokio-util = "0.7"
+dirs = "6"
+uuid = { version = "1", features = ["v4"] }
+gpui-kit = { git = "https://github.com/longbridge/gpui-kit", rev = "d2304b9063b902fc7ac19b97a7cb5bf3e650b4f5", optional = true }
 
 [features]
 default = []
-ui = ["dep:gpui"]
+ui = ["dep:gpui-kit"]
 
 [[bin]]
 name = "desktop-gpui"
 path = "src/main.rs"
 required-features = ["ui"]
+
+[profile.dev]
+debug = 0
