@@ -54,7 +54,8 @@ async function collectChromeHrefs(page: Page): Promise<Set<string>> {
 test.describe('E5.2 全局壳可达性', () => {
   test('/chat 顶栏与 Workspaces 入口齐备', async ({ page }) => {
     await seedNextAuth(page, 'fixture-token');
-    await page.goto(`${WEB_BASE}/chat`, { waitUntil: 'domcontentloaded' });
+    await page.addInitScript(base => { (window as any).__POC_CHAT_API_BASE__ = base; }, FIXTURE_BASE);
+    await page.goto(`${WEB_BASE}/chat`, { waitUntil: 'networkidle' });
     await expect(page.getByTestId('app-top-bar')).toBeVisible();
     await expect(page.getByTestId('all-workspaces-link')).toHaveAttribute('href', '/dashboard');
     await expect(page.getByTestId('app-topbar-share-menu')).toHaveCount(0);

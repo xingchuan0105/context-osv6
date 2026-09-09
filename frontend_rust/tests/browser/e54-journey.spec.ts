@@ -21,7 +21,7 @@ async function gotoApp(page: Page, path: string) {
   await page.addInitScript((base) => {
     (window as unknown as { __POC_CHAT_API_BASE__: string }).__POC_CHAT_API_BASE__ = base;
   }, FIXTURE_BASE);
-  await page.goto(path, { waitUntil: 'domcontentloaded' });
+  await page.goto(path, { waitUntil: 'networkidle' });
 }
 
 test.describe('E5.4 业务页真数据与交互件', () => {
@@ -51,6 +51,7 @@ test.describe('E5.4 业务页真数据与交互件', () => {
     const errors = collectPageErrors(page);
     await gotoApp(page, '/dashboard/ws-materials');
     await expect(page.getByTestId('workspace-workbench')).toBeVisible();
+    await page.getByTestId('workspace-open-sources').click();
     await page.getByTestId('open-upload').click();
     await expect(page.getByTestId('upload-dialog')).toBeVisible();
     await page.getByTestId('upload-tab-url').click();

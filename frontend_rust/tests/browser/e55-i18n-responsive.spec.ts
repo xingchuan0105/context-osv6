@@ -21,7 +21,7 @@ async function gotoApp(page: Page, path: string) {
   await page.addInitScript((base) => {
     (window as unknown as { __POC_CHAT_API_BASE__: string }).__POC_CHAT_API_BASE__ = base;
   }, FIXTURE_BASE);
-  await page.goto(path, { waitUntil: 'domcontentloaded' });
+  await page.goto(path, { waitUntil: 'networkidle' });
 }
 
 test.describe('E5.5 i18n + responsive', () => {
@@ -38,7 +38,8 @@ test.describe('E5.5 i18n + responsive', () => {
 
     await expect(page.getByTestId('new-chat-button')).toHaveText('New chat');
     await expect(page.getByTestId('send-button')).toHaveText('Send');
-    await expect(page.getByTestId('scope-cap-rag')).toContainText('Knowledge base');
+    await expect(page.getByTestId('scope-cap-rag')).toHaveCount(0);
+    await expect(page.getByTestId('scope-cap-search')).toHaveAccessibleName('Web search');
 
     const localeToggle = page.getByTestId('account-locale-toggle');
     if (!(await localeToggle.isVisible())) {

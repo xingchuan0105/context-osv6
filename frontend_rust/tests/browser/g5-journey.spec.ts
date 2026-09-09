@@ -23,7 +23,7 @@ async function gotoApp(page: Page, path: string, token = 'poc-test-token', apiBa
   await page.addInitScript((base) => {
     (window as unknown as { __POC_CHAT_API_BASE__: string }).__POC_CHAT_API_BASE__ = base;
   }, apiBase);
-  await page.goto(path, { waitUntil: 'domcontentloaded' });
+  await page.goto(path, { waitUntil: 'networkidle' });
 }
 
 test.describe('G5 PRODUCT_IA §1 旅程（fixture）', () => {
@@ -31,26 +31,26 @@ test.describe('G5 PRODUCT_IA §1 旅程（fixture）', () => {
     await request.post(`${FIXTURE_BASE}/admin/reset`);
   });
 
-  test('J0 无库直聊含会话文件', async ({ page, request }) => {
+  test('J0 无库直聊含本轮附件', async ({ page, request }) => {
     const errors = collectPageErrors(page);
     await gotoApp(page, '/chat', 'poc-test-token', `${FIXTURE_BASE}/case/files`);
     await expect(page.getByTestId('chat-canvas')).toBeVisible();
     await expect(page.getByTestId('chat-hero')).toBeVisible();
-    const fileInput = page.getByTestId('session-file-input');
-    await expect(fileInput).toHaveAttribute('data-listening', 'true', { timeout: 15_000 });
+    await page.route('**/chat/attachments/parse?*', route => route.fulfill({json:{filename:'notes.txt', mime_type:'text/plain', text:'hello'}}));
+    const fileInput = page.getByTestId('turn-attachment-input');
     await fileInput.setInputFiles({
       name: 'notes.txt',
       mimeType: 'text/plain',
       buffer: Buffer.from('hello'),
     });
-    await fileInput.dispatchEvent('change');
-    await expect(page).toHaveURL(/\/chat\/sess-file-1$/, { timeout: 15_000 });
-    await expect(page.getByTestId('session-file-status')).toHaveText('就绪', { timeout: 15_000 });
+    await expect(page.getByTestId('turn-attachment-item')).toBeVisible();
     await page.getByTestId('composer-input').fill('文件已就绪');
     await page.getByTestId('send-button').click();
     await expect(page.getByTestId('status-line')).toHaveText('已完成', { timeout: 15_000 });
     const state = await request.get(`${FIXTURE_BASE}/admin/state`).then((r) => r.json());
-    expect(state.lastChatBody?.capabilities).toEqual(['rag']);
+    expect(state.lastChatBody?.capabilities).toEqual([]);
+    expect(state.lastChatBody?.attachments).toEqual([expect.objectContaining({filename:'notes.txt', text:'hello'})]);
+    await expect(page.getByTestId('turn-attachment-item')).toHaveCount(0);
     expect(errors).toEqual([]);
   });
 
@@ -79,6 +79,7 @@ test.describe('G5 PRODUCT_IA §1 旅程（fixture）', () => {
     await page.getByTestId('login-password').fill('pass123456');
     await page.getByTestId('login-submit').click();
     await expect(page).toHaveURL(/\/settings$/);
+    await page.getByTestId('tab-providers').click();
     await expect(page.getByTestId('providers-panel')).toBeVisible();
     await page.getByTestId('input-quick_chat').fill('sk-g5-byok');
     await page.getByTestId('save-quick_chat').click();

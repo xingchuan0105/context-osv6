@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
-import { seedNextAuth } from './auth-seed';
+import { seedNextAuth, nextAuthPayload } from './auth-seed';
 
 const fixture = `http://127.0.0.1:${Number(process.env.POC_FIXTURE_PORT || 3201)}`;
 const source = readFileSync('../../crates/web-ui/src/app.rs', 'utf8');
@@ -9,7 +9,6 @@ const routes = [...source.matchAll(/path!\("([^"]+)"\)/g)].map((match) => match[
   .replace(':member_id', 'mem-99').replace(':owner_user_id', 'fixture-user')
   .replace(':user_id', 'u-materials-lead').replace(':token', 'tok-valid-123'));
 routes.push('/settings?tab=providers', '/settings?tab=preferences', '/settings?tab=security', '/settings?tab=billing');
-const capture = new Set(['/chat', '/dashboard', '/dashboard/ws-materials', '/settings', '/pricing', '/login', '/admin', '/shared/kb/tok-valid-123']);
 const phase = process.env.VISUAL_AUDIT_PHASE || 'after';
 const output = `/tmp/context-rust-visual/${phase}`;
 
@@ -81,12 +80,21 @@ for (const theme of ['light', 'dark']) {
       test.setTimeout(300_000);
       mkdirSync(output, { recursive: true });
       await request.post(`${fixture}/admin/reset`);
-      await seedNextAuth(page, 'poc-test-token');
       await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
-      await page.addInitScript(({ fixture, theme }) => {
+      await page.addInitScript(({ fixture, theme, auth }) => {
         (window as any).__POC_CHAT_API_BASE__ = fixture;
         localStorage.setItem('avrag.ui.theme.v1', theme);
-      }, { fixture, theme });
+        const anonymous = /^\/(login|register|reset-password)(\/|$)/.test(location.pathname);
+        if (anonymous) {
+          localStorage.removeItem('avrag.auth.v1');
+          document.cookie = 'avrag.auth.session=; Path=/; Max-Age=0';
+          document.cookie = 'avrag.auth.persisted=; Path=/; Max-Age=0';
+        } else {
+          localStorage.setItem('avrag.auth.v1', JSON.stringify(auth));
+          document.cookie = 'avrag.auth.session=1; Path=/; SameSite=Lax';
+          document.cookie = `avrag.auth.persisted=${encodeURIComponent(JSON.stringify(auth))}; Path=/; SameSite=Lax`;
+        }
+      }, { fixture, theme, auth: nextAuthPayload('poc-test-token') });
       const report: unknown[] = [];
       for (const path of [...new Set(routes)]) {
         await page.goto(path, { waitUntil: 'networkidle' });
@@ -96,16 +104,18 @@ for (const theme of ['light', 'dark']) {
           return {
             overflow: document.documentElement.scrollWidth - innerWidth,
             heavy: [...document.querySelectorAll('h1,h2,h3,h4,strong,b,th,button')].filter(visible).filter(el => Number(getComputedStyle(el).fontWeight) > 400).map(describe),
-            squareButtons: [...document.querySelectorAll('button')].filter(visible).filter(el => !el.matches('.app-menu-dismiss,.app-navigation-dismiss,.app-navigation .chat-new-chat,.app-navigation .chat-session-item')).filter(el => parseFloat(getComputedStyle(el).borderRadius) < el.getBoundingClientRect().height / 2).map(describe),
+            headers: document.querySelectorAll('[data-testid="app-top-bar"],.public-layout-header,.mkt-chrome').length,
+            applicationFooters: document.querySelectorAll('.application-layout [data-testid="product-chrome-footer"]').length,
             wide: [...document.querySelectorAll('main *,section *,form *')].filter(visible).filter(el => el.getBoundingClientRect().right > innerWidth + 1 && !el.closest('pre,.admin-table-scroll,.pub-table-wrap')).slice(0, 8).map(describe),
           };
         });
-        report.push({ path, ...state });
-        if (capture.has(path)) await page.screenshot({ path: `${output}/${theme}-${width}-${path.replaceAll('/', '_')}.png`, fullPage: true, animations: 'disabled' });
-        if (phase === 'after') {
+        report.push({ path, finalUrl: page.url(), ...state });
+        await page.screenshot({ path: `${output}/${theme}-${width}-${path.replaceAll('/', '_').replaceAll('?', '_')}.png`, fullPage: true, animations: 'disabled' });
+        if (phase !== 'before') {
           expect.soft(state.overflow, `${path}: horizontal overflow`).toBeLessThanOrEqual(1);
           expect.soft(state.heavy, `${path}: browser-default bold`).toEqual([]);
-          expect.soft(state.squareButtons, `${path}: button shape`).toEqual([]);
+          expect.soft(state.headers, `${path}: one page header`).toBe(1);
+          expect.soft(state.applicationFooters, `${path}: no marketing footer in app`).toBe(0);
         }
       }
       writeFileSync(`${output}/${theme}-${width}.json`, JSON.stringify(report, null, 2));

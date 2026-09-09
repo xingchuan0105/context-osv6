@@ -2,12 +2,12 @@ import {test, expect} from '@playwright/test';
 import {seedNextAuth} from './auth-seed';
 const fixture = `http://127.0.0.1:${Number(process.env.POC_FIXTURE_PORT || 3201)}`;
 
-for (const width of [390, 1280]) {
+for (const width of [390, 768, 1280, 1440]) {
   for (const theme of ['light', 'dark']) {
-    test(`W4 page families ${width} ${theme}`, async ({page, request}) => {
+    test(`page families ${width} ${theme}`, async ({page, request}) => {
       await request.post(`${fixture}/admin/reset`);
       await seedNextAuth(page, 'poc-test-token');
-      await page.setViewportSize({width, height:800});
+      await page.setViewportSize({width, height:width === 1280 ? 720 : 800});
       await page.addInitScript(({fixture,theme}) => {
         (window as any).__POC_CHAT_API_BASE__=fixture;
         localStorage.setItem('avrag.ui.theme.v1',theme);

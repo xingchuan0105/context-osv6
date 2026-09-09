@@ -14,7 +14,14 @@ for (const width of [390, 768, 1280, 1440]) {
   test(`workspace notes and chat drafts survive panel changes at ${width}px ${theme}`, async ({ page }) => {
     await page.addInitScript(theme => localStorage.setItem('avrag.ui.theme.v1', theme), theme);
     await page.setViewportSize({ width, height: 720 });
-    await page.goto('/dashboard/ws-materials');
+    await page.goto('/dashboard/ws-materials', {waitUntil:'networkidle'});
+    await expect(page.locator('.app-context-title')).toHaveText('材料研发知识库');
+    await page.evaluate(() => document.fonts.ready);
+    for (const control of await page.locator('.app-context-bar button, .app-context-bar a').all()) {
+      if (!await control.isVisible()) continue;
+      const box = await control.boundingBox();
+      expect(box!.x + box!.width, await control.getAttribute('data-testid') || 'header action').toBeLessThanOrEqual(width);
+    }
     const panel = page.getByTestId('workspace-side-rail');
     await expect(panel).toBeHidden();
     await expect(page.getByTestId('workspace-quick-add')).toBeEnabled();
