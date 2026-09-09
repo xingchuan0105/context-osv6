@@ -61,6 +61,10 @@
 - `engineering/2026-08-18-security-audit-ai-product.md` — AI 产品安全审查（L0–L6）；修补编排见 `plans/2026-08-18-security-remediation-plan.md`
 - `engineering/2026-08-10-harness-llm-user-channel-philosophy-diagnosis.md` — **Harness / LLM / 用户三角信道** vs 现网出站；主审复核通过；**§17 方案补丁**（verify 面 / ceiling 分叉 / 次数阈值）闭合后可开 P0
 
+## 待评审设计
+
+- [Subtex 仓库树与 Agent 文档检索 PRD v0.1](plans/2026-09-10-subtex-repository-tree-prd.md) — 2026-09-10 设计草案：原文章节树 + 跨文档主题树、search/read/browse 契约、Rust/SQLite 技术栈、开源选型、增量更新与消融验收；尚未实施，不替代现行目录插件 PRD。
+
 ## 进行中的计划
 
 - `plans/2026-09-07-subtex-m2-m3-dev-plan.md` — **Subtex M2/M3 切片**：F6 收件箱确认制 + F7 耗材 millicredit 账本（不进 Agent 会话、不接 B 线钱包）
