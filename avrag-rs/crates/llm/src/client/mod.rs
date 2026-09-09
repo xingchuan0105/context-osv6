@@ -1,6 +1,7 @@
 pub(crate) mod rate_limit;
 mod stream_parser;
 mod types;
+mod eval_capture;
 
 use crate::protocols::Protocol;
 use crate::route::build_route_from_config;
@@ -236,6 +237,8 @@ impl LlmClient {
         if let Some(enable) = self.thinking_override {
             effective.enable_thinking = Some(enable);
         }
+
+        eval_capture::record(&effective.model, &self.feature, &self.stage, messages);
 
         LlmRequest::new(messages.to_vec(), effective)
             .with_options(GenerationOptions {

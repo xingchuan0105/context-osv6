@@ -146,6 +146,8 @@ fn summarize_tool_activity_merges_sse_and_response_tools() {
         }],
         usage: None,
         agent_operation_guide: None,
+        credential_source: None,
+        turn_context_snapshot_id: None,
     };
     let tools = summarize_tool_activity(&events, &resp);
     assert_eq!(

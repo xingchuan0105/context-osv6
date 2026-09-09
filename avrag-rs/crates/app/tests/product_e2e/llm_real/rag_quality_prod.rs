@@ -423,6 +423,8 @@ fn compact_tool_trace_entry(r: &contracts::ToolResult) -> serde_json::Value {
         "grep_truncated": grep_truncated,
         "error": error,
         "stderr": stderr,
+        "data": r.data,
+        "trace": r.trace,
     })
 }
 
@@ -457,6 +459,8 @@ mod loop_observability_tests {
             tool_results: Vec::new(),
             usage: None,
             agent_operation_guide: None,
+            credential_source: None,
+            turn_context_snapshot_id: None,
         }
     }
 
