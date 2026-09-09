@@ -825,9 +825,9 @@ host    all             all             ::1/128                 trust\n"
 ///
 /// - Fresh trees: initdb bootstrapped [`PG_ADMIN_USER`]; create the demoted
 ///   runtime role [`PG_USER`].
-/// - Trees initialized by older shells: `avrag` **is** the initdb bootstrap
-///   superuser — create the admin through it, then demote it in the same
-///   still-privileged session (ALTER on self runs last).
+/// Existing trees whose bootstrap role is `avrag` require a separately
+/// approved data transfer to a correctly initialized cluster. PostgreSQL
+/// does not permit demoting the bootstrap role; startup must not attempt it.
 fn provision_pg_roles(pg_bin: &Path, log: &mut String) -> Result<(), String> {
     let psql = bin(pg_bin, "psql");
     // "Can we open a session as this role?" — doubles as existence probe.
@@ -841,10 +841,8 @@ fn provision_pg_roles(pg_bin: &Path, log: &mut String) -> Result<(), String> {
     };
     let session_user = if can_connect(PG_ADMIN_USER) {
         PG_ADMIN_USER
-    } else if can_connect(PG_USER) {
-        PG_USER
     } else {
-        return Err("postgres reachable but neither avrag_cluster_admin nor avrag exists".into());
+        return Err("数据库未采用当前角色结构（缺少 avrag_cluster_admin）。现有数据已保留；需要迁移到独立初始化的 Windows 数据目录，不能在启动时修改 bootstrap 角色。".into());
     };
 
     let (code, out, _) = run_capture(
@@ -861,12 +859,6 @@ fn provision_pg_roles(pg_bin: &Path, log: &mut String) -> Result<(), String> {
     let dml_role_exists = code == 0 && out.contains('1');
 
     let mut batch = String::new();
-    if session_user == PG_USER {
-        // Legacy repair: the session runs as the initdb superuser `avrag`.
-        batch.push_str(&format!(
-            "CREATE ROLE {PG_ADMIN_USER} LOGIN SUPERUSER PASSWORD '{PG_PASS}';"
-        ));
-    }
     if runtime_role_exists {
         // Healthy trees get a no-op; legacy trees drop out of the privilege
         // class here. Password keeps DATABASE_URL well-formed (local pg_hba

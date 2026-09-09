@@ -18,6 +18,8 @@ cargo build --features ui
 .\target\debug\desktop-gpui.exe
 ```
 
+Windows 原生链路开发验收使用 `pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/run-windows.ps1`（在 desktop_gpui 下运行）。脚本显式选择已安装的 Windows runtime 和状态目录，检查 API/worker/migrate/PG 文件；直接运行开发 exe 可能选择开发树中残留的 Linux 数据目录。`-RuntimeHome` 可指定完整 Windows 安装目录；不复制、覆盖或转换现有数据库。旧库若以 avrag 为 bootstrap 角色，当前角色初始化不支持原地降权，必须先完成独立数据迁移，不能据此宣布聊天链路通过。
+
 每批运行前仍遵守根 AGENTS.md 的耗时确认规则。默认连接共享宿主配置的本机 API（18080），点击“连接本机服务”复用既有本地会话逻辑及 `com.contextos.desktop` 数据目录。它不是云登录，不默认连接 Web 验收 API 18091。不要把生产/云 API 配成开发用本机地址。
 
 依赖锁定 `longbridge/gpui-kit` rev `d2304b9063b902fc7ac19b97a7cb5bf3e650b4f5`，使用该提交锁文件的 `gpui-pre 0.3.2`；gpui/component/platform 通过 kit facade 共用来源。升级需一起更新并验证锁文件。输入使用 `TextareaState`，不自写 IME。

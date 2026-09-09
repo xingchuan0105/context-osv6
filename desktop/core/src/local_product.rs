@@ -120,6 +120,9 @@ pub fn resolve_product_bin(name: &str) -> Option<PathBuf> {
         return Some(p);
     }
     if let Ok(home) = std::env::var("CONTEXT_OS_CLIENT_HOME") {
+        if let Some(p) = bin_candidate(&PathBuf::from(&home), name) {
+            return Some(p);
+        }
         if let Some(p) = bin_candidate(&PathBuf::from(home).join("bin"), name) {
             return Some(p);
         }
