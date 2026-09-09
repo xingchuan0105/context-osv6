@@ -4,6 +4,7 @@ use desktop_gpui::{
     session::Conversation,
 };
 use futures::StreamExt;
+use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::{
     component::{
         button::*,
@@ -22,6 +23,7 @@ struct ChatApp {
     sessions: Vec<ChatSession>,
     token: Option<String>,
     connecting: bool,
+    connection_attempted: bool,
     loading: bool,
     notice: String,
     cancel: Option<CancellationToken>,
@@ -57,6 +59,7 @@ impl ChatApp {
             sessions: vec![],
             token: None,
             connecting: false,
+            connection_attempted: false,
             loading: false,
             notice: "连接本机服务后开始聊天".into(),
             cancel: None,
@@ -164,6 +167,9 @@ impl Drop for ChatApp {
 impl Render for ChatApp {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let streaming = self.conversation.turn.status == TurnStatus::Streaming;
+        let empty = self.conversation.messages.is_empty()
+            && self.conversation.turn.answer_text.is_empty()
+            && !self.loading;
         let status = match &self.conversation.turn.status {
             TurnStatus::Streaming => "正在回答…".to_string(),
             TurnStatus::Done => "已完成".into(),
@@ -176,12 +182,13 @@ impl Render for ChatApp {
             .flex()
             .flex_col()
             .w(px(248.))
+            .flex_shrink_0()
             .h_full()
             .p_4()
             .gap_3()
             .border_r_1()
             .border_color(cx.theme().border)
-            .child("Context-OS")
+            .child(div().text_lg().child("Context-OS"))
             .child(
                 Button::new("new-chat")
                     .label("新对话")
@@ -192,7 +199,25 @@ impl Render for ChatApp {
                         this.notice.clear();
                         cx.notify();
                     })),
+            )
+            .child(
+                div()
+                    .text_sm()
+                    .text_color(cx.theme().muted_foreground)
+                    .child("个人聊天 · 历史会话"),
             );
+        if self.sessions.is_empty() {
+            sidebar = sidebar.child(
+                div()
+                    .text_sm()
+                    .text_color(cx.theme().muted_foreground)
+                    .child(if self.token.is_none() {
+                        "连接后显示本机的聊天记录"
+                    } else {
+                        "还没有历史会话"
+                    }),
+            );
+        }
         for session in &self.sessions {
             let id = session.id.clone();
             sidebar = sidebar.child(
@@ -217,11 +242,14 @@ impl Render for ChatApp {
             .flex_1()
             .min_h_0()
             .overflow_y_scroll()
+            .items_center()
             .gap_4()
             .p_4();
         for (role, text) in &self.conversation.messages {
             messages = messages.child(
                 div()
+                    .w_full()
+                    .max_w(px(760.))
                     .flex()
                     .flex_col()
                     .gap_2()
@@ -230,14 +258,44 @@ impl Render for ChatApp {
             );
         }
         if !self.conversation.turn.answer_text.is_empty() {
-            messages = messages.child(div().child(self.conversation.turn.answer_text.clone()));
+            messages = messages.child(
+                div()
+                    .w_full()
+                    .max_w(px(760.))
+                    .child(self.conversation.turn.answer_text.clone()),
+            );
         }
-        let mut controls = div().flex().gap_2();
+        if self.loading {
+            messages = messages.child(
+                div()
+                    .text_color(cx.theme().muted_foreground)
+                    .child("正在恢复会话…"),
+            );
+        }
+        if empty {
+            messages = messages.justify_end().child(
+                div()
+                    .w_full()
+                    .max_w(px(760.))
+                    .pb_6()
+                    .child(div().text_2xl().mb_3().child("今天想聊些什么？"))
+                    .child(div().text_color(cx.theme().muted_foreground).child(
+                        if self.token.is_some() {
+                            "提一个问题，或继续左侧的历史对话。"
+                        } else {
+                            "连接本机服务后，即可开始聊天并恢复历史记录。"
+                        },
+                    )),
+            );
+        }
+        let mut controls = div().flex().justify_end().gap_2();
         if self.token.is_none() {
             controls = controls.child(
                 Button::new("connect")
                     .label(if self.connecting {
-                        "正在连接…"
+                        "正在准备本机服务…"
+                    } else if self.connection_attempted {
+                        "重试连接"
                     } else {
                         "连接本机服务"
                     })
@@ -248,6 +306,9 @@ impl Render for ChatApp {
                             .or_else(|| dirs::data_dir().map(|p| p.join("com.contextos.desktop")))
                         {
                             this.connecting = true;
+                            this.connection_attempted = true;
+                            this.notice =
+                                "正在准备本机服务并恢复会话，首次启动可能需要一些时间。".into();
                             this.host.login(path);
                         } else {
                             this.notice = "无法确定本地数据目录".into();
@@ -284,18 +345,55 @@ impl Render for ChatApp {
                     .flex_1()
                     .min_w_0()
                     .h_full()
-                    .child(div().h(px(52.)).p_4().child("个人聊天"))
+                    .child(
+                        div()
+                            .h(px(52.))
+                            .flex_shrink_0()
+                            .px_4()
+                            .flex()
+                            .items_center()
+                            .justify_between()
+                            .child("个人聊天")
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child(if self.connecting {
+                                        "正在连接"
+                                    } else if self.token.is_some() {
+                                        "本机 · 已连接"
+                                    } else {
+                                        "本机 · 未连接"
+                                    }),
+                            ),
+                    )
                     .child(messages)
                     .child(
                         div()
                             .flex()
                             .flex_col()
+                            .flex_shrink_0()
+                            .items_center()
                             .gap_2()
                             .p_4()
-                            .child(status)
-                            .child(Textarea::new(&self.input))
-                            .child(controls),
-                    ),
+                            .child(
+                                div()
+                                    .w_full()
+                                    .max_w(px(760.))
+                                    .flex()
+                                    .flex_col()
+                                    .gap_3()
+                                    .child(
+                                        div()
+                                            .text_sm()
+                                            .text_color(cx.theme().muted_foreground)
+                                            .child(status),
+                                    )
+                                    .child(Textarea::new(&self.input).h(px(112.)))
+                                    .child(controls),
+                            ),
+                    )
+                    .when(empty, |content| content.child(div().flex_1())),
             )
     }
 }
