@@ -1,6 +1,6 @@
 use super::legal_markdown::{render_legal_markdown, TocEntry};
 use crate::components::help::json_ld::{OrganizationJsonLd, SoftwareApplicationJsonLd};
-use crate::components::shell::MarketingChrome;
+use crate::components::shell::PublicSiteHeader;
 use leptos::prelude::*;
 use leptos_meta::{Link, Meta, Title};
 
@@ -49,7 +49,7 @@ pub fn LegalShell(
     view! {
         <OrganizationJsonLd locale=locale/>
         <SoftwareApplicationJsonLd locale=locale/>
-        <MarketingChrome locale=locale active="legal"/>
+        <PublicSiteHeader locale=locale active="legal"/>
         <div class="legal-layout" data-testid="legal-doc-layout">
             <header class="legal-header">
                 <h1 class="legal-title">{title}</h1>
@@ -229,7 +229,7 @@ pub fn LegalCenterPageView(locale: &'static str) -> impl IntoView {
         <Link rel="alternate" hreflang="zh-CN" href="/legal"/>
         <Link rel="alternate" hreflang="en" href="/en/legal"/>
         <Link rel="alternate" hreflang="x-default" href="/legal"/>
-        <MarketingChrome locale=locale active="legal"/>
+        <PublicSiteHeader locale=locale active="legal"/>
         <main class="pub-shell" data-testid=if en { "legal-center-page-en" } else { "legal-center-page" }>
             <div class="pub-center">
                 <div class="legal-center-header">

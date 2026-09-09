@@ -1,34 +1,5 @@
 /* App top bar, menus, marketing chrome, product footer. */
 
-.app-frame {
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-}
-
-.app-frame-body {
-    flex: 1;
-    min-width: 0;
-}
-
-.app-frame > .chat-shell {
-    flex: 1;
-    min-height: 0;
-}
-
-.app-top-bar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    padding: 0.75rem 1rem;
-    border-bottom: 1px solid var(--cos-border);
-    background: var(--cos-surface);
-    position: sticky;
-    top: 0;
-    z-index: var(--z-sticky);
-}
-
 .app-top-bar-brand {
     display: inline-flex;
     align-items: center;
@@ -44,12 +15,6 @@
 .app-top-bar-wordmark {
     font-size: var(--font-size-brand);
     letter-spacing: var(--letter-spacing-title);
-}
-
-.app-top-bar-actions {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
 }
 
 .app-top-bar-capsule {
@@ -260,7 +225,8 @@
 .mkt-chrome-inner {
     max-width: 72rem;
     margin: 0 auto;
-    padding: 0.75rem 1rem;
+    padding: 8px 16px;
+    min-height: 52px;
     display: flex;
     align-items: center;
     justify-content: space-between;

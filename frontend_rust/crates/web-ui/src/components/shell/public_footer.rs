@@ -3,7 +3,7 @@ use crate::routes::dest;
 use leptos::prelude::*;
 
 #[component]
-pub fn ProductChromeFooter() -> impl IntoView {
+pub fn PublicFooter() -> impl IntoView {
     let i18n = use_i18n();
     view! {
         <footer class="product-chrome-footer" data-testid="product-chrome-footer">

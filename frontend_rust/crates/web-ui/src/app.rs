@@ -54,6 +54,7 @@ pub fn App() -> impl IntoView {
     provide_toaster();
 
     view! {
+        <leptos_meta::Title text="Context-OS"/>
         <AuthBootstrap/>
         <ToastHost/>
         <Router>
@@ -65,7 +66,7 @@ pub fn App() -> impl IntoView {
                     </main>
                 }
             }>
-                <Route path=path!("/") view=HomePage/>
+                <Route path=path!("/") view=|| view! { <crate::components::shell::public_layout::PublicLayout><HomePage/></crate::components::shell::public_layout::PublicLayout> }/>
                 <Route path=path!("/chat/:session_id?") view=|| view! { <ChatPage/> }/>
                 <Route path=path!("/dashboard") view=DashboardOverviewPage/>
                 <Route path=path!("/dashboard/analytics") view=GlobalAnalyticsPage/>
@@ -77,11 +78,11 @@ pub fn App() -> impl IntoView {
                 <Route path=path!("/shared/kb/:token") view=SharedKbPage/>
                 <Route path=path!("/shared/u/:user_id") view=SharedUserPage/>
                 <Route path=path!("/invite/:workspace_id/:member_id") view=InvitePage/>
-                <Route path=path!("/login") view=LoginPage/>
-                <Route path=path!("/register") view=RegisterPage/>
-                <Route path=path!("/reset-password") view=ResetPasswordRequestPage/>
-                <Route path=path!("/reset-password/verify") view=ResetPasswordVerifyPage/>
-                <Route path=path!("/reset-password/confirm") view=ResetPasswordConfirmPage/>
+                <Route path=path!("/login") view=|| view! { <crate::components::shell::public_layout::PublicLayout><LoginPage/></crate::components::shell::public_layout::PublicLayout> }/>
+                <Route path=path!("/register") view=|| view! { <crate::components::shell::public_layout::PublicLayout><RegisterPage/></crate::components::shell::public_layout::PublicLayout> }/>
+                <Route path=path!("/reset-password") view=|| view! { <crate::components::shell::public_layout::PublicLayout><ResetPasswordRequestPage/></crate::components::shell::public_layout::PublicLayout> }/>
+                <Route path=path!("/reset-password/verify") view=|| view! { <crate::components::shell::public_layout::PublicLayout><ResetPasswordVerifyPage/></crate::components::shell::public_layout::PublicLayout> }/>
+                <Route path=path!("/reset-password/confirm") view=|| view! { <crate::components::shell::public_layout::PublicLayout><ResetPasswordConfirmPage/></crate::components::shell::public_layout::PublicLayout> }/>
                 <Route path=path!("/settings") view=SettingsPage/>
                 <Route path=path!("/settings/usage") view=UsagePage/>
                 <Route path=path!("/admin") view=AdminOverviewPage/>
@@ -99,30 +100,30 @@ pub fn App() -> impl IntoView {
                 <Route path=path!("/admin/feature-flags") view=AdminFeatureFlagsPage/>
                 <Route path=path!("/help") view=HelpPage/>
                 <Route path=path!("/help/write") view=HelpWritePage/>
-                <Route path=path!("/help/faq") view=HelpFaqPage/>
-                <Route path=path!("/help/compare") view=HelpComparePage/>
-                <Route path=path!("/help/api-access") view=HelpApiAccessPage/>
-                <Route path=path!("/help/api-access/agents") view=HelpAgentApiPage/>
-                <Route path=path!("/integrations") view=IntegrationIndexPage/>
-                <Route path=path!("/integrations/mcp") view=IntegrationMcpPage/>
-                <Route path=path!("/integrations/claude-desktop") view=IntegrationClaudeDesktopPage/>
-                <Route path=path!("/integrations/cursor") view=IntegrationCursorPage/>
+                <Route path=path!("/help/faq") view=|| view! { <crate::components::shell::public_layout::PublicLayout><HelpFaqPage/></crate::components::shell::public_layout::PublicLayout> }/>
+                <Route path=path!("/help/compare") view=|| view! { <crate::components::shell::public_layout::PublicLayout><HelpComparePage/></crate::components::shell::public_layout::PublicLayout> }/>
+                <Route path=path!("/help/api-access") view=|| view! { <crate::components::shell::public_layout::PublicLayout><HelpApiAccessPage/></crate::components::shell::public_layout::PublicLayout> }/>
+                <Route path=path!("/help/api-access/agents") view=|| view! { <crate::components::shell::public_layout::PublicLayout><HelpAgentApiPage/></crate::components::shell::public_layout::PublicLayout> }/>
+                <Route path=path!("/integrations") view=|| view! { <crate::components::shell::public_layout::PublicLayout><IntegrationIndexPage/></crate::components::shell::public_layout::PublicLayout> }/>
+                <Route path=path!("/integrations/mcp") view=|| view! { <crate::components::shell::public_layout::PublicLayout><IntegrationMcpPage/></crate::components::shell::public_layout::PublicLayout> }/>
+                <Route path=path!("/integrations/claude-desktop") view=|| view! { <crate::components::shell::public_layout::PublicLayout><IntegrationClaudeDesktopPage/></crate::components::shell::public_layout::PublicLayout> }/>
+                <Route path=path!("/integrations/cursor") view=|| view! { <crate::components::shell::public_layout::PublicLayout><IntegrationCursorPage/></crate::components::shell::public_layout::PublicLayout> }/>
                 <Route path=path!("/desktop") view=DesktopPage/>
-                <Route path=path!("/activate") view=DesktopActivatePage/>
-                <Route path=path!("/setup") view=DesktopSetupPage/>
+                <Route path=path!("/activate") view=|| view! { <crate::components::shell::public_layout::PublicLayout><DesktopActivatePage/></crate::components::shell::public_layout::PublicLayout> }/>
+                <Route path=path!("/setup") view=|| view! { <crate::components::shell::public_layout::PublicLayout><DesktopSetupPage/></crate::components::shell::public_layout::PublicLayout> }/>
                 <Route path=path!("/legal") view=LegalCenterPage/>
                 <Route path=path!("/legal/terms") view=LegalTermsPage/>
                 <Route path=path!("/legal/privacy") view=LegalPrivacyPage/>
                 <Route path=path!("/legal/licenses") view=LegalLicensesPage/>
                 <Route path=path!("/legal/licenses/project") view=LegalProjectLicensePage/>
                 <Route path=path!("/legal/licenses/third-party") view=LegalThirdPartyPage/>
-                <Route path=path!("/en") view=EnHomePage/>
+                <Route path=path!("/en") view=|| view! { <crate::components::shell::public_layout::PublicLayout locale="en"><EnHomePage/></crate::components::shell::public_layout::PublicLayout> }/>
                 <Route path=path!("/en/pricing") view=EnPricingPage/>
                 <Route path=path!("/en/desktop") view=EnDesktopPage/>
-                <Route path=path!("/en/help/faq") view=EnHelpFaqPage/>
-                <Route path=path!("/en/help/compare") view=EnHelpComparePage/>
-                <Route path=path!("/en/help/api-access") view=EnHelpApiAccessPage/>
-                <Route path=path!("/en/help/api-access/agents") view=EnHelpAgentApiPage/>
+                <Route path=path!("/en/help/faq") view=|| view! { <crate::components::shell::public_layout::PublicLayout locale="en"><EnHelpFaqPage/></crate::components::shell::public_layout::PublicLayout> }/>
+                <Route path=path!("/en/help/compare") view=|| view! { <crate::components::shell::public_layout::PublicLayout locale="en"><EnHelpComparePage/></crate::components::shell::public_layout::PublicLayout> }/>
+                <Route path=path!("/en/help/api-access") view=|| view! { <crate::components::shell::public_layout::PublicLayout locale="en"><EnHelpApiAccessPage/></crate::components::shell::public_layout::PublicLayout> }/>
+                <Route path=path!("/en/help/api-access/agents") view=|| view! { <crate::components::shell::public_layout::PublicLayout locale="en"><EnHelpAgentApiPage/></crate::components::shell::public_layout::PublicLayout> }/>
                 <Route path=path!("/en/legal") view=EnLegalCenterPage/>
                 <Route path=path!("/en/legal/terms") view=EnLegalTermsPage/>
                 <Route path=path!("/en/legal/privacy") view=EnLegalPrivacyPage/>
@@ -130,9 +131,9 @@ pub fn App() -> impl IntoView {
                 <Route path=path!("/en/legal/licenses/project") view=EnLegalProjectLicensePage/>
                 <Route path=path!("/en/legal/licenses/third-party") view=EnLegalThirdPartyPage/>
                 <Route path=path!("/pricing") view=ZhPricingPage/>
-                <Route path=path!("/upgrade/paywall") view=PaywallPage/>
-                <Route path=path!("/upgrade/success") view=UpgradeSuccessPage/>
-                <Route path=path!("/desktop/buy") view=DesktopBuyPage/>
+                <Route path=path!("/upgrade/paywall") view=|| view! { <crate::components::shell::public_layout::PublicLayout><PaywallPage/></crate::components::shell::public_layout::PublicLayout> }/>
+                <Route path=path!("/upgrade/success") view=|| view! { <crate::components::shell::public_layout::PublicLayout><UpgradeSuccessPage/></crate::components::shell::public_layout::PublicLayout> }/>
+                <Route path=path!("/desktop/buy") view=|| view! { <crate::components::shell::public_layout::PublicLayout><DesktopBuyPage/></crate::components::shell::public_layout::PublicLayout> }/>
             </Routes>
         </Router>
     }
@@ -149,7 +150,6 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                 <meta charset="utf-8"/>
                 <meta name="viewport" content="width=device-width, initial-scale=1"/>
                 <meta name="turnstile-site-key" content=turnstile_site_key/>
-                <title>"Context-OS Chat"</title>
                 <HashedStylesheet id="leptos" options=options.clone()/>
                 <link rel="stylesheet" href="/style/app.css"/>
                 <AutoReload options=options.clone()/>

@@ -5,7 +5,7 @@ use leptos_router::NavigateOptions;
 use serde::Deserialize;
 
 use crate::components::legal::legal_pages::LegalFooterLinks;
-use crate::components::shell::MarketingChrome;
+use crate::components::shell::PublicSiteHeader;
 
 /// 桌面发布清单（对齐 Next `lib/desktop/release-manifest.ts`）。
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -213,7 +213,7 @@ pub fn DesktopProductPage(locale: &'static str) -> impl IntoView {
         <Link rel="alternate" hreflang="zh-CN" href="/desktop"/>
         {en_link}
         <Link rel="alternate" hreflang="x-default" href="/desktop"/>
-        <MarketingChrome locale=locale active="desktop"/>
+        <PublicSiteHeader locale=locale active="desktop"/>
         <main class="pub-shell" data-testid="desktop-product-page">
             <div class="pub-center pub-desktop-grid">
                 <header class="pub-header">

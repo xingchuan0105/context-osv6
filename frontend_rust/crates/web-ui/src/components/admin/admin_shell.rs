@@ -128,6 +128,7 @@ pub fn AdminShell(
     let login_href = Signal::derive(move || format!("/login?next={}", pathname.get()));
 
     view! {
+        <crate::components::shell::ApplicationLayout title=Signal::derive(move || title.to_string())>
         <div class="admin-shell" data-testid=test_id>
             <header class="admin-header">
                 <div class="admin-header-left">
@@ -151,6 +152,7 @@ pub fn AdminShell(
                                         "admin-nav-item"
                                     }
                                 }
+                                aria-current=move || admin_path_is_active(&pathname.get(), href).then_some("page")
                                 data-testid=format!("admin-nav-{id}")
                             >
                                 {*label}
@@ -205,5 +207,6 @@ pub fn AdminShell(
                 }}
             </main>
         </div>
+        </crate::components::shell::ApplicationLayout>
     }
 }

@@ -1,4 +1,4 @@
-use crate::components::shell::ProductChrome;
+use crate::components::shell::ApplicationLayout;
 use leptos::prelude::*;
 
 /// 应用内帮助中心（Help ≠ primary nav：不进主导航，仅从弱入口进入）。
@@ -6,7 +6,7 @@ use leptos::prelude::*;
 #[component]
 pub fn HelpPage() -> impl IntoView {
     view! {
-        <ProductChrome>
+        <ApplicationLayout title=Signal::derive(|| "帮助中心".to_string())>
         <div class="help-shell" data-testid="help-page">
             <header class="help-header">
                 <a href="/chat" class="settings-back-link">"← 返回对话"</a>
@@ -57,6 +57,6 @@ pub fn HelpPage() -> impl IntoView {
                 </section>
             </main>
         </div>
-        </ProductChrome>
+        </ApplicationLayout>
     }
 }

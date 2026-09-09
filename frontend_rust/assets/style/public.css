@@ -406,6 +406,23 @@
     min-width: 0;
 }
 
+@media (max-width: 767px) {
+    .legal-body {
+        flex-direction: column;
+    }
+
+    .legal-toc {
+        flex: none;
+        position: static;
+        width: 100%;
+        max-height: 12rem;
+    }
+
+    .legal-content {
+        width: 100%;
+    }
+}
+
 .legal-footer {
     display: flex;
     justify-content: center;

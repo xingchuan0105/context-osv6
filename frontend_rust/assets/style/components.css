@@ -105,7 +105,6 @@ summary {
 
 .pricing-plan-card,
 .settings-usage-card,
-.pub-card,
 .help-card,
 .admin-link-card {
     animation: cos-card-enter var(--duration-slow) var(--ease-standard) both;

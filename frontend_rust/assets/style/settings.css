@@ -16,6 +16,8 @@
 .public-layout .shared-user-shell { max-width: 1120px; }
 .share-categories .share-log-item { flex-wrap: wrap; gap: 8px; overflow-wrap: anywhere; }
 .public-layout .auth-shell { min-height: calc(100dvh - 52px); }
+.public-layout .auth-page-container { min-height: calc(100dvh - 52px); padding-top: 32px; }
+.public-layout .pub-shell { max-width: 1120px; margin: 0 auto; padding-top: 32px; }
 @media (max-width: 767px) {
     .settings-shell.category-layout { grid-template-columns: minmax(0, 1fr); padding: 16px; gap: 16px; }
     .settings-categories[data-category-open="false"] > .settings-content { display: none; }

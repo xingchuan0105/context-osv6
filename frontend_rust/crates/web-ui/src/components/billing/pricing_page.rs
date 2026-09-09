@@ -1,5 +1,5 @@
 use crate::api_base::poc_api_base;
-use crate::components::shell::{MarketingChrome, ProductChromeFooter};
+use crate::components::shell::{PublicSiteHeader, PublicFooter};
 use crate::components::ui::AppDialog;
 use crate::i18n::{UiLocale, interpolate, lookup, use_i18n};
 use leptos::prelude::*;
@@ -323,8 +323,8 @@ pub fn PricingPage(#[prop(optional)] locale_override: Option<UiLocale>) -> impl 
 #[component]
 pub fn ZhPricingPage() -> impl IntoView {
     view! {
-        <MarketingChrome locale="zh" active="pricing"/>
+        <PublicSiteHeader locale="zh" active="pricing"/>
         <PricingPage/>
-        <ProductChromeFooter/>
+        <PublicFooter/>
     }
 }

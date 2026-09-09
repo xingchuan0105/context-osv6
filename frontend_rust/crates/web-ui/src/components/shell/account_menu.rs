@@ -130,6 +130,9 @@ pub fn AccountMenu() -> impl IntoView {
                             >
                                 {move || i18n.t("accountMenu.help")}
                             </a>
+                            <a class="app-menu-item" href=dest::LEGAL data-testid="account-legal-link" on:click=move |_| open.set(false)>
+                                {move || i18n.t("productChrome.legalCenter")}
+                            </a>
                             <Show when=move || show_admin.get()>
                                 <a
                                     class="app-menu-item"

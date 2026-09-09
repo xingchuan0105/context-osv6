@@ -4,7 +4,7 @@ use leptos::prelude::*;
 use leptos_router::hooks::use_location;
 
 #[component]
-pub fn MarketingChrome(
+pub fn PublicSiteHeader(
     #[prop(default = "zh")] locale: &'static str,
     #[prop(default = "none")] active: &'static str,
 ) -> impl IntoView {
