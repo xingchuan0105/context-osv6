@@ -28,3 +28,8 @@ required-features = ["ui"]
 
 [profile.dev]
 debug = 0
+
+# Execute the original shared Tauri transport suite against GPUI's locked dependencies.
+[[test]]
+name = "shared_desktop_stream"
+path = "../desktop/core/tests/chat_stream_tests.rs"

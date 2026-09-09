@@ -23,3 +23,7 @@ cargo build --features ui
 依赖锁定 `longbridge/gpui-kit` rev `d2304b9063b902fc7ac19b97a7cb5bf3e650b4f5`，使用该提交锁文件的 `gpui-pre 0.3.2`；gpui/component/platform 通过 kit facade 共用来源。升级需一起更新并验证锁文件。输入使用 `TextareaState`，不自写 IME。
 
 本批范围与验证记录见 [D1 任务](../docs/plans/2026-09-09-gpui-chat-task.md)。Windows 输入/真实本机服务及 macOS/Linux 通过情况以该记录为准，编译不代表人工验收。
+
+## 复用 Tauri 套件
+
+同步后执行 `pwsh -NoProfile -ExecutionPolicy Bypass -File desktop_gpui/scripts/accept-tauri-shared.ps1 -WithHttpFixture`。原 shared-core lib 和流测试直接复用，另有 GPUI Host 适配测试；HTTP 用例仅使用测试进程内的 loopback 夹具。完整范围见 [验收报告](../docs/desktop/2026-09-09-gpui-tauri-suite-acceptance.md)。

@@ -6,6 +6,9 @@ use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender, unbounded};
 use std::path::PathBuf;
 use tokio_util::sync::CancellationToken;
 
+#[cfg(test)]
+mod acceptance;
+
 pub enum Update {
     Login(Result<desktop_core::LocalSessionStatus, String>),
     Sessions(Result<Vec<ChatSession>, String>),
