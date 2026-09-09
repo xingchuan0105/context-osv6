@@ -85,6 +85,7 @@ fn PanelIcon() -> impl IntoView {
 #[component]
 pub fn NavigationRail(state: NavigationState, children: Children) -> impl IntoView {
     let i18n = use_i18n();
+    let location = leptos_router::hooks::use_location();
     view! {
         <button class="app-navigation-dismiss" data-testid="chat-rail-dismiss" hidden=move || !state.open.get()
             aria-label=move || i18n.t("chat.sessionsDismiss") tabindex="-1" on:click=move |_| state.close()/>
@@ -95,12 +96,16 @@ pub fn NavigationRail(state: NavigationState, children: Children) -> impl IntoVi
                 <button type="button" class="app-icon-button" id="navigation-collapse" data-testid="navigation-collapse"
                     aria-label=move || i18n.t("chat.sessionsToggle") on:click=move |_| state.toggle()><PanelIcon/></button>
             </div>
-            <nav class="app-navigation-shortcuts" aria-label=move || i18n.t("chat.workspaces")>
-                <a class="app-icon-button" href=dest::CHAT title=move || i18n.t("chat.newConversation") aria-label=move || i18n.t("chat.newConversation")>
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            <nav class="app-navigation-shortcuts" aria-label=move || i18n.t("navigation.primary")>
+                <a class="app-navigation-destination" href=dest::CHAT title=move || i18n.t("navigation.chat")
+                    aria-current=move || location.pathname.get().starts_with("/chat").then_some("page")>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-6 3V6a2 2 0 0 1 2-2Z"/></svg>
+                    <span>{move || i18n.t("navigation.chat")}</span>
                 </a>
-                <a class="app-icon-button" href=dest::DASHBOARD title=move || i18n.t("chat.workspaces") aria-label=move || i18n.t("chat.workspaces")>
+                <a class="app-navigation-destination" href=dest::DASHBOARD title=move || i18n.t("navigation.workspace")
+                    aria-current=move || location.pathname.get().starts_with("/dashboard").then_some("page")>
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 7V4h7l2 3h9v13H3z"/></svg>
+                    <span>{move || i18n.t("navigation.workspace")}</span>
                 </a>
             </nav>
             <div class="app-navigation-content">{children()}</div>
@@ -110,7 +115,7 @@ pub fn NavigationRail(state: NavigationState, children: Children) -> impl IntoVi
 }
 
 #[component]
-pub fn ContextTopBar(state: NavigationState, title: Signal<String>) -> impl IntoView {
+pub fn ContextTopBar(state: NavigationState, title: Signal<String>, #[prop(optional)] children: Option<Children>) -> impl IntoView {
     let i18n = use_i18n();
     view! {
         <header class="app-context-bar" data-testid="app-top-bar">
@@ -118,6 +123,7 @@ pub fn ContextTopBar(state: NavigationState, title: Signal<String>) -> impl Into
                 aria-controls="chat-session-drawer" aria-expanded=move || state.open.get()
                 aria-label=move || i18n.t("chat.sessionsToggle") on:click=move |_| state.toggle()><PanelIcon/></button>
             <span class="app-context-title">{move || title.get()}</span>
+            <div class="app-context-actions">{children.map(|render| render())}</div>
             <NotificationBell/>
         </header>
     }

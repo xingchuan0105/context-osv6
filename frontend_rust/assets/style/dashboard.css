@@ -2,7 +2,7 @@
 
 /* E3.2 Dashboard & Workspace 样式 */
 .dashboard-shell {
-    max-width: 960px;
+    max-width: 1120px;
     margin: 0 auto;
     padding: 2rem 1rem 4rem;
     display: flex;
@@ -162,43 +162,11 @@
     font-size: 0.8125rem;
 }
 
-/* Workspace 工作台两栏外壳 */
+/* Workspace content; navigation and the optional panel belong to the application shell. */
 .workspace-workbench-shell {
     display: flex;
     flex-direction: column;
-    min-height: 100vh;
-}
-
-.workbench-top-bar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0.75rem 1.25rem;
-    background: var(--cos-surface);
-    border-bottom: 1px solid var(--cos-border);
-}
-
-.workbench-top-left {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-}
-
-.workbench-back {
-    color: var(--cos-text-secondary);
-    text-decoration: none;
-    font-size: 0.8125rem;
-}
-
-.workbench-back:hover {
-    color: var(--cos-primary);
-}
-
-.workbench-title {
-    font-size: 1rem;
-    font-weight: 400;
-    margin: 0;
-    color: var(--cos-text);
+    min-height: 0;
 }
 
 .workbench-analyze-link {
@@ -216,14 +184,6 @@
     flex: 1;
     min-width: 0;
     min-height: 0;
-    display: flex;
-    flex-direction: column;
-}
-
-.workbench-side-rail {
-    width: 320px;
-    border-left: 1px solid var(--cos-border);
-    background: var(--cos-bg-secondary);
     display: flex;
     flex-direction: column;
 }

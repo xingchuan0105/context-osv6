@@ -30,6 +30,8 @@ web-sys = { workspace = true, features = [
     "Document",
     "Element",
     "NodeList",
+    "DomRect",
+    "BeforeUnloadEvent",
     "HtmlElement",
     "HtmlInputElement",
     "HtmlTextAreaElement",

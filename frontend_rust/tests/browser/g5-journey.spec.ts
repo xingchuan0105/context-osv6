@@ -66,6 +66,8 @@ test.describe('G5 PRODUCT_IA §1 旅程（fixture）', () => {
     await page.getByTestId('submit-create-workspace').click();
     await expect(page).toHaveURL(/\/dashboard\/ws-/);
     await expect(page.getByTestId('workspace-workbench')).toBeVisible();
+    await expect(page.getByTestId('workspace-side-rail')).toBeHidden();
+    await page.getByTestId('workspace-open-sources').click();
     await expect(page.getByTestId('workspace-side-rail')).toBeVisible();
     expect(errors).toEqual([]);
   });

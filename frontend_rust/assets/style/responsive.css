@@ -12,10 +12,6 @@
         flex-wrap: wrap;
     }
 
-    .workbench-top-bar {
-        flex-wrap: wrap;
-        gap: 0.5rem;
-    }
 }
 
 @media (max-width: 768px) {
@@ -33,11 +29,6 @@
         flex-direction: column;
     }
 
-    .workbench-side-rail {
-        width: 100%;
-        border-left: 0;
-        border-top: 1px solid var(--cos-border);
-    }
 
     .pub-desktop-columns {
         grid-template-columns: 1fr;

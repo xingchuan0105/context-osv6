@@ -1,5 +1,5 @@
 use crate::api_base::poc_api_base;
-use crate::components::shell::ProductChrome;
+use crate::components::shell::ApplicationLayout;
 use crate::components::ui::{AppDialog, Toaster};
 use crate::i18n::{tf_now, t_now, use_i18n};
 use crate::routes::dest;
@@ -104,7 +104,7 @@ pub fn DashboardOverviewPage() -> impl IntoView {
     };
 
     view! {
-        <ProductChrome>
+        <ApplicationLayout title=Signal::derive(move || i18n.t("dashboard.title"))>
         <div class="dashboard-shell" data-testid="dashboard-overview">
             <header class="dashboard-header">
                 <div class="dashboard-header-left">
@@ -305,7 +305,7 @@ pub fn DashboardOverviewPage() -> impl IntoView {
                 }>{move || i18n.t("commonConfirmDelete")}</button>
             </AppDialog>
         </div>
-        </ProductChrome>
+        </ApplicationLayout>
     }
 }
 

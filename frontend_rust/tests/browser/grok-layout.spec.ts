@@ -15,6 +15,11 @@ test('desktop navigation collapse persists without replacing the chat draft', as
   await page.getByTestId('composer-input').fill('Keep the current draft');
   await page.getByTestId('navigation-collapse').click();
   await expect(page.getByTestId('session-list')).toHaveCSS('width', '60px');
+  const shortcuts = page.locator('.app-navigation-shortcuts');
+  await expect(shortcuts.getByRole('link').nth(0)).toHaveText('聊天');
+  await expect(shortcuts.getByRole('link').nth(1)).toHaveText('工作区');
+  await expect(shortcuts.getByRole('link').nth(1)).toHaveAttribute('href', '/dashboard');
+  await expect(shortcuts.getByRole('link').nth(0)).toHaveAttribute('aria-current', 'page');
   await expect(page.getByTestId('composer-input')).toHaveValue('Keep the current draft');
   await page.reload({ waitUntil: 'networkidle' });
   await expect(page.getByTestId('session-list')).toHaveCSS('width', '60px');
@@ -22,6 +27,8 @@ test('desktop navigation collapse persists without replacing the chat draft', as
   await expect(page.getByTestId('session-list')).toHaveCSS('width', '248px');
   await expect(page.getByTestId('dashboard-account-menu-trigger')).toHaveCount(1);
   await expect(page.getByTestId('app-topbar-share-menu')).toHaveCount(0);
+  await expect(page.getByTestId('all-workspaces-link')).toHaveText('工作区');
+  await expect(page.locator('.chat-workspace-link')).toHaveCount(0);
 });
 
 test('mobile drawer traps focus, dismisses with Escape, and keeps the draft', async ({ page }) => {

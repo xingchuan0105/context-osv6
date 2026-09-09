@@ -61,12 +61,14 @@ test.describe('工作区工作台控制台与持久资料/笔记（E3.2）', () 
     await request.post(`${FIXTURE_BASE}/admin/reset`);
   });
 
-  test('工作台右轨展示持久文件与笔记，支持删除文档与添加笔记', async ({ page }) => {
+  test('按需打开资料与笔记，支持删除文档与添加笔记', async ({ page }) => {
     const errors = collectPageErrors(page);
     await gotoDashboard(page, '/dashboard/ws-materials');
 
     // 1. 验证工作台外壳与侧栏
     await expect(page.getByTestId('workspace-workbench')).toBeVisible();
+    await expect(page.getByTestId('workspace-side-rail')).not.toBeVisible();
+    await page.getByTestId('workspace-open-sources').click();
     await expect(page.getByTestId('workspace-side-rail')).toBeVisible();
 
     // 2. 验证持久文件列表与删除操作
@@ -86,7 +88,7 @@ test.describe('工作区工作台控制台与持久资料/笔记（E3.2）', () 
     // 4. 添加新工作区笔记
     await page.getByTestId('btn-new-note').click();
     await page.getByTestId('note-title-input').fill('材料选型备忘');
-    await page.getByTestId('note-content-input').fill('优先选用 TC4 钛合金棒材。');
+    await page.locator('.note-editor-host [contenteditable="true"]').fill('优先选用 TC4 钛合金棒材。');
     await page.getByTestId('submit-note-btn').click();
 
     const newNoteItem = page.getByTestId('workspace-note-item').filter({ hasText: '材料选型备忘' });

@@ -1,8 +1,8 @@
 use crate::api_base::poc_api_base;
 use crate::components::chat::chat_page::ChatPage;
 use crate::components::notes::NoteEditor;
-use crate::components::shell::ProductChrome;
-use crate::components::ui::{AppDialog, Toaster};
+use crate::components::shell::ApplicationLayout;
+use crate::components::ui::{AppDialog, SidePanel, Toaster};
 use crate::i18n::{t_now, use_i18n};
 use contracts::documents::Document;
 use contracts::workspaces::{ChatSession, Workspace, WorkspaceNote};
@@ -39,6 +39,7 @@ pub fn WorkspaceWorkbenchPage() -> impl IntoView {
     let documents = RwSignal::new(Vec::<Document>::new());
     let notes = RwSignal::new(Vec::<WorkspaceNote>::new());
     let active_tab = RwSignal::new("sources"); // "sources" | "notes"
+    let panel_open = RwSignal::new(false);
     let new_note_title = RwSignal::new(String::new());
     let new_note_content = RwSignal::new(String::new());
     let is_creating_note = RwSignal::new(false);
@@ -60,6 +61,7 @@ pub fn WorkspaceWorkbenchPage() -> impl IntoView {
     let preview_loading = RwSignal::new(false);
     let preview_refresh = RwSignal::new(0_u64);
     let file_input = NodeRef::<leptos::html::Input>::new();
+    let quick_file_input = NodeRef::<leptos::html::Input>::new();
 
     Effect::new(move |_| {
         let wid = workspace_id.get();
@@ -84,6 +86,10 @@ pub fn WorkspaceWorkbenchPage() -> impl IntoView {
             documents.set(Vec::new()); notes.set(Vec::new()); sessions.set(Vec::new());
             selected_docs.set(Default::default());
             busy.set(false); action_error.set(None); show_upload.set(false);
+            panel_open.set(false); active_tab.set("sources");
+            let (title, content) = crate::components::notes::draft::read(&wid);
+            is_creating_note.set(!title.is_empty() || !content.is_empty());
+            new_note_title.set(title); new_note_content.set(content);
         }
         let generation = refresh_gen.get();
         loading.set(true); load_error.set(None);
@@ -109,6 +115,28 @@ pub fn WorkspaceWorkbenchPage() -> impl IntoView {
             }
             loading.set(false);
         });
+    });
+
+    Effect::new(move |_| {
+        let wid = workspace_id.get();
+        let title = new_note_title.get();
+        let content = new_note_content.get();
+        if !wid.is_empty() && previous_workspace.get() == wid {
+            crate::components::notes::draft::save(&wid, &title, &content);
+        }
+    });
+    crate::components::notes::draft::guard(workspace_id, Signal::derive(move || !new_note_title.get().is_empty() || !new_note_content.get().is_empty()));
+
+    Effect::new(move |_| {
+        let processing = documents.with(|docs| docs.iter().any(|doc| !matches!(doc.status.as_str(), "completed" | "failed" | "upload_invalid")));
+        #[cfg(target_arch = "wasm32")]
+        if processing {
+            if let Ok(handle) = set_interval_with_handle(move || { if !busy.get_untracked() && !loading.get_untracked() { refresh_gen.update(|n| *n += 1); } }, std::time::Duration::from_secs(5)) {
+                on_cleanup(move || handle.clear());
+            }
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        let _ = processing;
     });
 
     Effect::new(move |_| {
@@ -196,34 +224,109 @@ pub fn WorkspaceWorkbenchPage() -> impl IntoView {
 
     };
 
+    let chat_model = expect_context::<RwSignal<crate::components::chat::ChatCanvasModel>>();
+    let sidebar: Children = Box::new(move || view! {
+        <nav class="application-destinations">
+            <a href="/chat">{move || i18n.t("navigation.chat")}</a>
+            <a href="/dashboard" data-testid="all-workspaces-link">{move || i18n.t("navigation.workspace")}</a>
+        </nav>
+        <div class="workspace-navigation-context">
+            <button type="button" class="chat-new-chat" data-testid="workspace-new-chat"
+                disabled=move || chat_model.with(|model| model.is_streaming())
+                on:click=move |_| {
+                    chat_model.update(|model| model.switch_to_workspace(&workspace_id.get_untracked(), None));
+                    set_session_query.set(None);
+                }>{move || i18n.t("navigation.workspaceNew")}</button>
+        </div>
+                        <section class="rail-section" data-testid="workspace-sessions">
+                            <div class="rail-section-header">
+                                <span class="rail-section-title">{move || i18n.t("workbench.sessions")}</span>
+                            </div>
+                            <p class="page-status-empty" hidden=move || !sessions.get().is_empty()>{move || i18n.t("workbench.sessionsEmpty")}</p>
+                            <ul class="rail-note-list">
+                                <For
+                                    each=move || sessions.get()
+                                    key=|session| (session.id.clone(), session.pinned, session.title.clone())
+                                    children=move |session| {
+                                        let sid = session.id.clone();
+                                        let sid_pin = sid.clone();
+                                        let sid_del = sid.clone();
+                                        let title = session.title.clone().unwrap_or_else(|| i18n.t("chat.untitled"));
+                                        let pinned = session.pinned;
+                                        view! {
+                                            <li class="rail-note-item" data-testid="workspace-session-item">
+                                                <button
+                                                    type="button"
+                                                    class="rail-session-open"
+                                                    data-testid="open-workspace-session"
+                                                    on:click={
+                                                        let navigate = navigate.clone();
+                                                        let sid = sid.clone();
+                                                        move |_| {
+                                                            set_session_query.set(Some(sid.clone()));
+                                                            navigate(
+                                                                &format!("/dashboard/{}?session={sid}", workspace_id.get_untracked()),
+                                                                NavigateOptions { replace: true, ..Default::default() },
+                                                            );
+                                                        }
+                                                    }
+                                                >
+                                                    {if pinned { "📌 " } else { "" }}{title}
+                                                </button>
+                                                <button type="button" data-testid="pin-session" disabled=move || busy.get() on:click=move |_| {
+                                                    let tok = current_wb_token(token);
+                                                    let sid = sid_pin.clone();
+                                                    run_workbench_action(workspace_id, busy, action_error, refresh_gen, async move {
+                                                        BrowserRestClient::new(&poc_api_base(), Some(tok)).update_session(&sid, None, Some(!pinned)).await.map(|_| ())
+                                                    }, Callback::new(move |_| ()));
+                                                }>{if pinned { i18n.t("workspaceUnpinSessionAction") } else { i18n.t("workspacePinSessionAction") }}</button>
+                                                <button type="button" data-testid="delete-session" disabled=move || busy.get() on:click=move |_| {
+                                                    let tok = current_wb_token(token);
+                                                    let sid = sid_del.clone();
+                                                    let deleted = sid.clone();
+                                                    run_workbench_action(workspace_id, busy, action_error, refresh_gen, async move {
+                                                        BrowserRestClient::new(&poc_api_base(), Some(tok)).delete_session(&sid).await
+                                                    }, Callback::new(move |_| { if session_query.get_untracked().as_ref() == Some(&deleted) { set_session_query.set(None); } }));
+                                                }>{move || i18n.t("dashboardActionDelete")}</button>
+                                            </li>
+                                        }
+                                    }
+                                />
+                            </ul>
+                        </section>
+    }.into_any());
+
+    let title = Signal::derive(move || current_ws.get().map(|ws| ws.name).unwrap_or_else(|| i18n.t("chat.workspaces")));
+    let actions: Children = Box::new(move || view! {
+        <input type="file" hidden node_ref=quick_file_input accept=SESSION_FILE_ACCEPT data-testid="workspace-quick-file-input"
+            on:change=move |_| {
+                #[cfg(target_arch = "wasm32")]
+                if quick_file_input.get().and_then(|input| input.files()).is_some_and(|files| files.length() > 0) {
+                    panel_open.set(true); active_tab.set("sources");
+                    start_workspace_file_upload(token, workspace_id, quick_file_input, toaster, refresh_gen, busy, action_error, show_upload);
+                }
+            }/>
+        <button type="button" class="app-icon-button" data-testid="workspace-quick-add" disabled=move || loading.get() || busy.get()
+            title=move || i18n.t("workbench.uploadFile") aria-label=move || i18n.t("workbench.uploadFile")
+            on:click=move |_| { if let Some(input) = quick_file_input.get() { input.set_value(""); input.click(); } }>"＋"</button>
+        <button type="button" class="workbench-panel-entry" data-testid="workspace-open-sources" aria-expanded=move || panel_open.get() && active_tab.get() == "sources"
+            on:click=move |_| { active_tab.set("sources"); panel_open.set(true); }>
+            {move || i18n.t("navigation.sources")}
+            <span class="workbench-pending" hidden=move || !busy.get() && !documents.get().iter().any(|doc| doc.status != "completed")>"•"</span>
+        </button>
+        <button type="button" class="workbench-panel-entry" data-testid="workspace-open-notes" aria-expanded=move || panel_open.get() && active_tab.get() == "notes"
+            on:click=move |_| { active_tab.set("notes"); panel_open.set(true); }>
+            {move || i18n.t("navigation.notes")}
+            <span class="workbench-pending" data-testid="note-draft-indicator"
+                hidden=move || new_note_title.get().is_empty() && new_note_content.get().is_empty()
+                title=move || i18n.t("workbench.noteDraft") aria-label=move || i18n.t("workbench.noteDraft")>"•"</span>
+        </button>
+        <a href=move || format!("/dashboard/{}/share", workspace_id.get()) class="workbench-analyze-link" data-testid="goto-analyze">{move || i18n.t("navigation.share")}</a>
+    }.into_any());
+
     view! {
-        <ProductChrome footer=false>
-        <div class="workspace-workbench-shell" data-testid="workspace-workbench">
-            <header class="workbench-top-bar">
-                <div class="workbench-top-left">
-                    <a href="/dashboard" class="workbench-back">{move || i18n.t("workbench.backAll")}</a>
-                    <h2 class="workbench-title">
-                        {move || {
-                            current_ws
-                                .get()
-                                .map(|ws| ws.name)
-                                .unwrap_or_else(|| {
-                                    let id = workspace_id.get();
-                                    i18n.tf("workbench.workspaceFallback", &[("id", id.as_str())])
-                                })
-                        }}
-                    </h2>
-                </div>
-                <div class="workbench-top-actions">
-                    <a
-                        href=move || format!("/dashboard/{}/share", workspace_id.get())
-                        class="workbench-analyze-link"
-                        data-testid="goto-analyze"
-                    >
-                        {move || i18n.t("workbench.shareCenter")}
-                    </a>
-                </div>
-            </header>
+        <ApplicationLayout title=title actions=actions sidebar=sidebar>
+        <div class="workspace-workbench-shell" data-testid="workspace-workbench" data-panel-open=move || panel_open.get().to_string()>
 
             <p role="status" hidden=move || !loading.get()>{move || i18n.t("common.loading")}</p>
             <div hidden=move || load_error.get().is_none() data-testid="workbench-load-error">
@@ -240,7 +343,7 @@ pub fn WorkspaceWorkbenchPage() -> impl IntoView {
                     />
                 </div>
 
-                <aside class="workbench-side-rail" data-testid="workspace-side-rail">
+                <SidePanel open=panel_open title=Signal::derive(move || i18n.t(if active_tab.get() == "notes" { "workbench.notesTab" } else { "workbench.sourcesTab" }))>
                     <div class="rail-tabs">
                         <button
                             type="button"
@@ -414,64 +517,9 @@ pub fn WorkspaceWorkbenchPage() -> impl IntoView {
                                 </ul>
                             </section>
                         </Show>
-                        <section class="rail-section" data-testid="workspace-sessions">
-                            <div class="rail-section-header">
-                                <span class="rail-section-title">{move || i18n.t("workbench.sessions")}</span>
-                            </div>
-                            <p class="page-status-empty" hidden=move || !sessions.get().is_empty()>{move || i18n.t("workbench.sessionsEmpty")}</p>
-                            <ul class="rail-note-list">
-                                <For
-                                    each=move || sessions.get()
-                                    key=|session| (session.id.clone(), session.pinned, session.title.clone())
-                                    children=move |session| {
-                                        let sid = session.id.clone();
-                                        let sid_pin = sid.clone();
-                                        let sid_del = sid.clone();
-                                        let title = session.title.clone().unwrap_or_else(|| i18n.t("chat.untitled"));
-                                        let pinned = session.pinned;
-                                        view! {
-                                            <li class="rail-note-item" data-testid="workspace-session-item">
-                                                <button
-                                                    type="button"
-                                                    class="rail-session-open"
-                                                    data-testid="open-workspace-session"
-                                                    on:click={
-                                                        let navigate = navigate.clone();
-                                                        let sid = sid.clone();
-                                                        move |_| {
-                                                            set_session_query.set(Some(sid.clone()));
-                                                            navigate(
-                                                                &format!("/dashboard/{}?session={sid}", workspace_id.get_untracked()),
-                                                                NavigateOptions { replace: true, ..Default::default() },
-                                                            );
-                                                        }
-                                                    }
-                                                >
-                                                    {if pinned { "📌 " } else { "" }}{title}
-                                                </button>
-                                                <button type="button" data-testid="pin-session" disabled=move || busy.get() on:click=move |_| {
-                                                    let tok = current_wb_token(token);
-                                                    let sid = sid_pin.clone();
-                                                    run_workbench_action(workspace_id, busy, action_error, refresh_gen, async move {
-                                                        BrowserRestClient::new(&poc_api_base(), Some(tok)).update_session(&sid, None, Some(!pinned)).await.map(|_| ())
-                                                    }, Callback::new(move |_| ()));
-                                                }>{if pinned { i18n.t("workspaceUnpinSessionAction") } else { i18n.t("workspacePinSessionAction") }}</button>
-                                                <button type="button" data-testid="delete-session" disabled=move || busy.get() on:click=move |_| {
-                                                    let tok = current_wb_token(token);
-                                                    let sid = sid_del.clone();
-                                                    let deleted = sid.clone();
-                                                    run_workbench_action(workspace_id, busy, action_error, refresh_gen, async move {
-                                                        BrowserRestClient::new(&poc_api_base(), Some(tok)).delete_session(&sid).await
-                                                    }, Callback::new(move |_| { if session_query.get_untracked().as_ref() == Some(&deleted) { set_session_query.set(None); } }));
-                                                }>{move || i18n.t("dashboardActionDelete")}</button>
-                                            </li>
-                                        }
-                                    }
-                                />
-                            </ul>
-                        </section>
+
                     </div>
-                </aside>
+                </SidePanel>
             </div>
             <AppDialog open=Signal::derive(move || source_query.get().is_some()) title_key="workbench.previewTitle" test_id="source-preview" on_close=Callback::new(move |_| set_source_query.set(None))>
                 <p role="status" hidden=move || !preview_loading.get()>{move || i18n.t("common.loading")}</p>
@@ -522,7 +570,7 @@ pub fn WorkspaceWorkbenchPage() -> impl IntoView {
                 </div>
             </AppDialog>
         </div>
-        </ProductChrome>
+        </ApplicationLayout>
     }
 }
 

@@ -49,6 +49,7 @@ test('workspace load failure is recoverable and does not claim an empty knowledg
   await expect(page.getByTestId('sources-empty')).not.toBeVisible();
   fail = false;
   await page.getByTestId('workbench-load-error').getByRole('button').click();
+  await page.getByTestId('workspace-open-sources').click();
   await expect(page.getByTestId('workspace-doc-item').first()).toBeVisible();
   await expect(page.getByTestId('workbench-load-error')).not.toBeVisible();
 });
@@ -57,6 +58,7 @@ test('document preview opens actual content and Escape restores focus', async ({
   await page.route('**/api/v1/documents/*/content', route => route.fulfill({ json: { content: 'A real document preview', summary: null } }));
   await page.goto('/dashboard/ws-materials');
   const open = page.getByTestId('preview-doc').first();
+  await page.getByTestId('workspace-open-sources').click();
   await open.click();
   await expect(page).toHaveURL(/source=/);
   const dialog = page.getByTestId('source-preview');
@@ -75,6 +77,7 @@ test('document preview opens actual content and Escape restores focus', async ({
 test('failed source import keeps the dialog and text for retry', async ({ page }) => {
   await page.route('**/api/v1/workspaces/ws-materials/sources/paste', route => route.fulfill({ status: 503, body: 'import failed' }));
   await page.goto('/dashboard/ws-materials');
+  await page.getByTestId('workspace-open-sources').click();
   await page.getByTestId('preview-doc').first().waitFor();
   await page.getByTestId('open-upload').click();
   await page.getByTestId('upload-tab-paste').click();
@@ -91,6 +94,7 @@ test('failed file transfer never calls upload completion or reports success', as
   await page.route('**/upload/*', route => route.fulfill({ status: 503, body: 'transfer failed' }));
   await page.route('**/api/v1/documents/*/complete-upload', route => { completed++; return route.continue(); });
   await page.goto('/dashboard/ws-materials');
+  await page.getByTestId('workspace-open-sources').click();
   await page.getByTestId('preview-doc').first().waitFor();
   await page.getByTestId('open-upload').click();
   await page.getByTestId('workspace-file-input').setInputFiles({ name: 'sample.txt', mimeType: 'text/plain', buffer: Buffer.from('Sample text') });
@@ -103,7 +107,7 @@ test('failed file transfer never calls upload completion or reports success', as
 test('notification failure has retry, not an empty inbox message', async ({ page }) => {
   await page.route('**/api/v1/notifications', route => route.fulfill({ status: 503, body: 'notifications unavailable' }));
   await page.goto('/dashboard/ws-materials');
-  await page.getByTestId('preview-doc').first().waitFor();
+  await expect(page.getByTestId('workspace-quick-add')).toBeEnabled();
   await page.getByTestId('notification-bell').click();
   await expect(page.getByTestId('notification-error')).toBeVisible();
   await expect(page.getByTestId('notification-empty')).toHaveCount(0);

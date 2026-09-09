@@ -5,6 +5,8 @@ pub mod notification_bell;
 pub mod product_chrome_footer;
 pub mod share_menu;
 pub mod navigation;
+pub mod application_layout;
+pub use application_layout::ApplicationLayout;
 
 pub use navigation::{ContextTopBar, NavigationRail, NavigationState};
 

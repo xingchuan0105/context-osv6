@@ -504,45 +504,12 @@ pub fn ChatPage(
                     {move || i18n.t("chat.newConversation")}
                 </button>
                 <div class="chat-workspaces" data-testid="chat-workspaces">
-                    <span class="chat-workspaces-label">{move || i18n.t("chat.workspaces")}</span>
                     <a href=dest::DASHBOARD class="chat-workspaces-all" data-testid="all-workspaces-link">
-                        {move || i18n.t("chat.allWorkspaces")}
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 7V4h7l2 3h9v13H3z"/></svg>
+                        {move || i18n.t("navigation.workspace")}
                     </a>
-                    {move || {
-                        let mut seen = std::collections::BTreeSet::new();
-                        let items: Vec<(String, String)> = model.with(|m| {
-                            m.manager()
-                                .session_list
-                                .iter()
-                                .filter_map(|session| {
-                                    let id = session.workspace_id.as_ref()?;
-                                    if seen.insert(id.clone()) {
-                                        Some((
-                                            id.clone(),
-                                            session
-                                                .workspace_name
-                                                .clone()
-                                                .unwrap_or_else(|| id.clone()),
-                                        ))
-                                    } else {
-                                        None
-                                    }
-                                })
-                                .collect()
-                        });
-                        items
-                            .into_iter()
-                            .map(|(id, name)| {
-                                let href = format!("/dashboard/{id}");
-                                view! {
-                                    <a class="chat-workspace-link" href=href>
-                                        {name}
-                                    </a>
-                                }
-                            })
-                            .collect_view()
-                    }}
                 </div>
+                <p class="chat-sessions-hint">{move || i18n.t("navigation.history")}</p>
                 <Show when=move || token.with(|value| value.is_empty())>
                     <p class="chat-sessions-hint" data-testid="session-auth-hint">{move || i18n.t("chat.signInToLoadSessions")}</p>
                 </Show>

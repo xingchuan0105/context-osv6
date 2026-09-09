@@ -1,5 +1,5 @@
 use crate::api_base::poc_api_base;
-use crate::components::shell::ProductChrome;
+use crate::components::shell::ApplicationLayout;
 use crate::components::ui::PageStatus;
 use crate::i18n::{tf_now, t_now, use_i18n};
 use contracts::share::ShareAnalyticsResponse;
@@ -41,11 +41,11 @@ pub fn WorkspaceAnalyzePage() -> impl IntoView {
     });
 
     view! {
-        <ProductChrome>
+        <ApplicationLayout>
             <p class="dashboard-loading" data-testid="workspace-analyze-redirect">
                 {move || use_i18n().t("analytics.redirecting")}
             </p>
-        </ProductChrome>
+        </ApplicationLayout>
     }
 }
 
@@ -111,7 +111,7 @@ pub fn GlobalAnalyticsPage() -> impl IntoView {
     });
 
     view! {
-        <ProductChrome>
+        <ApplicationLayout title=Signal::derive(move || i18n.t("analytics.globalTitle"))>
         <div class="dashboard-shell" data-testid="global-analytics-page">
             <header class="dashboard-header">
                 <div class="dashboard-header-left">
@@ -161,7 +161,7 @@ pub fn GlobalAnalyticsPage() -> impl IntoView {
                 </section>
             </PageStatus>
         </div>
-        </ProductChrome>
+        </ApplicationLayout>
     }
 }
 

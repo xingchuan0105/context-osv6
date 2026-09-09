@@ -89,17 +89,13 @@ test.describe('E5.2 全局壳可达性', () => {
       if (missing.length === 0) {
         continue;
       }
-      const hop = first.has('/dashboard')
-        ? '/dashboard'
-        : first.has('/help')
-          ? '/help'
-          : first.has('/chat')
-            ? '/chat'
-            : null;
-      expect(hop, `no second-hop from ${start}, still missing ${missing.join(',')}`).toBeTruthy();
-      await page.goto(`${WEB_BASE}${hop}`, { waitUntil: 'domcontentloaded' });
-      const second = await collectChromeHrefs(page);
-      const union = new Set([...first, ...second]);
+      const hops = ['/dashboard', '/help', '/settings', '/legal'].filter(href => first.has(href));
+      expect(hops.length, `no second-hop from ${start}`).toBeGreaterThan(0);
+      const union = new Set(first);
+      for (const hop of hops) {
+        await page.goto(`${WEB_BASE}${hop}`, { waitUntil: 'domcontentloaded' });
+        for (const href of await collectChromeHrefs(page)) union.add(href);
+      }
       for (const href of missing) {
         const path = href.split('#')[0];
         expect(

@@ -133,9 +133,6 @@ summary {
     transition: background-color var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard);
 }
 
-.workbench-back {
-    transition: color var(--duration-fast) var(--ease-standard);
-}
 
 .rail-tab {
     transition: background-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard);
@@ -304,10 +301,6 @@ summary:hover {
     box-shadow: var(--shadow-focus-ring);
 }
 
-.workbench-back:focus-visible {
-    outline: none;
-    box-shadow: var(--shadow-focus-ring);
-}
 
 .rail-tab:focus-visible {
     outline: none;
@@ -398,7 +391,6 @@ select:focus-visible {
 .auth-link:hover,
 .settings-back-link:hover,
 .dashboard-chat-link:hover,
-.workbench-back:hover,
 .workbench-analyze-link:hover,
 .admin-back-link:hover,
 .admin-table-link:hover,

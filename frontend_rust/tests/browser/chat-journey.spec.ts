@@ -495,7 +495,9 @@ test.describe('Workspace 最小 Shell 与归属隔离（W2.8）', () => {
     // 3. 工作区使用自己的标题和会话列表，不重复个人聊天侧栏。
     await expect(page.getByTestId('workspace-workbench')).toBeVisible();
     await expect(page.getByTestId('workspace-sessions')).toHaveCount(1);
-    await expect(page.getByTestId('session-list')).toHaveCount(0);
+    await expect(page.getByTestId('session-list')).toHaveCount(1);
+    await expect(page.getByTestId('session-list')).not.toContainText('夹具会话');
+    await expect(page.getByTestId('workspace-sessions')).toContainText('合金强度分析');
     await expect(page.getByTestId('model-role-badge')).toContainText('工作区 Agent');
 
     // 4. 工作区内发问自动携带 workspace_id
