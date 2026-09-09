@@ -1,5 +1,5 @@
 use crate::api_base::poc_api_base;
-use crate::components::shell::ProductChrome;
+use crate::components::shell::ApplicationLayout;
 use crate::components::ui::PageStatus;
 use crate::i18n::{tf_now, t_now, use_i18n};
 use leptos::prelude::*;
@@ -51,14 +51,14 @@ pub fn UsagePage() -> impl IntoView {
     });
 
     view! {
-        <ProductChrome>
-        <div class="settings-shell" data-testid="usage-page">
+        <ApplicationLayout title=Signal::derive(move || i18n.t("settings.usageLink"))>
+        <div class="settings-shell category-layout settings-categories" data-category-open="true" data-testid="usage-page">
             <header class="settings-header">
                 <div class="settings-header-left">
                     <a href="/settings" class="settings-back-link">{move || i18n.t("usage.back")}</a>
                     <h1 class="settings-title">{move || i18n.t("usage.overviewTitle")}</h1>
                 </div>
-            </header>
+            </header><super::settings_navigation::SettingsNavigation selected=Signal::derive(|| "usage".to_string())/>
             <PageStatus
                 loading=Signal::derive(move || loading.get())
                 error=Signal::derive(move || error.get())
@@ -121,7 +121,7 @@ pub fn UsagePage() -> impl IntoView {
                 </main>
             </PageStatus>
         </div>
-        </ProductChrome>
+        </ApplicationLayout>
     }
 }
 

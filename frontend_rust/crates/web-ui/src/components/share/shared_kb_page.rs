@@ -57,6 +57,7 @@ pub fn SharedKbPage() -> impl IntoView {
     });
 
     view! {
+        <crate::components::shell::public_layout::PublicLayout>
         <div class="shared-kb-shell" data-testid="shared-kb-page">
             <p role="status" hidden=move || !loading.get()>{move || i18n.t("common.loading")}</p>
             <Show when=move || error.get().is_some()>
@@ -120,5 +121,6 @@ pub fn SharedKbPage() -> impl IntoView {
                 }}
             </Show>
         </div>
+        </crate::components::shell::public_layout::PublicLayout>
     }
 }

@@ -1,5 +1,31 @@
 /* Settings, providers, usage */
 
+.settings-shell.category-layout { display: grid; grid-template-columns: 200px minmax(0, 1fr); max-width: 1120px; gap: 24px; padding: 24px; align-items: start; }
+.category-layout > .settings-header { grid-column: 1 / -1; border-bottom: 0; padding-bottom: 0; }
+.category-layout > .settings-nav { display: flex; flex-direction: column; overflow: visible; border: 0; gap: 4px; padding: 0; }
+.category-layout .settings-nav-item { display: flex; align-items: center; min-height: 44px; padding: 10px 12px; border: 0; border-radius: var(--radius-control); text-align: left; }
+.category-layout .settings-content { min-width: 0; max-width: 640px; width: 100%; }
+.category-layout .settings-content > * { min-width: 0; }
+.category-back { display: none; }
+.share-categories .settings-content { max-width: none; }
+.public-layout { min-height: 100dvh; display: flex; flex-direction: column; }
+.public-layout-header { display: flex; align-items: center; justify-content: space-between; height: 52px; padding: 0 24px; flex-shrink: 0; }
+.public-layout-header a { color: var(--cos-text); text-decoration: none; }
+.public-layout-content { flex: 1; min-width: 0; }
+.public-layout .shared-kb-shell { min-height: calc(100dvh - 52px); }
+.public-layout .shared-user-shell { max-width: 1120px; }
+.share-categories .share-log-item { flex-wrap: wrap; gap: 8px; overflow-wrap: anywhere; }
+.public-layout .auth-shell { min-height: calc(100dvh - 52px); }
+@media (max-width: 767px) {
+    .settings-shell.category-layout { grid-template-columns: minmax(0, 1fr); padding: 16px; gap: 16px; }
+    .settings-categories[data-category-open="false"] > .settings-content { display: none; }
+    .settings-categories[data-category-open="true"] > .settings-nav { display: none; }
+    .category-back { display: inline-flex; align-items: center; min-height: 44px; color: var(--cos-text-secondary); }
+    .share-categories > .settings-nav { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .share-categories .settings-nav-item { justify-content: center; padding: 8px 4px; font-size: 12px; }
+    .public-layout-header { padding: 0 16px; }
+}
+
 /* E3.1 Settings 样式 */
 .settings-shell {
     max-width: 860px;

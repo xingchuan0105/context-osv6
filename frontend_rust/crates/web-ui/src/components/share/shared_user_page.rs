@@ -63,6 +63,7 @@ pub fn SharedUserPage() -> impl IntoView {
     });
 
     view! {
+        <crate::components::shell::public_layout::PublicLayout>
         <div class="shared-user-shell" data-testid="shared-user-page">
             <p role="status" hidden=move || !loading.get()>{move || i18n.t("common.loading")}</p>
             <div hidden=move || error.get().is_none()><p role="alert">{move || error.get()}</p><button type="button" on:click=move |_| retry.update(|n| *n += 1)>{move || i18n.t("common.retry")}</button></div>
@@ -101,5 +102,6 @@ pub fn SharedUserPage() -> impl IntoView {
             </Show>
             </Show>
         </div>
+        </crate::components::shell::public_layout::PublicLayout>
     }
 }

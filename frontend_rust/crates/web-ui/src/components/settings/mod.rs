@@ -5,3 +5,5 @@ pub mod usage_page;
 pub use providers_panel::ProvidersPanel;
 pub use settings_page::SettingsPage;
 pub use usage_page::UsagePage;
+
+pub mod settings_navigation;

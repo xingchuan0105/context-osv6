@@ -10,3 +10,5 @@ pub use share_manage_page::{
 };
 pub use shared_kb_page::SharedKbPage;
 pub use shared_user_page::SharedUserPage;
+
+pub mod share_navigation;

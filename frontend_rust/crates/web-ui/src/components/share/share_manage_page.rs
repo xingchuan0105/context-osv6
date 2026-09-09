@@ -1,5 +1,5 @@
 use crate::api_base::poc_api_base;
-use crate::components::shell::ProductChrome;
+use crate::components::shell::ApplicationLayout;
 use contracts::share::{AccessLogEntry, ShareAnalyticsResponse, ShareSettings};
 use leptos::prelude::*;
 use leptos_router::hooks::use_params;
@@ -149,8 +149,8 @@ pub fn WorkspaceSharePage() -> impl IntoView {
     };
 
     view! {
-        <ProductChrome>
-        <div class="settings-shell" data-testid="workspace-share-page">
+        <ApplicationLayout title=Signal::derive(move || i18n.t("share.centerTitle"))>
+        <div class="settings-shell category-layout share-categories" data-testid="workspace-share-page">
             <header class="settings-header">
                 <div class="settings-header-left">
                     <a href=move || format!("/dashboard/{}", workspace_id.get()) class="settings-back-link">
@@ -159,18 +159,9 @@ pub fn WorkspaceSharePage() -> impl IntoView {
                     <h1 class="settings-title">{move || i18n.t("share.centerTitle")}</h1>
                 </div>
             </header>
+            <super::share_navigation::ShareNavigation workspace_id=workspace_id selected=""/>
 
-            <nav class="settings-nav" aria-label={move || i18n.t("share.navLabel")}>
-                <a href=move || format!("/dashboard/{}/share", workspace_id.get()) class="settings-nav-item is-active">
-                    {move || i18n.t("share.linkSettings")}
-                </a>
-                <a href=move || format!("/dashboard/{}/share/access-logs", workspace_id.get()) class="settings-nav-item">
-                    {move || i18n.t("share.logsTitle")}
-                </a>
-                <a href=move || format!("/dashboard/{}/share/analytics", workspace_id.get()) class="settings-nav-item">
-                    {move || i18n.t("share.analyticsNav")}
-                </a>
-            </nav>
+
 
             <main class="settings-content">
                 <p role="status" hidden=move || !loading.get()>{move || i18n.t("common.loading")}</p>
@@ -227,7 +218,7 @@ pub fn WorkspaceSharePage() -> impl IntoView {
                 </section>
             </main>
         </div>
-        </ProductChrome>
+        </ApplicationLayout>
     }
 }
 
@@ -274,8 +265,8 @@ pub fn WorkspaceShareLogsPage() -> impl IntoView {
     });
 
     view! {
-        <ProductChrome>
-        <div class="settings-shell" data-testid="share-logs-page">
+        <ApplicationLayout title=Signal::derive(move || i18n.t("share.centerTitle"))>
+        <div class="settings-shell category-layout share-categories" data-testid="share-logs-page">
             <header class="settings-header">
                 <div class="settings-header-left">
                     <a href=move || format!("/dashboard/{}/share", workspace_id.get()) class="settings-back-link">
@@ -284,6 +275,7 @@ pub fn WorkspaceShareLogsPage() -> impl IntoView {
                     <h1 class="settings-title">{move || i18n.t("share.logsTitle")}</h1>
                 </div>
             </header>
+            <super::share_navigation::ShareNavigation workspace_id=workspace_id selected="/access-logs"/>
             <main class="settings-content">
                 <p role="status" hidden=move || !loading.get()>{move || i18n.t("common.loading")}</p>
                 <div hidden=move || error.get().is_none()><p role="alert">{move || error.get()}</p><button type="button" on:click=move |_| retry.update(|n| *n += 1)>{move || i18n.t("common.retry")}</button></div>
@@ -307,7 +299,7 @@ pub fn WorkspaceShareLogsPage() -> impl IntoView {
                 </section>
             </main>
         </div>
-        </ProductChrome>
+        </ApplicationLayout>
     }
 }
 
@@ -354,8 +346,8 @@ pub fn WorkspaceShareAnalyticsPage() -> impl IntoView {
     });
 
     view! {
-        <ProductChrome>
-        <div class="settings-shell" data-testid="share-analytics-page">
+        <ApplicationLayout title=Signal::derive(move || i18n.t("share.centerTitle"))>
+        <div class="settings-shell category-layout share-categories" data-testid="share-analytics-page">
             <header class="settings-header">
                 <div class="settings-header-left">
                     <a href=move || format!("/dashboard/{}/share", workspace_id.get()) class="settings-back-link">
@@ -364,6 +356,7 @@ pub fn WorkspaceShareAnalyticsPage() -> impl IntoView {
                     <h1 class="settings-title">{move || i18n.t("share.analyticsTitle")}</h1>
                 </div>
             </header>
+            <super::share_navigation::ShareNavigation workspace_id=workspace_id selected="/analytics"/>
             <main class="settings-content">
                 <p role="status" hidden=move || !loading.get()>{move || i18n.t("common.loading")}</p>
                 <div hidden=move || error.get().is_none()><p role="alert">{move || error.get()}</p><button type="button" on:click=move |_| retry.update(|n| *n += 1)>{move || i18n.t("common.retry")}</button></div>
@@ -385,6 +378,6 @@ pub fn WorkspaceShareAnalyticsPage() -> impl IntoView {
                 </section>
             </main>
         </div>
-        </ProductChrome>
+        </ApplicationLayout>
     }
 }

@@ -1,5 +1,5 @@
 use super::providers_panel::ProvidersPanel;
-use crate::components::shell::ProductChrome;
+use crate::components::shell::ApplicationLayout;
 use crate::components::ui::Toaster;
 use crate::i18n::{UiLocale, UiTheme, t_now, use_i18n};
 use leptos::prelude::*;
@@ -12,10 +12,10 @@ pub fn SettingsPage() -> impl IntoView {
     let token = expect_context::<RwSignal<String>>();
     let i18n = use_i18n();
     let navigate = use_navigate();
-    let (tab_query, set_tab_query) = query_signal::<String>("tab");
+    let (tab_query, _) = query_signal::<String>("tab");
 
     let current_tab = Signal::derive(move || {
-        tab_query.get().unwrap_or_else(|| "profile".to_string())
+        tab_query.get().filter(|tab| matches!(tab.as_str(), "providers" | "profile" | "preferences" | "billing" | "security")).unwrap_or_else(|| "profile".to_string())
     });
 
     let on_logout = {
@@ -28,8 +28,8 @@ pub fn SettingsPage() -> impl IntoView {
     };
 
     view! {
-        <ProductChrome>
-        <div class="settings-shell" data-testid="settings-page">
+        <ApplicationLayout title=Signal::derive(move || i18n.t("settings.pageHeading"))>
+        <div class="settings-shell category-layout settings-categories" data-testid="settings-page" data-category-open=move || tab_query.get().is_some().to_string()>
             <header class="settings-header">
                 <div class="settings-header-left">
                     <h1 class="settings-title">{move || i18n.t("settings.pageHeading")}</h1>
@@ -38,89 +38,20 @@ pub fn SettingsPage() -> impl IntoView {
                     type="button"
                     class="settings-logout-btn"
                     data-testid="settings-logout"
+                    hidden=move || token.get().is_empty()
                     on:click=on_logout
                 >
                     {move || i18n.t("dashboardLogout")}
                 </button>
             </header>
 
-            <nav class="settings-nav" aria-label=move || i18n.t("settings.navAria")>
-                <button
-                    type="button"
-                    class=move || {
-                        if current_tab.get() == "providers" {
-                            "settings-nav-item is-active"
-                        } else {
-                            "settings-nav-item"
-                        }
-                    }
-                    data-testid="tab-providers"
-                    on:click=move |_| set_tab_query.set(Some("providers".to_string()))
-                >
-                    {move || i18n.t("settings.tabs.providers")}
-                </button>
-                <button
-                    type="button"
-                    class=move || {
-                        if current_tab.get() == "profile" {
-                            "settings-nav-item is-active"
-                        } else {
-                            "settings-nav-item"
-                        }
-                    }
-                    data-testid="tab-profile"
-                    on:click=move |_| set_tab_query.set(Some("profile".to_string()))
-                >
-                    {move || i18n.t("settings.tabs.profile")}
-                </button>
-                <button
-                    type="button"
-                    class=move || {
-                        if current_tab.get() == "preferences" {
-                            "settings-nav-item is-active"
-                        } else {
-                            "settings-nav-item"
-                        }
-                    }
-                    data-testid="tab-preferences"
-                    on:click=move |_| set_tab_query.set(Some("preferences".to_string()))
-                >
-                    {move || i18n.t("settings.tabs.preferences")}
-                </button>
-                <button
-                    type="button"
-                    class=move || {
-                        if current_tab.get() == "billing" {
-                            "settings-nav-item is-active"
-                        } else {
-                            "settings-nav-item"
-                        }
-                    }
-                    data-testid="tab-billing"
-                    on:click=move |_| set_tab_query.set(Some("billing".to_string()))
-                >
-                    {move || i18n.t("settings.tabs.billing")}
-                </button>
-                <button
-                    type="button"
-                    class=move || {
-                        if current_tab.get() == "security" {
-                            "settings-nav-item is-active"
-                        } else {
-                            "settings-nav-item"
-                        }
-                    }
-                    data-testid="tab-security"
-                    on:click=move |_| set_tab_query.set(Some("security".to_string()))
-                >
-                    {move || i18n.t("settings.tabs.security")}
-                </button>
-                <a href="/settings/usage" class="settings-nav-item" data-testid="tab-usage">
-                    {move || i18n.t("settings.usageLink")}
-                </a>
-            </nav>
+            <super::settings_navigation::SettingsNavigation selected=current_tab/>
 
-            <main class="settings-content">
+
+            <main class="settings-content"><a class="category-back" href="/settings">{move || i18n.t("settings.backCategories")}</a>
+                <Show when=move || token.get().is_empty()>
+                    <a href="/login?next=/settings" data-testid="settings-login-required">{move || i18n.t("pricing.loginRequired")}</a>
+                </Show>
                 {move || {
                     match current_tab.get().as_str() {
                         "providers" => view! { <ProvidersPanel/> }.into_any(),
@@ -147,7 +78,7 @@ pub fn SettingsPage() -> impl IntoView {
                 }}
             </main>
         </div>
-        </ProductChrome>
+        </ApplicationLayout>
     }
 }
 

@@ -30,6 +30,7 @@ pub fn InvitePage() -> impl IntoView {
     });
 
     view! {
+        <crate::components::shell::public_layout::PublicLayout>
         <div class="auth-page-container" data-testid="invite-page">
             <main class="auth-card" aria-label=move || i18n.t("invite.title")>
                 <header class="auth-header">
@@ -90,5 +91,6 @@ pub fn InvitePage() -> impl IntoView {
                 {move || error.get().map(|message| view! { <p role="alert" class="settings-error" data-testid="invite-error">{message}</p> })}
             </main>
         </div>
+        </crate::components::shell::public_layout::PublicLayout>
     }
 }

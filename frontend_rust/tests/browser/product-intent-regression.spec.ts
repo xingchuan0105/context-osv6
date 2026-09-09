@@ -135,7 +135,9 @@ test('workspace selection enters the request without conversation file uploads',
   await page.goto('/dashboard/ws-materials');
   await expect(page.getByTestId('scope-cap-rag')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByTestId('turn-attachment-tray')).toHaveCount(0);
+  await page.getByTestId('workspace-open-sources').click();
   await page.getByTestId('doc-select').first().check();
+  await page.getByTestId('workspace-panel-close').click();
   await page.getByTestId('composer-input').fill('Compare the selected materials');
   await page.getByTestId('send-button').click();
   await expect.poll(() => body).toBeTruthy();
