@@ -15,7 +15,22 @@
 2. 名称与前 2000 字命中目录关键词规则，冲突进入待处理，无命中按格式归类；展示原因，支持编辑后续归档规则。
 3. 保存标题路径、来源定位和 chunk 序列，支持前后块及章节序列展开。示例用「前三项已完整表达，第四项仍在下一块」验证续读。
 4. 目录内关键词子串与精确余弦检索，RRF 合并。在线 embedding 使用 SiliconFlow `Pro/BAAI/bge-m3`；原文、向量和索引保存在本地，生成向量时向在线服务发送相关文本。
-5. HTTP 和 MCP 共用领域服务，提供 status/browse/search/read；外部 Agent 可按 `document_id/seq/next` 读取正文。
+5. HTTP 和 MCP 共用领域服务，提供 status/browse/outline/search/read/graph；外部 Agent 可按 `document_id/seq/next` 读取正文，并由 `graph_node_id` 展开跨文档近邻。
+
+## 2026-09-10：跨文档 embedding 图已接入
+
+在用户明确要求加入 embedding 图后，独立原型新增 `semantic_graph.py`、`repo.graph` MCP / `repo_graph` function calling、浏览器章节图及配套 Skill。节点是同一标题路径下最多 16 个连续块的窗口，使用现有块向量的字数加权归一化平均；每节点选择余弦至少 0.60 的 5 个跨文档近邻，合并为无向 `semantic_similarity` 边。它表示语义接近，不能当作支持、矛盾、因果或主题归属。
+
+图保存在独立 `semantic-graph.sqlite`，访问时核对原件、结构与向量指纹，变化后本地重建；没有文件监听。正文搜索/读取附带图锚点，图节点本身不能用于正文引用。无邻居或缺少向量的章节仍可枚举和阅读；图支持范围过滤、版本游标，超过 4096 节点停止连边。没有新增依赖、下载本地模型或为建图调用在线接口。
+
+- 原 128 题语料：10 份原件、872 块已有在线向量，形成 **200 节点、735 条无向边、27 个孤立节点**。主 `index.sqlite` 建图前后哈希相同。
+- 本机全量自动检查：**80 passed（10.76 秒）**；新增图相关用例及真实 MCP HTTP 调用均通过。
+- 真实 Qwen3.8 Flash：2 题明确要求沿图阅读的合成材料任务完成，图调用 2/3 次，工具错误 0，有效正文引用；共 87,308 reported tokens。这是工具路径验收，没有独立答案质量评分。
+- Edge 浏览器：9 项检查通过，包括展开近邻、原文续读、范围过滤、孤立节点和过期请求保护；本机入口仍为 `http://127.0.0.1:8765`，顶部「语义图谱」可试用。
+
+实现与证据保存在独立工程：[设计决策](C:/Users/xingc/Documents/Codex/repository-tree/decisions/semantic-graph-v1.md)、[验证记录](C:/Users/xingc/Documents/Codex/repository-tree/evidence/semantic-graph-validation.md)、[Agent 接口](C:/Users/xingc/Documents/Codex/repository-tree/eval/AGENT-INTERFACE.md)。
+
+历史 128 题和典型20题四路对照均未使用此图；本轮不重跑、不改写那些结果，也不据此声称准确率提高。主题聚类、主题树、SVD 和规模性能仍未验收。以下首轮验证记录保留为历史证据。
 
 ## 技术和验证
 
