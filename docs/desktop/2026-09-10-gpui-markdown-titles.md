@@ -49,9 +49,19 @@
 - 共享 Tauri 套件重新执行：desktop-core 19 项、GPUI lib 16 项、原始共享流测试 4 项、隔离 HTTP 会话/历史 1 项，共 **40 项不同测试通过**。上述 6 项包含在 GPUI lib 中，不重复计数。
 - Windows `cargo check --features ui --locked` 通过（3.35 秒），jobs=2。已有 ts-rs 属性解析和 desktop-core 未使用函数警告仍在。
 - 用户确认关闭旧窗口后，Windows `cargo build --features ui --locked` 通过（10.44 秒），jobs=2。新版已通过 `run-isolated-gpui.ps1` 打开，进程 PID 34404；独立 API 18082 的 PID 仍为 37708，未重启后端或调用模型。
-- 程序为 `C:\dev\context-osv6\desktop_gpui\target\debug\desktop-gpui.exe`，本地构建时间 2026-09-10 10:13:21，SHA-256 为 `03761D7D679FFE948D6FCE95DF6D06820C151EB9E1159417FC3209DF083B1C4B`。进程启动已核实；新版原生视觉、选择/复制及流式表现尚未复验，不以自动测试代替用户验收。
+- 程序为 `C:\dev\context-osv6\desktop_gpui\target\debug\desktop-gpui.exe`，本地构建时间 2026-09-10 10:13:21，SHA-256 为 `03761D7D679FFE948D6FCE95DF6D06820C151EB9E1159417FC3209DF083B1C4B`。交付时已核实进程启动，原生表现当时待用户复验；后续确认见下节。
 - 日志位于 `C:\dev\context-osv6\desktop_gpui\target\acceptance\tauri-shared\`：`markdown-position.log`、`markdown-ui-check.log`、`markdown-ui-build.log`，以及重新运行的 `shared-core.log`、`gpui-and-original-stream.log`、`local-session-history.log`。代码关系图已更新；提交范围仅为本批 GPUI 文件与验收文档。
 
 ### 用户复验项
 
 打开原“天空为什么是蓝色的？”历史，检查首句不再显示加粗星号，末项按原文显示 `4. 结果`；拖选并复制含列表的正文，检查可读内容和编号。已有基本流式/停止验收保持历史记录，本版渲染变化的原生确认单独记录。
+
+### 用户复验结果：通过
+
+2026-09-10，用户对上述三项检查回复“已检查，全部正常”。对应修复提交 `09b7466b`，确认结果为：
+
+- 中文括号旁的文字正常加粗，不再残留 `**`。
+- 独立有序列表的“结果”项保留原文起始编号 `4.`。
+- 含列表正文的拖选与复制正常。
+
+本批两处排版余项及选择/复制的原生复验已通过。40 项自动测试、Windows 构建与本次用户验收分别记录；本次没有重新进行模型请求或流式/停止复验，相关基本能力沿用已有 D1 用户验收证据。完整客户端对等仍按 D2–D6 清单推进。
