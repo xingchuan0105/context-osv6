@@ -1,8 +1,8 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use thiserror::Error;
 
-use crate::ir::{AssetKind, BlockModality, BlockType, DocumentIr, DocumentType, ParseBackend};
+use crate::ir::{BlockModality, BlockType, DocumentIr, DocumentType, ParseBackend};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DocumentIrValidationIssue {
@@ -346,101 +346,21 @@ fn validate_presentation_contract(
     document: &DocumentIr,
     issues: &mut Vec<DocumentIrValidationIssue>,
 ) {
-    let has_slide_text = document.blocks.iter().any(|block| {
-        matches!(
-            block.block_type,
-            BlockType::SlideText | BlockType::SlideNotes
-        ) && !block.text.trim().is_empty()
-    });
-    if !has_slide_text {
-        issues.push(issue(
-            "presentation_missing_slide_text",
-            "presentation documents must include at least one slide_text or slide_notes block",
-            None,
-            None,
-            None,
-        ));
-    }
-
-    let has_slide_image = document
+    // The active Office parser emits Markdown text blocks. Per-slide raster
+    // assets belonged to the removed POI parser and cannot be required here.
+    // Asset references and image modalities are validated by the common checks.
+    if !document
         .blocks
         .iter()
-        .any(|block| matches!(block.block_type, BlockType::SlideImage));
-    if !has_slide_image {
+        .any(|block| !block.text.trim().is_empty())
+    {
         issues.push(issue(
-            "presentation_missing_slide_image",
-            "presentation documents must include at least one slide_image block",
+            "presentation_missing_text",
+            "presentation documents must include extracted text",
             None,
             None,
             None,
         ));
-    }
-
-    let mut pages = BTreeSet::new();
-    for page in &document.pages {
-        pages.insert(page.page_number);
-    }
-    for block in &document.blocks {
-        if let Some(page) = block.page.or(block.source_locator.page) {
-            pages.insert(page);
-        }
-    }
-    for asset in &document.assets {
-        if let Some(page) = asset.page {
-            pages.insert(page);
-        }
-    }
-
-    let asset_by_id = document
-        .assets
-        .iter()
-        .map(|asset| (asset.asset_id.as_str(), asset))
-        .collect::<BTreeMap<_, _>>();
-
-    for page in pages {
-        let slide_render_assets = document
-            .assets
-            .iter()
-            .filter(|asset| asset.page == Some(page) && asset.asset_kind == AssetKind::SlideRender)
-            .collect::<Vec<_>>();
-
-        if slide_render_assets.len() != 1 {
-            issues.push(issue(
-                "presentation_slide_render_count_invalid",
-                format!(
-                    "presentation page {} must have exactly one slide_render asset",
-                    page
-                ),
-                None,
-                None,
-                Some(page),
-            ));
-            continue;
-        }
-
-        let slide_render_asset = slide_render_assets[0];
-        let referenced_by_slide_image = document.blocks.iter().any(|block| {
-            matches!(block.block_type, BlockType::SlideImage)
-                && block.page.or(block.source_locator.page) == Some(page)
-                && block.asset_refs.iter().any(|asset_ref| {
-                    asset_by_id
-                        .get(asset_ref.as_str())
-                        .is_some_and(|asset| asset.asset_id == slide_render_asset.asset_id)
-                })
-        });
-
-        if !referenced_by_slide_image {
-            issues.push(issue(
-                "presentation_slide_image_missing_render_ref",
-                format!(
-                    "presentation page {} must have a slide_image block that references slide_render asset {}",
-                    page, slide_render_asset.asset_id
-                ),
-                None,
-                Some(slide_render_asset.asset_id.clone()),
-                Some(page),
-            ));
-        }
     }
 }
 
@@ -622,110 +542,68 @@ mod tests {
         validate_document_ir(&document).expect("resolved image block should validate");
     }
 
-    fn base_presentation_document() -> DocumentIr {
-        DocumentIr {
-            document_id: "deck-1".to_string(),
-            title: "deck".to_string(),
-            doc_type: DocumentType::Pptx,
-            primary_backend: ParseBackend::PoiPptx,
-            backend_version: None,
-            language: None,
-            metadata: BTreeMap::new(),
-            pages: vec![crate::ir::PageIr {
-                page_number: 1,
-                width: None,
-                height: None,
-                backend: ParseBackend::PoiPptx,
-                text_char_count: 10,
-                image_count: 1,
-                metadata: BTreeMap::new(),
-            }],
-            blocks: vec![
-                BlockIr {
-                    block_id: "slide-1-text".to_string(),
-                    page: Some(1),
-                    block_type: BlockType::SlideText,
-                    modality: BlockModality::TextOnly,
-                    text: "Agenda".to_string(),
-                    alt_text: None,
-                    asset_refs: Vec::new(),
-                    caption: None,
-                    section_path: Vec::new(),
-                    source_locator: SourceLocator {
-                        page: Some(1),
-                        slide_index: Some(1),
-                        ..SourceLocator::default()
-                    },
-                    parser_backend: ParseBackend::PoiPptx,
-                    metadata: BTreeMap::new(),
-                },
-                BlockIr {
-                    block_id: "slide-1-image".to_string(),
-                    page: Some(1),
-                    block_type: BlockType::SlideImage,
-                    modality: BlockModality::ImageWithContext,
-                    text: "Agenda slide".to_string(),
-                    alt_text: Some("Agenda slide render".to_string()),
-                    asset_refs: vec!["slide-render-1".to_string()],
-                    caption: Some("Agenda slide".to_string()),
-                    section_path: Vec::new(),
-                    source_locator: SourceLocator {
-                        page: Some(1),
-                        slide_index: Some(1),
-                        ..SourceLocator::default()
-                    },
-                    parser_backend: ParseBackend::PoiPptx,
-                    metadata: BTreeMap::new(),
-                },
-            ],
-            assets: vec![AssetIr {
-                asset_id: "slide-render-1".to_string(),
-                page: Some(1),
-                asset_kind: AssetKind::SlideRender,
-                storage_path: "temporary://slide-1.png".to_string(),
-                mime_type: Some("image/png".to_string()),
-                width: Some(1280),
-                height: Some(720),
-                parser_backend: ParseBackend::PoiPptx,
-                metadata: BTreeMap::new(),
-            }],
-            warnings: Vec::new(),
+    fn markdown_presentation(markdown: &str) -> DocumentIr {
+        let mut document = DocumentIr::new(
+            "deck-1",
+            "deck.pptx",
+            DocumentType::Pptx,
+            ParseBackend::Anydoc,
+        );
+        document.blocks = crate::parser::markitdown::blocks_from_markdown(markdown);
+        for block in &mut document.blocks {
+            block.parser_backend = ParseBackend::Anydoc;
         }
-    }
-
-    #[test]
-    fn validate_document_ir_rejects_presentation_without_slide_render_asset() {
-        let mut document = base_presentation_document();
-        document.assets.clear();
-
-        let error = validate_document_ir(&document).expect_err("missing slide render should fail");
-        assert!(
-            error
-                .issues
-                .iter()
-                .any(|issue| issue.code == "presentation_slide_render_count_invalid")
-        );
-    }
-
-    #[test]
-    fn validate_document_ir_rejects_presentation_without_slide_image_block() {
-        let mut document = base_presentation_document();
         document
-            .blocks
-            .retain(|block| block.block_type != BlockType::SlideImage);
+    }
 
-        let error = validate_document_ir(&document).expect_err("missing slide image should fail");
+    #[test]
+    fn validate_document_ir_accepts_presentation_markdown_without_fake_rasters() {
+        let document = markdown_presentation("# Agenda\n\nProject overview\n");
+        assert!(document.pages.is_empty() && document.assets.is_empty());
+        validate_document_ir(&document).expect("current Office output should validate");
+    }
+
+    #[test]
+    fn validate_document_ir_rejects_presentation_without_extracted_text() {
+        let mut document = markdown_presentation("# Agenda");
+        for block in &mut document.blocks {
+            block.text = " \n ".into();
+        }
+        let error = validate_document_ir(&document).expect_err("empty text should fail");
         assert!(
             error
                 .issues
                 .iter()
-                .any(|issue| issue.code == "presentation_missing_slide_image")
+                .any(|issue| issue.code == "presentation_missing_text")
+        );
+        document.blocks.clear();
+        assert!(validate_document_ir(&document).is_err());
+    }
+
+    #[test]
+    fn validate_document_ir_still_rejects_presentation_image_without_asset() {
+        let mut document = markdown_presentation("Agenda");
+        document.blocks[0].block_type = BlockType::SlideImage;
+        document.blocks[0].modality = BlockModality::ImageWithContext;
+        let error = validate_document_ir(&document).expect_err("missing image asset should fail");
+        assert!(
+            error
+                .issues
+                .iter()
+                .any(|issue| issue.code == "slide_image_missing_asset")
         );
     }
 
     #[test]
-    fn validate_document_ir_accepts_complete_presentation_contract() {
-        let document = base_presentation_document();
-        validate_document_ir(&document).expect("complete presentation contract should validate");
+    fn validate_document_ir_still_rejects_presentation_unknown_asset() {
+        let mut document = markdown_presentation("Agenda");
+        document.blocks[0].asset_refs.push("missing-image".into());
+        let error = validate_document_ir(&document).expect_err("unknown asset should fail");
+        assert!(
+            error
+                .issues
+                .iter()
+                .any(|issue| issue.code == "unknown_asset_ref")
+        );
     }
 }

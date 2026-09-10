@@ -16,5 +16,6 @@ tokio.workspace = true
 uuid.workspace = true
 contracts = { path = "../../../contracts" }
 avrag-llm = { path = "../llm" }
-# struct_query 同款 bundled DuckDB（WSL2 一次性编译成本已付）
-duckdb = { version = "1", features = ["bundled"] }
+# Metadata uses JSON columns; ship the extension with the same native build.
+duckdb = { version = "1", features = ["bundled", "json"] }
+avrag-duckdb-store = { path = "../duckdb-store" }

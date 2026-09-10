@@ -856,7 +856,7 @@ impl BootstrapRepository {
 
         // Parent-guarded replacement: zero side effects when the document
         // belongs to another owner (surfaces via caller's NotFound checks).
-        let guard = sqlx::query_scalar::<_, i64>(
+        let guard = sqlx::query_scalar::<_, i32>(
             "select 1 from documents where id = $1 and owner_user_id = $2 for update",
         )
         .bind(document_id)

@@ -10,5 +10,9 @@ jobs = 2
 # Scope the assembler flag to MinGW C++ builds; native/MSVC builds are unchanged.
 CXXFLAGS_x86_64_pc_windows_gnu = "-Wa,-mbig-obj"
 
+[target.x86_64-pc-windows-gnu]
+# WSL cross-build: keep MinGW C++ callback/TLS state inside the executable.
+linker = "../scripts/link-windows-gnu.sh"
+
 [alias]
 test-app = ["test", "-p", "app", "--message-format=short"]

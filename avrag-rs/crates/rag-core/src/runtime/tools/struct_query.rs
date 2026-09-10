@@ -90,16 +90,10 @@ fn doc_file(dir: &Path, doc_id: Uuid) -> PathBuf {
 }
 
 /// 加固只读打开（配置顺序：先关外部访问，再锁定配置防 SET 撤销）。
-fn open_readonly(path: &Path) -> Result<duckdb::Connection, String> {
-    let config = duckdb::Config::default()
-        .access_mode(duckdb::AccessMode::ReadOnly)
-        .map_err(|e| format!("config: {e}"))?;
-    let con = duckdb::Connection::open_with_flags(path, config)
+fn open_readonly(path: &Path) -> Result<avrag_duckdb_store::Connection, String> {
+    let con = avrag_duckdb_store::Connection::open_readonly(path)
         .map_err(|e| format!("open {}: {e}", path.display()))?;
-    // fts 扩展（表内值发现）：bundled 内建，LOAD 需扩展目录访问——在加固前加载，
-    // 之后 SET 禁文件访问不影响已加载扩展；LOAD 失败（离线/缺失）时静默降级，
-    // 普通查询不受影响，match_bm25 谓词会报 schema 不存在（模型可见错误）。
-    let _ = con.execute_batch("LOAD fts");
+    // JSON / FTS 与内核一起编译，连接创建时完成注册，无外部扩展下载。
     con.execute_batch("SET enable_external_access=false; SET lock_configuration=true;")
         .map_err(|e| format!("harden: {e}"))?;
     Ok(con)
@@ -167,7 +161,7 @@ fn render_rows_md(columns: &[String], rows: &[Vec<String>]) -> String {
 
 /// 单文件的 catalog：information_schema 列表 + DESCRIBE + 样例行 + _meta。
 fn catalog_for_file(
-    con: &duckdb::Connection,
+    con: &avrag_duckdb_store::Connection,
     doc_id: Uuid,
 ) -> Result<Vec<serde_json::Value>, String> {
     // fts 内部表（dict/docs/fields/stats/terms/stopwords）与 W6 内建映射表
@@ -294,7 +288,7 @@ fn quote_ident(name: &str) -> String {
 /// （raw_statement: “The statement was not executed yet”），故先收集行、
 /// 释放游标后再读 schema（空结果集同样可得列名）。
 fn query_rows(
-    con: &duckdb::Connection,
+    con: &avrag_duckdb_store::Connection,
     sql: &str,
     cap: usize,
 ) -> Result<(Vec<String>, Vec<Vec<String>>), String> {
@@ -328,7 +322,7 @@ fn query_rows(
 /// `_line_map`（W6 worker 写入：md 行区间 → body chunk_id）读取，
 /// 按 md_line_start 排序（同 start 按 chunk_id 稳定序）。老库无此表 → None；
 /// 表存在但为空同样视为 None（调用侧降级表级证据）。
-fn read_line_map(con: &duckdb::Connection) -> Option<Vec<(i64, i64, String)>> {
+fn read_line_map(con: &avrag_duckdb_store::Connection) -> Option<Vec<(i64, i64, String)>> {
     let has: i64 = con
         .query_row(
             "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = '_line_map'",
@@ -797,7 +791,7 @@ mod tests {
     fn fixture_file(dir: &Path, doc_id: Uuid) -> PathBuf {
         std::fs::create_dir_all(dir).unwrap();
         let path = doc_file(dir, doc_id);
-        let con = duckdb::Connection::open(&path).unwrap();
+        let con = avrag_duckdb_store::Connection::open(&path).unwrap();
         con.execute_batch(
             "CREATE TABLE _meta (table_name VARCHAR, caption VARCHAR, unit VARCHAR, table_kind VARCHAR, confidence VARCHAR, start_line INTEGER, n_rows INTEGER, n_cols INTEGER, status VARCHAR, checks JSON, notes JSON, evidence_chunk_id VARCHAR);
              CREATE TABLE t0 (row_ord INTEGER, __src_line INTEGER, 阶段 VARCHAR, 角色 VARCHAR);
@@ -833,7 +827,7 @@ mod tests {
     fn fixture_file_with_line_map(dir: &Path, doc_id: Uuid) -> PathBuf {
         std::fs::create_dir_all(dir).unwrap();
         let path = doc_file(dir, doc_id);
-        let con = duckdb::Connection::open(&path).unwrap();
+        let con = avrag_duckdb_store::Connection::open(&path).unwrap();
         con.execute_batch(
             "CREATE TABLE _meta (table_name VARCHAR, caption VARCHAR, unit VARCHAR, table_kind VARCHAR, confidence VARCHAR, start_line INTEGER, n_rows INTEGER, n_cols INTEGER, status VARCHAR, checks JSON, notes JSON, evidence_chunk_id VARCHAR);
              CREATE TABLE t0 (row_ord INTEGER, __src_line INTEGER, 阶段 VARCHAR, 角色 VARCHAR);
@@ -1052,7 +1046,7 @@ mod tests {
     fn fixture_file_with_fts(dir: &Path, doc_id: Uuid) -> PathBuf {
         std::fs::create_dir_all(dir).unwrap();
         let path = doc_file(dir, doc_id);
-        let con = duckdb::Connection::open(&path).unwrap();
+        let con = avrag_duckdb_store::Connection::open(&path).unwrap();
         con.execute_batch(
             "CREATE TABLE _meta (table_name VARCHAR, caption VARCHAR, unit VARCHAR, table_kind VARCHAR, confidence VARCHAR, start_line INTEGER, n_rows INTEGER, n_cols INTEGER, status VARCHAR, checks JSON, notes JSON, evidence_chunk_id VARCHAR);
              CREATE TABLE t0 (row_ord INTEGER, __src_line INTEGER, 阶段 VARCHAR, 角色 VARCHAR);
@@ -1090,7 +1084,7 @@ mod tests {
         .unwrap();
         assert_eq!(idents, vec!["t0".to_string()]);
 
-        // 只读加固连接上执行 FTS 谓词（先 LOAD fts 再 SET 加固，open_readonly 已处理）。
+        // 静态 FTS 初始化后，在加固只读连接上执行谓词。
         let con = open_readonly(&doc_file(&dir, doc_id)).unwrap();
         let (cols, rows) = query_rows(&con, &sql, 10).unwrap();
         assert_eq!(cols, vec!["row_ord".to_string(), "阶段".to_string()]);
@@ -1113,7 +1107,7 @@ mod tests {
     fn fixture_file_t1(dir: &Path, doc_id: Uuid) -> PathBuf {
         std::fs::create_dir_all(dir).unwrap();
         let path = doc_file(dir, doc_id);
-        let con = duckdb::Connection::open(&path).unwrap();
+        let con = avrag_duckdb_store::Connection::open(&path).unwrap();
         con.execute_batch(
             "CREATE TABLE t1 (row_ord INTEGER, __src_line INTEGER, x VARCHAR);
              INSERT INTO t1 VALUES (0, 10, 'a'), (1, 11, 'b');",
@@ -1216,7 +1210,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("struct_store_test_{}", Uuid::new_v4()));
         let doc_id = Uuid::new_v4();
         std::fs::create_dir_all(&dir).unwrap();
-        let con = duckdb::Connection::open(doc_file(&dir, doc_id)).unwrap();
+        let con = avrag_duckdb_store::Connection::open(doc_file(&dir, doc_id)).unwrap();
         con.execute_batch(
             "CREATE TABLE _meta (table_name VARCHAR, caption VARCHAR, unit VARCHAR, table_kind VARCHAR, confidence VARCHAR, start_line INTEGER, n_rows INTEGER, n_cols INTEGER, status VARCHAR, checks JSON, notes JSON);
              CREATE TABLE t0 (row_ord INTEGER, __src_line INTEGER, x VARCHAR);

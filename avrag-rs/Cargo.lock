@@ -813,6 +813,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "avrag-duckdb-store"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "cc",
+ "duckdb",
+ "libduckdb-sys",
+ "tempfile",
+]
+
+[[package]]
 name = "avrag-guardrails"
 version = "0.1.0"
 dependencies = [
@@ -883,6 +894,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "avrag-code-interpreter",
+ "avrag-duckdb-store",
  "avrag-rag-core-ports",
  "avrag-retrieval-data-plane",
  "avrag-storage-pgvector",
@@ -1045,6 +1057,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "avrag-duckdb-store",
  "avrag-llm",
  "contracts",
  "duckdb",

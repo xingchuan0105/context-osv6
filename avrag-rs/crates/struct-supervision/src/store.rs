@@ -38,7 +38,7 @@ pub struct TableMeta {
 
 /// 在内存连接上重建表结构（`pipeline._rebuild_db`；每表 t{i}(row_ord, cols…)）。
 /// 同一连接重复调用时先 DROP 既有表（对齐 Python 每次重建全新内存库的语义）。
-pub fn rebuild_db(con: &duckdb::Connection, grids: &[Grid]) -> duckdb::Result<()> {
+pub fn rebuild_db(con: &avrag_duckdb_store::Connection, grids: &[Grid]) -> duckdb::Result<()> {
     for (i, g) in grids.iter().enumerate() {
         con.execute_batch(&format!("DROP TABLE IF EXISTS t{i}"))?;
         let hdr = sanitize_headers(g.header());
@@ -104,7 +104,7 @@ fn write_duckdb_inner(
     metas: &[TableMeta],
     out_path: &Path,
 ) -> anyhow::Result<Vec<EvidenceChunk>> {
-    let con = duckdb::Connection::open(out_path)?;
+    let con = avrag_duckdb_store::Connection::open(out_path)?;
     con.execute_batch(
         "CREATE TABLE _meta (table_name VARCHAR, caption VARCHAR, unit VARCHAR, table_kind VARCHAR, \
          confidence VARCHAR, start_line INTEGER, n_rows INTEGER, n_cols INTEGER, status VARCHAR, \
@@ -157,18 +157,16 @@ fn write_duckdb_inner(
             n_rows: g.n_rows(),
             md: render_table_md(&hdr, &rows),
         });
-        // FTS 索引（fts 表内值发现）：bundled duckdb 内建 fts 扩展，PRAGMA 即可。
+        // FTS 与当前 DuckDB 工具链静态编译，连接初始化时完成注册。
         // 查询侧（struct_query 只读连接）用 fts_main_<table>.match_bm25(row_ord, 'x')
-        // 谓词检索；中文整串不分词（与 grep 配合：grep 管子串、fts 管空格分隔 token）。
-        if let Err(e) = con.execute_batch(&format!(
+        // 谓词检索；沿用 FTS 的默认词项规则，子串检索由 grep 提供。
+        con.execute_batch(&format!(
             "PRAGMA create_fts_index('{name}', 'row_ord', {})",
             hdr.iter()
                 .map(|h| format!("'{}'", h.replace('\'', "''")))
                 .collect::<Vec<_>>()
                 .join(", ")
-        )) {
-            eprintln!("struct-supervision: create_fts_index({name}) failed: {e}");
-        }
+        ))?;
         con.execute(
             "INSERT INTO _meta VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             duckdb::params![
@@ -254,7 +252,7 @@ mod tests {
             ("2", &["1", "a"]),
             ("3", &["2", "b"]),
         ]);
-        let con = duckdb::Connection::open_in_memory().unwrap();
+        let con = avrag_duckdb_store::Connection::open_in_memory().unwrap();
         rebuild_db(&con, &[g]).unwrap();
         let n: i64 = con
             .query_row("SELECT COUNT(*) FROM t0", [], |r| r.get(0))
@@ -281,7 +279,7 @@ mod tests {
         assert_eq!(evidence[0].table, "t0");
         assert!(evidence[0].md.contains("| 编号 | 名称 |"));
 
-        let con = duckdb::Connection::open(&out).unwrap();
+        let con = avrag_duckdb_store::Connection::open(&out).unwrap();
         let (status, n_rows, chunk_id): (String, i64, Option<String>) = con
             .query_row(
                 "SELECT status, n_rows, evidence_chunk_id FROM _meta",
@@ -394,7 +392,7 @@ mod tests {
         assert_eq!(after.status, "high_candidate");
 
         // 内存库复验：COUNT(*) 与序号自校验（row_ord 0 起 ↔ 编号 1..=3）。
-        let con = duckdb::Connection::open_in_memory().unwrap();
+        let con = avrag_duckdb_store::Connection::open_in_memory().unwrap();
         rebuild_db(&con, &s.grids).unwrap();
         let n: i64 = con
             .query_row("SELECT COUNT(*) FROM t0", [], |r| r.get(0))
@@ -436,7 +434,7 @@ mod tests {
         let metas = build_metas(&[g.clone()], &reports, &finals);
         let evidence = write_duckdb(&[g], &metas, &out).unwrap();
         assert!(evidence.is_empty());
-        let con = duckdb::Connection::open(&out).unwrap();
+        let con = avrag_duckdb_store::Connection::open(&out).unwrap();
         let n: i64 = con
             .query_row("SELECT COUNT(*) FROM _meta", [], |r| r.get(0))
             .unwrap();

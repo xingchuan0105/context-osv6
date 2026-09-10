@@ -98,7 +98,7 @@ impl Journey {
         ]);
         command.env(
             "PGOPTIONS",
-            "-c statement_timeout=10000 -c default_transaction_read_only=on",
+            format!("-c statement_timeout=10000 -c default_transaction_read_only=on -c app.current_user={}", self.user),
         );
         desktop_core::win_cmd::hide_console(&mut command);
         let output = command.output().map_err(|e| e.to_string())?;
@@ -199,6 +199,12 @@ impl Journey {
                     "worker exited during ingestion; see worker log and Windows crash record",
                 )?;
                 check(
+                    !fs::read_to_string(self.root.join("logs/worker.log"))
+                        .unwrap_or_default()
+                        .contains("document ir validation failed"),
+                    "document IR rejected; stop before retrying an unchanged parse result",
+                )?;
+                check(
                     Instant::now() < deadline,
                     "document ingestion exceeded six minutes",
                 )?;
@@ -222,7 +228,8 @@ impl Journey {
                         break;
                     }
                 }
-                tokio::time::sleep(Duration::from_secs(2)).await;
+                // Load fetches several endpoints; stay below the API's 60/min limit.
+                tokio::time::sleep(Duration::from_secs(5)).await;
             }
             match self.action(Action::Preview(id)).await? {
                 ResultData::Preview { content, .. } => {
@@ -237,6 +244,42 @@ impl Journey {
             }
             self.record(format!(
                 "{filename}: signed upload, worker completion, chunks and preview"
+            ))?;
+            uuid::Uuid::parse_str(self.documents.last().unwrap()).map_err(|e| e.to_string())?;
+            // Short documents can legitimately produce zero TOC entries. Compare
+            // the producer's actual count with persisted rows, under the same owner.
+            let worker_log =
+                fs::read_to_string(self.root.join("logs/worker.log")).map_err(|e| e.to_string())?;
+            let document_marker = format!("document_id={}", self.documents.last().unwrap());
+            let expected_toc = worker_log
+                .lines()
+                .filter(|line| {
+                    line.contains(&document_marker)
+                        && line.contains("windowed profile+summary+triplet done")
+                })
+                .filter_map(|line| {
+                    line.split_whitespace().find_map(|field| {
+                        field
+                            .strip_prefix("toc=")
+                            .and_then(|value| value.parse::<usize>().ok())
+                    })
+                })
+                .next_back()
+                .ok_or("missing TOC production count")?;
+            let toc = self.sql(&format!(
+                "SELECT COALESCE(jsonb_agg(jsonb_build_object('title',title,'owner_user_id',owner_user_id)),'[]') FROM document_toc WHERE document_id='{}'",
+                self.documents.last().unwrap()
+            ))?;
+            self.save(&format!("{filename}.toc.json"), toc.clone())?;
+            check(
+                toc.as_array().is_some_and(|rows| {
+                    rows.len() == expected_toc
+                        && rows.iter().all(|row| row["owner_user_id"] == self.user)
+                }),
+                "document TOC count differs from produced entries or has wrong owner",
+            )?;
+            self.record(format!(
+                "{filename}: {expected_toc} produced TOC entries read back"
             ))?;
         }
         for (index, (_, kind, expected, _)) in cases.iter().enumerate() {
@@ -356,11 +399,21 @@ impl Journey {
         )?;
         self.record("embedding metering, usage debit and RAG audits read back")
     }
+    async fn cleanup_call(&self, method: &str, path: String) -> Result<Value> {
+        match self.raw(method, path.clone()).await {
+            Err(error) if error.starts_with("429 ") => {
+                println!("CLEANUP rate limited; waiting one request window before retry");
+                tokio::time::sleep(Duration::from_secs(61)).await;
+                self.raw(method, path).await
+            }
+            result => result,
+        }
+    }
     async fn cleanup(&mut self) -> Vec<String> {
         let mut errors = vec![];
         for id in self.documents.clone() {
             if let Err(e) = self
-                .raw("DELETE", web_sdk::workspace_api::document_url("", &id))
+                .cleanup_call("DELETE", web_sdk::workspace_api::document_url("", &id))
                 .await
             {
                 errors.push(e);
@@ -368,13 +421,13 @@ impl Journey {
         }
         if let Some(id) = &self.workspace {
             if let Err(e) = self
-                .raw("DELETE", web_sdk::workspace_api::workspace_url("", id))
+                .cleanup_call("DELETE", web_sdk::workspace_api::workspace_url("", id))
                 .await
             {
                 errors.push(e);
             }
             match self
-                .raw("GET", web_sdk::workspace_api::workspaces_url(""))
+                .cleanup_call("GET", web_sdk::workspace_api::workspaces_url(""))
                 .await
             {
                 Ok(value) => match web_sdk::workspace_api::parse_workspace_list(
@@ -387,7 +440,7 @@ impl Journey {
             }
         }
         if !self.documents.is_empty() {
-            match self.raw("GET", "/api/v1/documents".into()).await {
+            match self.cleanup_call("GET", "/api/v1/documents".into()).await {
                 Ok(value) => match web_sdk::workspace_api::parse_workspace_documents(
                     &serde_json::to_vec(&value).unwrap(),
                 ) {

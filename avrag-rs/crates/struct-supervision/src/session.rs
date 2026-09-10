@@ -93,7 +93,7 @@ pub struct Session {
     pub reports: BTreeMap<String, TableReport>,
     pub finals: BTreeMap<String, FinalState>,
     pub log: Vec<(String, serde_json::Value, String)>,
-    pub con: duckdb::Connection,
+    pub con: avrag_duckdb_store::Connection,
 }
 
 impl Session {
@@ -104,7 +104,7 @@ impl Session {
             .enumerate()
             .map(|(i, g)| (format!("t{i}"), crate::checks::table_report(i, g)))
             .collect();
-        let con = duckdb::Connection::open_in_memory()?;
+        let con = avrag_duckdb_store::Connection::open_in_memory()?;
         rebuild_db(&con, &input.grids)?;
         Ok(Self {
             grids: input.grids.clone(),

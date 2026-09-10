@@ -41,6 +41,7 @@ members = [
   "crates/subtex-index",
   "crates/subtex-store-sqlite",
   "crates/struct-supervision",
+  "crates/duckdb-store",
   "crates/telemetry",
   "crates/transport-http",
   "crates/e2e-analyzer",
