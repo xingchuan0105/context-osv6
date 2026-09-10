@@ -39,6 +39,20 @@ pub fn kill_pid_tree(pid: u32) -> u32 {
     }
 }
 
+/// Executable identity for a recorded process; missing/inaccessible processes are not adopted.
+pub fn process_executable(pid: u32) -> Option<PathBuf> {
+    #[cfg(windows)]
+    { win::exe_path(pid) }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    { std::fs::read_link(format!("/proc/{pid}/exe")).ok() }
+    #[cfg(target_os = "macos")]
+    {
+        let output = Command::new("ps").args(["-p", &pid.to_string(), "-o", "comm="]).output().ok()?;
+        let path = PathBuf::from(String::from_utf8(output.stdout).ok()?.trim());
+        (output.status.success() && path.is_absolute()).then_some(path)
+    }
+}
+
 /// Kill named processes whose executable path sits under any of `roots`.
 pub fn kill_named_under(names: &[&str], roots: &[PathBuf]) -> Vec<String> {
     #[cfg(windows)]
@@ -85,7 +99,7 @@ mod win {
         Some(Snap(h))
     }
 
-    fn exe_path(pid: u32) -> Option<PathBuf> {
+    pub(super) fn exe_path(pid: u32) -> Option<PathBuf> {
         unsafe {
             let h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
             if h.is_null() {

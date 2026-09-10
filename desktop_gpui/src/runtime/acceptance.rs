@@ -43,10 +43,17 @@ fn request(stream: &mut TcpStream) -> serde_json::Value {
 
 fn next(host: &Host, updates: &mut UnboundedReceiver<Update>) -> Update {
     host.runtime.block_on(async {
-        tokio::time::timeout(Duration::from_secs(5), updates.next())
-            .await
-            .unwrap()
-            .unwrap()
+        loop {
+            let update = tokio::time::timeout(Duration::from_secs(5), updates.next())
+                .await
+                .unwrap()
+                .unwrap();
+            match update {
+                Update::ServicePhase(_) | Update::ServiceSnapshot(Ok(_)) => continue,
+                Update::ServiceSnapshot(Err(error)) => panic!("service probe failed: {error}"),
+                _ => return update,
+            }
+        }
     })
 }
 
@@ -148,6 +155,35 @@ fn unavailable_local_api_reaches_host_as_error() {
 }
 
 #[test]
+#[ignore = "read-only live probe; requires the explicitly selected isolated API"]
+fn attached_service_snapshot_is_read_only() {
+    assert_eq!(
+        std::env::var("GPUI_ACCEPTANCE_LIVE_PROBE").as_deref(),
+        Ok("1")
+    );
+    assert_eq!(
+        desktop_core::product_api_base_url(),
+        "http://127.0.0.1:18082"
+    );
+    let (host, mut updates) = Host::new().unwrap();
+    host.refresh_services();
+    let update = host.runtime.block_on(async {
+        tokio::time::timeout(Duration::from_secs(5), updates.next())
+            .await
+            .unwrap()
+            .unwrap()
+    });
+    match update {
+        Update::ServiceSnapshot(Ok(snapshot)) => {
+            assert!(snapshot.attached && snapshot.product.api_ok);
+            assert_eq!(snapshot.product.api_endpoint, "127.0.0.1:18082");
+            assert!(!snapshot.owned && snapshot.stack.is_none());
+        }
+        _ => panic!("selected API health probe failed"),
+    }
+}
+
+#[test]
 #[ignore = "requires isolated process environment; run scripts/accept-tauri-shared.ps1 -WithHttpFixture"]
 fn local_session_and_history_over_http() {
     assert_eq!(std::env::var("GPUI_ACCEPTANCE_HTTP").as_deref(), Ok("1"));
@@ -157,21 +193,28 @@ fn local_session_and_history_over_http() {
     );
     let listener =
         TcpListener::bind("127.0.0.1:18180").expect("isolated fixture port must be free");
+    let healthy = Arc::new(std::sync::atomic::AtomicBool::new(true));
+    let server_healthy = healthy.clone();
     let server = std::thread::spawn(move || {
         let mut title: Option<String> = None;
-        for _ in 0..8 {
+        let mut requests = 0;
+        while requests < 15 {
             let (mut socket, _) = listener.accept().unwrap();
             socket
                 .set_read_timeout(Some(Duration::from_secs(5)))
                 .unwrap();
             let mut headers = Vec::new();
             let mut byte = [0];
+            if socket.peek(&mut byte).unwrap() == 0 {
+                continue;
+            } // TCP health probe, no HTTP request.
             while !headers.ends_with(b"\r\n\r\n") {
                 socket.read_exact(&mut byte).unwrap();
                 headers.push(byte[0]);
                 assert!(headers.len() < 16384);
             }
             let headers = String::from_utf8(headers).unwrap();
+            requests += 1;
             let path = headers.split_whitespace().nth(1).unwrap();
             let size = headers
                 .lines()
@@ -191,7 +234,8 @@ fn local_session_and_history_over_http() {
                 );
             }
             let body = match path {
-                "/health" | "/api/auth/me" => serde_json::json!({"success":true}),
+                "/health" => serde_json::json!({"success":server_healthy.load(std::sync::atomic::Ordering::SeqCst)}),
+                "/api/auth/me" => serde_json::json!({"success":true}),
                 "/api/auth/login" => serde_json::json!({"success":true,"data":{"token":"synthetic-local-session","user":{"id":"fixture-user","email":"local@context-os.client","full_name":"Fixture"}}}),
                 "/api/v1/chat/sessions" => serde_json::json!({"sessions":[
                     {"id":"sess-900","title":title,"owner_user_id":"fixture-user","scope_kind":"personal","model_role":"quick_chat","agent_type":"chat","created_at":"2026-09-09","updated_at":"2026-09-09"},
@@ -223,10 +267,30 @@ fn local_session_and_history_over_http() {
     let dir = std::env::temp_dir().join(format!("gpui-acceptance-{}", uuid::Uuid::new_v4()));
     let (host, mut updates) = Host::new().unwrap();
     host.login(dir.clone());
-    let session = match next(&host, &mut updates) {
-        Update::Login(Ok(session)) => session,
-        _ => panic!("local session failed"),
+    let mut phases = Vec::new();
+    let session = loop {
+        let update = host.runtime.block_on(async {
+            tokio::time::timeout(Duration::from_secs(5), updates.next())
+                .await
+                .unwrap()
+                .unwrap()
+        });
+        match update {
+            Update::ServicePhase(phase) => phases.push(phase),
+            Update::ServiceSnapshot(Ok(snapshot)) => {
+                assert!(snapshot.attached && !snapshot.owned && snapshot.product.api_ok);
+                assert!(snapshot.stack.is_none());
+                assert_eq!(snapshot.product.api_endpoint, "127.0.0.1:18180");
+            }
+            Update::Login(Ok(session)) => break session,
+            _ => panic!("local session failed"),
+        }
     };
+    assert_eq!(
+        phases,
+        vec![Phase::Checking, Phase::Connecting],
+        "an attached API must never start a local stack"
+    );
     assert!(session.ready);
     let token = session.token.unwrap();
     assert!(dir.join("local_session.json").is_file());
@@ -270,6 +334,27 @@ fn local_session_and_history_over_http() {
     }
     host.login(dir.clone());
     assert!(matches!(next(&host, &mut updates), Update::Login(Ok(s)) if s.ready));
+    host.stop_services();
+    assert!(matches!(
+        next(&host, &mut updates),
+        Update::ServicesStopped(Ok(()))
+    ));
+    host.refresh_services();
+    let update = host.runtime.block_on(async {
+        tokio::time::timeout(Duration::from_secs(5), updates.next())
+            .await
+            .unwrap()
+            .unwrap()
+    });
+    assert!(
+        matches!(update, Update::ServiceSnapshot(Ok(s)) if s.product.api_ok && s.attached && !s.owned),
+        "disconnect must leave the attached API alive"
+    );
+    healthy.store(false, std::sync::atomic::Ordering::SeqCst);
+    host.login(dir.clone());
+    assert!(
+        matches!(next(&host, &mut updates), Update::Login(Err(error)) if error.contains("尚未就绪"))
+    );
     server.join().unwrap();
     drop(host);
     // Only the two files created by this test; no recursive profile deletion.

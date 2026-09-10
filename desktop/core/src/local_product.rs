@@ -18,6 +18,7 @@ use crate::host_error::HostError;
 pub struct LocalProductStatus {
     pub overall_ok: bool,
     pub api_ok: bool,
+    pub api_port_open: bool,
     pub worker_ok: bool,
     pub api_base_url: String,
     pub api_endpoint: String,
@@ -38,10 +39,6 @@ pub struct EnsureLocalProductResult {
     pub stdout: String,
     pub stderr: String,
     pub status: LocalProductStatus,
-}
-
-fn env_or(key: &str, default: &str) -> String {
-    std::env::var(key).unwrap_or_else(|_| default.to_string())
 }
 
 fn product_script(root: &Path) -> PathBuf {
@@ -223,15 +220,14 @@ fn client_api_base() -> String {
 }
 
 fn client_api_host_port() -> (String, u16) {
-    let host = read_env_file_value("CLIENT_API_HOST")
-        .or_else(|| std::env::var("CLIENT_API_HOST").ok())
-        .unwrap_or_else(|| "127.0.0.1".into());
-    let port: u16 = read_env_file_value("CLIENT_API_PORT")
-        .or_else(|| std::env::var("CLIENT_API_PORT").ok())
-        .unwrap_or_else(|| env_or("CLIENT_API_PORT", "18080"))
-        .parse()
-        .unwrap_or(18080);
-    (host, port)
+    endpoint_from_base(&client_api_base()).unwrap_or_else(|_| (String::new(), 0))
+}
+
+fn endpoint_from_base(base: &str) -> Result<(String, u16), String> {
+    let url = url::Url::parse(base).map_err(|e| e.to_string())?;
+    let host = url.host_str().ok_or("API URL has no host")?.to_owned();
+    let port = url.port_or_known_default().ok_or("API URL has no port")?;
+    Ok((host, port))
 }
 
 fn probe_tcp(host: &str, port: u16) -> bool {
@@ -364,6 +360,7 @@ fn build_status() -> LocalProductStatus {
     LocalProductStatus {
         overall_ok: api_ok && worker_ok,
         api_ok,
+        api_port_open: port_ok,
         worker_ok,
         api_base_url: base,
         api_endpoint: format!("{host}:{port}"),
@@ -396,17 +393,25 @@ fn probe_health(url: &str) -> Result<String, String> {
     let mut buf = Vec::new();
     stream.read_to_end(&mut buf).map_err(|e| e.to_string())?;
     let text = String::from_utf8_lossy(&buf);
-    Ok(text
-        .split("\r\n\r\n")
-        .nth(1)
-        .unwrap_or(text.as_ref())
-        .trim()
-        .to_string())
+    validated_health_body(&text)
+}
+
+fn validated_health_body(response: &str) -> Result<String, String> {
+    let (headers, body) = response.split_once("\r\n\r\n").ok_or("invalid health response")?;
+    let code = headers.split_whitespace().nth(1).and_then(|s| s.parse::<u16>().ok());
+    if !code.is_some_and(|code| (200..300).contains(&code)) {
+        return Err(format!("health HTTP status {}", code.unwrap_or(0)));
+    }
+    let value: serde_json::Value = serde_json::from_str(body.trim()).map_err(|_| "health response is not JSON")?;
+    if value.get("status").and_then(|v| v.as_str()) != Some("ok")
+        && value.get("success").and_then(|v| v.as_bool()) != Some(true) {
+        return Err("API health is not ready".into());
+    }
+    Ok(body.trim().to_owned())
 }
 
 fn api_healthy() -> bool {
-    let (host, port) = client_api_host_port();
-    probe_tcp(&host, port)
+    probe_health(&format!("{}/health", client_api_base())).is_ok()
 }
 
 fn open_append_log(path: &Path) -> Result<File, String> {
@@ -548,9 +553,6 @@ fn wait_api_healthy(secs: u64, log: &mut String) -> bool {
                 log.push_str("API healthy\n");
                 return true;
             }
-            // Port open is enough for desktop bootstrap (migrations may still settle).
-            log.push_str("API port open (treating as ready)\n");
-            return true;
         }
         thread::sleep(Duration::from_millis(400));
     }
@@ -561,7 +563,7 @@ fn wait_api_healthy(secs: u64, log: &mut String) -> bool {
 /// Pure-Rust product bring-up for install + monorepo (no bash required).
 fn ensure_product_native() -> Result<String, String> {
     let mut log = String::new();
-    if api_healthy() {
+    if api_healthy() && pid_alive(&run_log_dir().0.join("worker.pid")) {
         return Ok("product API already healthy".into());
     }
 
@@ -640,7 +642,7 @@ fn ensure_product_native() -> Result<String, String> {
         spawn_with_env(&worker_bin, &env_pairs, &worker_log, &worker_pid, None)?;
     }
 
-    if wait_api_healthy(45, &mut log) {
+    if wait_api_healthy(45, &mut log) && pid_alive(&worker_pid) {
         Ok(format!(
             "product API ready at {} (native spawn)\n{log}",
             client_api_base()
@@ -733,7 +735,7 @@ pub fn get_local_product_status() -> LocalProductStatus {
 pub async fn ensure_local_product() -> Result<EnsureLocalProductResult, HostError> {
     // Fast path.
     let early = build_status();
-    if early.api_ok {
+    if early.overall_ok {
         return Ok(EnsureLocalProductResult {
             ok: true,
             message: format!("Local product API already ready at {}.", early.api_base_url),
@@ -751,7 +753,7 @@ pub async fn ensure_local_product() -> Result<EnsureLocalProductResult, HostErro
     match native {
         Ok(msg) => {
             let status = build_status();
-            if status.api_ok {
+            if status.overall_ok {
                 return Ok(EnsureLocalProductResult {
                     ok: true,
                     message: msg.lines().next().unwrap_or("product ready").to_string(),
@@ -769,7 +771,7 @@ pub async fn ensure_local_product() -> Result<EnsureLocalProductResult, HostErro
                     .map_err(|e| HostError::internal(format!("ensure product join: {e}")))?;
                 if let Ok((code, stdout, stderr)) = script_result {
                     let status = build_status();
-                    let ok = code == 0 && status.api_ok;
+                    let ok = code == 0 && status.overall_ok;
                     let message = if ok {
                         format!(
                             "Local product API ready at {} (bash; native first: {native_err}).",
@@ -811,7 +813,7 @@ pub async fn ensure_local_product() -> Result<EnsureLocalProductResult, HostErro
             .map_err(|e| HostError::internal(format!("ensure product join: {e}")))?
         {
             let status = build_status();
-            let ok = code == 0 && status.api_ok;
+            let ok = code == 0 && status.overall_ok;
             return Ok(EnsureLocalProductResult {
                 ok,
                 message: if ok {
@@ -831,8 +833,8 @@ pub async fn ensure_local_product() -> Result<EnsureLocalProductResult, HostErro
 
     let status = build_status();
     Ok(EnsureLocalProductResult {
-        ok: status.api_ok,
-        message: if status.api_ok {
+        ok: status.overall_ok,
+        message: if status.overall_ok {
             format!("Local product API ready at {}.", status.api_base_url)
         } else {
             format!(
@@ -905,6 +907,19 @@ pub fn product_api_base_url() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn health_uses_the_configured_api_url_port() {
+        assert_eq!(endpoint_from_base("http://127.0.0.1:18082").unwrap(), ("127.0.0.1".into(), 18082));
+    }
+
+    #[test]
+    fn health_rejects_error_status_html_and_unhealthy_json() {
+        for response in ["HTTP/1.0 503 Unavailable\r\n\r\n{\"status\":\"ok\"}", "HTTP/1.0 200 OK\r\n\r\n<html>page</html>", "HTTP/1.0 200 OK\r\n\r\n{\"status\":\"error\"}"] {
+            assert!(validated_health_body(response).is_err());
+        }
+        assert!(validated_health_body("HTTP/1.0 200 OK\r\n\r\n{\"status\":\"ok\"}").is_ok());
+    }
 
     #[test]
     fn default_api_port_is_offset() {

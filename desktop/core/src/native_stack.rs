@@ -1235,6 +1235,14 @@ pub fn ensure_native(
     }
 }
 
+/// Graceful shutdown for a data directory whose process identity the caller owns.
+pub(crate) fn stop_owned_postgres(data: &Path) -> Result<(), String> {
+    let pg_bin = find_pg_bin().ok_or("pg_ctl unavailable; PostgreSQL was left running")?;
+    let code = run_status_null(Command::new(bin(&pg_bin, "pg_ctl"))
+        .arg("-D").arg(data).args(["-m", "fast", "-w", "-t", "10", "stop"]));
+    if code == 0 { Ok(()) } else { Err(format!("pg_ctl stop exited with {code}")) }
+}
+
 pub fn stop_native() -> NativeEnsureReport {
     let mut log = String::new();
     let Some(state_rt) = runtime_home() else {

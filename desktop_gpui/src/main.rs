@@ -1,6 +1,7 @@
 use contracts::workspaces::ChatSession;
 use desktop_gpui::{
     runtime::{Host, Update},
+    services::{Phase, ServiceViewState},
     session::Conversation,
     session_titles::session_label,
 };
@@ -19,6 +20,7 @@ use tokio_util::sync::CancellationToken;
 use web_sdk::TurnStatus;
 
 mod markdown_view;
+mod service_view;
 
 struct ChatApp {
     host: Host,
@@ -33,6 +35,10 @@ struct ChatApp {
     title_error: Option<String>,
     cancel: Option<CancellationToken>,
     scroll: ScrollHandle,
+    services: ServiceViewState,
+    show_services: bool,
+    exiting: bool,
+    exit_ready: bool,
 }
 
 impl ChatApp {
@@ -47,7 +53,7 @@ impl ChatApp {
             while let Some(update) = updates.next().await {
                 if this
                     .update(cx, |this, cx| {
-                        this.apply(update);
+                        this.apply(update, cx);
                         cx.notify();
                     })
                     .is_err()
@@ -57,6 +63,18 @@ impl ChatApp {
             }
         })
         .detach();
+        let weak = cx.entity().downgrade();
+        window.on_window_should_close(cx, move |_, cx| {
+            weak.update(cx, |this, cx| {
+                if this.exit_ready {
+                    return true;
+                }
+                this.request_exit(cx);
+                false
+            })
+            .unwrap_or(true)
+        });
+        host.refresh_services();
         Self {
             host,
             input,
@@ -70,24 +88,88 @@ impl ChatApp {
             title_error: None,
             cancel: None,
             scroll: ScrollHandle::new(),
+            services: ServiceViewState {
+                phase: Phase::Checking,
+                ..Default::default()
+            },
+            show_services: false,
+            exiting: false,
+            exit_ready: false,
         }
     }
 
-    fn apply(&mut self, update: Update) {
+    fn apply(&mut self, update: Update, cx: &mut Context<Self>) {
         match update {
+            Update::ServicePhase(phase) => {
+                if !self.exiting && self.services.phase != Phase::Stopping {
+                    self.services.phase = phase;
+                }
+            }
+            Update::ServiceSnapshot(result) => {
+                match result {
+                    Ok(snapshot) => {
+                        if !snapshot.product.api_ok && self.token.is_some() {
+                            self.stop();
+                            self.token = None;
+                            self.notice =
+                                "本机服务已断开，请重新连接；草稿和已显示内容保留。".into();
+                        }
+                        self.services.snapshot = Some(snapshot);
+                    }
+                    Err(error) => self.services.error = Some(error),
+                }
+                if !self.connecting && !self.exiting && self.services.phase != Phase::Stopping {
+                    self.services.phase = if self.token.is_some() {
+                        Phase::Ready
+                    } else {
+                        Phase::Idle
+                    };
+                }
+            }
+            Update::ServicesStopped(result) => {
+                self.connecting = false;
+                match result {
+                    Ok(()) => {
+                        self.token = None;
+                        self.services.phase = Phase::Stopped;
+                        self.services.error = None;
+                        self.notice = "本机会话已断开，已有正文和草稿保留。".into();
+                        if self.exiting {
+                            self.exit_ready = true;
+                            cx.quit();
+                        }
+                    }
+                    Err(error) => {
+                        self.exiting = false;
+                        self.services.phase = Phase::Failed;
+                        self.services.error = Some(error);
+                    }
+                }
+            }
             Update::Login(result) => {
                 self.connecting = false;
+                if self.exiting || self.services.phase == Phase::Stopping {
+                    return;
+                }
                 match result {
                     Ok(session) => {
                         self.token = session.token;
                         if let Some(token) = &self.token {
+                            self.services.phase = Phase::Ready;
+                            self.services.error = None;
                             self.notice = "本地会话已连接".into();
                             self.host.sessions(token.clone());
                         } else {
                             self.notice = "本地会话未返回凭据，请重试".into();
+                            self.services.phase = Phase::Failed;
+                            self.services.error = Some(self.notice.clone());
                         }
                     }
-                    Err(error) => self.notice = error,
+                    Err(error) => {
+                        self.services.phase = Phase::Failed;
+                        self.services.error = Some(error.clone());
+                        self.notice = error;
+                    }
                 }
             }
             Update::Sessions(result) => match result {
@@ -152,7 +234,7 @@ impl ChatApp {
     }
 
     fn send(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.loading {
+        if self.loading || self.services.busy() || self.exiting {
             return;
         }
         let Some(token) = self.token.clone() else {
@@ -172,6 +254,44 @@ impl ChatApp {
         ));
         self.scroll.scroll_to_bottom();
         cx.notify();
+    }
+
+    fn connect(&mut self, cx: &mut Context<Self>) {
+        if self.services.busy() || self.exiting {
+            return;
+        }
+        if let Some(path) = std::env::var_os("CONTEXT_OS_DESKTOP_DATA_DIR")
+            .map(std::path::PathBuf::from)
+            .or_else(|| dirs::data_dir().map(|p| p.join("com.contextos.desktop")))
+        {
+            self.connecting = true;
+            self.connection_attempted = true;
+            self.services.phase = Phase::Checking;
+            self.services.error = None;
+            self.notice = "正在准备本机服务并恢复会话…".into();
+            self.host.login(path);
+        } else {
+            self.notice = "无法确定本地数据目录".into();
+        }
+        cx.notify();
+    }
+
+    fn stop_services(&mut self, cx: &mut Context<Self>) {
+        self.stop();
+        self.loading = false;
+        self.conversation.generation += 1;
+        self.services.phase = Phase::Stopping;
+        self.host.stop_services();
+        cx.notify();
+    }
+
+    fn request_exit(&mut self, cx: &mut Context<Self>) {
+        if self.exiting {
+            return;
+        }
+        self.exiting = true;
+        self.show_services = true;
+        self.stop_services(cx);
     }
 }
 
@@ -214,6 +334,7 @@ impl Render for ChatApp {
                         this.loading = false;
                         this.conversation.reset(None);
                         this.notice.clear();
+                        this.show_services = false;
                         cx.notify();
                     })),
             )
@@ -262,6 +383,7 @@ impl Render for ChatApp {
                     .tooltip(label.clone())
                     .child(div().w_full().min_w_0().text_ellipsis().child(label))
                     .on_click(cx.listener(move |this, _, _, cx| {
+                        this.show_services = false;
                         this.stop();
                         let generation = this.conversation.reset(Some(id.clone()));
                         if let Some(token) = &this.token {
@@ -271,6 +393,15 @@ impl Render for ChatApp {
                         cx.notify();
                     })),
             );
+        }
+        if self.show_services {
+            return div()
+                .flex()
+                .size_full()
+                .bg(cx.theme().background)
+                .text_color(cx.theme().foreground)
+                .child(sidebar.overflow_y_scroll())
+                .child(self.render_services(cx));
         }
         let mut messages = div()
             .id("messages")
@@ -336,21 +467,9 @@ impl Render for ChatApp {
                     } else {
                         "连接本机服务"
                     })
-                    .disabled(self.connecting)
+                    .disabled(self.services.busy())
                     .on_click(cx.listener(|this, _, _, cx| {
-                        if let Some(path) = std::env::var_os("CONTEXT_OS_DESKTOP_DATA_DIR")
-                            .map(std::path::PathBuf::from)
-                            .or_else(|| dirs::data_dir().map(|p| p.join("com.contextos.desktop")))
-                        {
-                            this.connecting = true;
-                            this.connection_attempted = true;
-                            this.notice =
-                                "正在准备本机服务并恢复会话，首次启动可能需要一些时间。".into();
-                            this.host.login(path);
-                        } else {
-                            this.notice = "无法确定本地数据目录".into();
-                        }
-                        cx.notify();
+                        this.connect(cx);
                     })),
             );
         } else if streaming {
@@ -365,7 +484,7 @@ impl Render for ChatApp {
                 Button::new("send")
                     .primary()
                     .label("发送")
-                    .disabled(self.loading)
+                    .disabled(self.loading || self.services.busy())
                     .on_click(cx.listener(|this, _, window, cx| this.send(window, cx))),
             );
         }
@@ -392,9 +511,17 @@ impl Render for ChatApp {
                             .justify_between()
                             .child("个人聊天")
                             .child(
-                                div()
-                                    .text_sm()
-                                    .text_color(cx.theme().muted_foreground)
+                                Button::new("local-services")
+                                    .ghost()
+                                    .label("本机服务")
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.show_services = true;
+                                        if !this.services.busy() {
+                                            this.services.phase = Phase::Checking;
+                                            this.host.refresh_services();
+                                        }
+                                        cx.notify();
+                                    }))
                                     .child(if self.connecting {
                                         "正在连接"
                                     } else if self.token.is_some() {

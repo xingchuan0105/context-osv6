@@ -359,6 +359,16 @@ pub async fn ensure_local_session(
 
     ensure_local_environment(device_id, relay_env).await?;
 
+    connect_local_session(data_dir).await
+}
+
+/// Authenticate against an existing API. This never starts or stops local services.
+pub async fn connect_local_session(data_dir: &Path) -> Result<LocalSessionStatus, HostError> {
+    let active = get_local_session(data_dir).await?;
+    if active.ready {
+        return Ok(active);
+    }
+
     let base = product_api_base_url();
     let creds = load_or_create_credentials(data_dir)?;
     let session = login_or_register(&base, &creds).await?;

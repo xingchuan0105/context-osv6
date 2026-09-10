@@ -1,3 +1,4 @@
+use crate::services::{Phase, Services, Snapshot};
 use contracts::{
     chat::{ChatEvent, ChatMessage},
     workspaces::ChatSession,
@@ -6,7 +7,7 @@ use futures::{
     StreamExt,
     channel::mpsc::{UnboundedReceiver, UnboundedSender, unbounded},
 };
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 use tokio_util::sync::CancellationToken;
 
 use crate::session_titles::{has_title, title_from_messages};
@@ -15,6 +16,9 @@ use crate::session_titles::{has_title, title_from_messages};
 mod acceptance;
 
 pub enum Update {
+    ServicePhase(Phase),
+    ServiceSnapshot(Result<Snapshot, String>),
+    ServicesStopped(Result<(), String>),
     Login(Result<desktop_core::LocalSessionStatus, String>),
     Sessions(Result<Vec<ChatSession>, String>),
     SessionTitle(Result<ChatSession, String>),
@@ -26,6 +30,7 @@ pub enum Update {
 pub struct Host {
     runtime: tokio::runtime::Runtime,
     sender: UnboundedSender<Update>,
+    services: Arc<tokio::sync::Mutex<Services>>,
 }
 
 impl Host {
@@ -35,16 +40,48 @@ impl Host {
             .enable_all()
             .build()?;
         let (sender, receiver) = unbounded();
-        Ok((Self { runtime, sender }, receiver))
+        Ok((
+            Self {
+                runtime,
+                sender,
+                services: Arc::new(tokio::sync::Mutex::new(Services::new())),
+            },
+            receiver,
+        ))
     }
 
     pub fn login(&self, data_dir: PathBuf) {
         let sender = self.sender.clone();
+        let services = self.services.clone();
         self.runtime.spawn(async move {
-            let result = desktop_core::ensure_local_session(&data_dir, None, None)
-                .await
-                .map_err(|e| e.to_string());
+            let mut services = services.lock().await;
+            let result = services
+                .connect(data_dir, |phase| {
+                    let _ = sender.unbounded_send(Update::ServicePhase(phase));
+                })
+                .await;
+            let _ = sender.unbounded_send(Update::ServiceSnapshot(services.snapshot().await));
             let _ = sender.unbounded_send(Update::Login(result));
+        });
+    }
+
+    pub fn refresh_services(&self) {
+        let services = self.services.clone();
+        let sender = self.sender.clone();
+        self.runtime.spawn(async move {
+            let services = services.lock().await;
+            let _ = sender.unbounded_send(Update::ServiceSnapshot(services.snapshot().await));
+        });
+    }
+
+    pub fn stop_services(&self) {
+        let services = self.services.clone();
+        let sender = self.sender.clone();
+        self.runtime.spawn(async move {
+            let mut services = services.lock().await;
+            let result = services.shutdown().await;
+            let _ = sender.unbounded_send(Update::ServiceSnapshot(services.snapshot().await));
+            let _ = sender.unbounded_send(Update::ServicesStopped(result));
         });
     }
 
@@ -159,6 +196,18 @@ impl Host {
             let _ = sender.unbounded_send(Update::End(generation, result));
         });
         cancel
+    }
+}
+
+impl Drop for Host {
+    fn drop(&mut self) {
+        // A final guard for application quit paths that bypass the window-close callback.
+        // The same mutex waits for a pending start before releasing its process records.
+        self.runtime.block_on(async {
+            if let Err(error) = self.services.lock().await.shutdown().await {
+                eprintln!("GPUI service shutdown: {error}");
+            }
+        });
     }
 }
 
