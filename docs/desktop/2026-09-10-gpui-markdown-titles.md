@@ -31,3 +31,27 @@
 - 原文 `4. **结果**` 在窗口显示为 `1. 结果`。这是新有序列表起始编号的保留问题，尚待修正。
 
 原文回查会话为 a2fcbbed-56c4-42cb-90b4-e1c491462c29；只读取历史，没有产生模型调用、重启或改写消息。用户截图为 `C:\Users\xingc\AppData\Local\Temp\codex-clipboard-1dad6878-f687-4b49-bf0a-cde4088e3302.png`。
+
+## 2026-09-10 Markdown 余项修正
+
+用户继续授权本批 15–25 分钟定向测试、Windows 增量构建和验收程序更新。仍不使用 Computer Use、不重启后端、不调用付费模型。上节保留首次修正的历史结论，本节记录后续状态。
+
+### 实现
+
+- 保留锁定的 gpui-kit 版本，通过其 `MarkdownPlugin` 块扩展接入 Comrak 0.55.0，关闭不需要的默认特性。现有解析器没有中文友好加粗选项；Comrak 提供 `cjk_friendly_emphasis`，避免自行修改星号、插入空格或重写 Markdown 语法。该依赖是首次修正之后新增的。[Comrak 选项](https://docs.rs/comrak/0.55.0/comrak/options/struct.Extension.html)
+- `markdown.rs` 负责源文本解析及保留列表起始编号的数据，`markdown_view.rs` 负责原生块渲染。段落、标题、表格中涉及加粗/强调的内容使用成熟解析器输出；有序、无序和任务列表保留起始编号、嵌套层级及多段内容。代码和转义符不做字符串替换。组件库丢弃列表起始编号已有上游问题记录：[gpui-kit #2633](https://github.com/longbridge/gpui-kit/issues/2633)。
+- 模型回答及历史存储原文不变；扩展节点保留原文 Markdown，渲染标识使用会话/消息标识和原文偏移，避免不同回答复用富文本状态。制表符在两个解析器中的显示列号不同，定位统一使用字节偏移，并覆盖 LF、CRLF 和 CR 换行。
+- 共用正文渲染入口，历史恢复与当前回答应用相同规则。当前轮次的发送、停止、会话状态及标题保存逻辑未改动。
+
+### 自动验证与交付状态
+
+- 新增 6 项 Markdown 定向测试通过：中文标点旁加粗与引用链接；代码/转义保护；独立及嵌套列表起始编号；标题/表格/任务/多段列表；流式未闭合片段与不同文档隔离；原生解析器与 Comrak 在制表符、嵌套和不同换行下的定位一致性。
+- 共享 Tauri 套件重新执行：desktop-core 19 项、GPUI lib 16 项、原始共享流测试 4 项、隔离 HTTP 会话/历史 1 项，共 **40 项不同测试通过**。上述 6 项包含在 GPUI lib 中，不重复计数。
+- Windows `cargo check --features ui --locked` 通过（3.35 秒），jobs=2。已有 ts-rs 属性解析和 desktop-core 未使用函数警告仍在。
+- 用户确认关闭旧窗口后，Windows `cargo build --features ui --locked` 通过（10.44 秒），jobs=2。新版已通过 `run-isolated-gpui.ps1` 打开，进程 PID 34404；独立 API 18082 的 PID 仍为 37708，未重启后端或调用模型。
+- 程序为 `C:\dev\context-osv6\desktop_gpui\target\debug\desktop-gpui.exe`，本地构建时间 2026-09-10 10:13:21，SHA-256 为 `03761D7D679FFE948D6FCE95DF6D06820C151EB9E1159417FC3209DF083B1C4B`。进程启动已核实；新版原生视觉、选择/复制及流式表现尚未复验，不以自动测试代替用户验收。
+- 日志位于 `C:\dev\context-osv6\desktop_gpui\target\acceptance\tauri-shared\`：`markdown-position.log`、`markdown-ui-check.log`、`markdown-ui-build.log`，以及重新运行的 `shared-core.log`、`gpui-and-original-stream.log`、`local-session-history.log`。代码关系图已更新；提交范围仅为本批 GPUI 文件与验收文档。
+
+### 用户复验项
+
+打开原“天空为什么是蓝色的？”历史，检查首句不再显示加粗星号，末项按原文显示 `4. 结果`；拖选并复制含列表的正文，检查可读内容和编号。已有基本流式/停止验收保持历史记录，本版渲染变化的原生确认单独记录。

@@ -18,6 +18,8 @@ use gpui_kit::{
 use tokio_util::sync::CancellationToken;
 use web_sdk::TurnStatus;
 
+mod markdown_view;
+
 struct ChatApp {
     host: Host,
     input: Entity<TextareaState>,
@@ -446,7 +448,8 @@ fn render_message(id: String, role: &str, text: &str) -> Div {
         let mut table = StyleRefinement::default();
         table.overflow.x = Some(Overflow::Scroll);
         row = row.child(
-            TextView::markdown(SharedString::from(id), text.to_owned())
+            TextView::markdown(SharedString::from(id.clone()), text.to_owned())
+                .plugin(markdown_view::ChatMarkdown::new(id))
                 .w_full()
                 .min_w_0()
                 .style(TextViewStyle::default().table(table)),

@@ -1,5 +1,6 @@
 use web_sdk::{ChatTurnState, FixtureTransport, reduce_chat_event};
 
+pub mod markdown;
 pub mod runtime;
 pub mod session;
 pub mod session_titles;
