@@ -63,7 +63,9 @@
 
 ## 待评审设计
 
-- [Subtex 仓库树与 Agent 文档检索 PRD v0.1](plans/2026-09-10-subtex-repository-tree-prd.md) — 2026-09-10 设计草案：原文章节树 + 跨文档主题树、search/read/browse 契约、Rust/SQLite 技术栈、开源选型、增量更新与消融验收；尚未实施，不替代现行目录插件 PRD。
+- [仓库树独立版 PRD v0.2](plans/2026-09-10-repository-tree-prd-v0.2.md) — 2026-09-10：脱离大项目背景的功能与性能设计；Python 编排、LanceDB/SQLite 独立选型、解析与精排前移、发布快照与评测门；待原型验证。
+- [仓库树 PRD 独立技术评审](reviews/2026-09-10-repository-tree-prd-independent-review.md) — 11 项发现、SVD 评分退化推导、开源组件对比与 v0.2 修订依据。
+- [Subtex 仓库树 PRD v0.1（前序集成方案）](plans/2026-09-10-subtex-repository-tree-prd.md) — 原稿保留供评审对照；其项目复用选型不构成 v0.2 独立技术决策。
 
 ## 进行中的计划
 

@@ -1,0 +1,460 @@
+# PRD v0.2：独立仓库树与 Agent 文档检索服务
+
+日期：2026-09-10 · 状态：独立技术方案草案，待原型验证
+
+**产品定义：** 面向本地文档仓库，为 Agent 提供可检索、可浏览、可定位、可按预算读取的原文环境。文档内部沿标题与正文结构建树；跨文档使用向量组织主题；检索性能由专用检索索引承担。
+
+**本版边界：** 不依赖任何大项目、既有编程语言、账户、目录规范或部署服务。目录原文件为主本是产品需求；Python、SQLite、LanceDB 等选择须独立通过功能与性能验证。
+
+**版本关系：** 本版吸收[独立评审](../reviews/2026-09-10-repository-tree-prd-independent-review.md)，可独立阅读。[v0.1](2026-09-10-subtex-repository-tree-prd.md)保留为前序集成方案记录，本文不把其既有依赖当选型依据。
+
+## 1. 目标、假设与决策摘要
+
+### 1.1 产品目标
+
+1. Agent 找到证据时，同时获得文档路径、章节位置、来源版本和继续读取入口。
+2. 自然语言、精确术语和仓库浏览都具有可用路径，不要求每次逐层遍历主题树。
+3. 文件更新后逐步就绪；已知过期、未解析或未完成的内容不被误报为“没有答案”。
+4. 对跨文档任务区分文件枚举、搜索覆盖、原文阅读和语义结论覆盖。
+5. 在达到正确性与证据完整性要求的条件下，降低端到端延迟、模型输入量和索引维护成本。
+
+### 1.2 首版负载假设
+
+| 档位 | 用途 | 数据/并发 | 环境假设 |
+|---|---|---|---|
+| S | 小型本地仓库 | 1万 chunks，1 个活跃请求 | 16 GB RAM、SSD、CPU，无 GPU 必需 |
+| M | 常规目标 | 10万 chunks，并发 1/4 | 16–32 GB RAM；模型运行资源单列 |
+| L | 扩展验证 | 100万 chunks，并发 4/16 | 工作站或单服务器；不套用 M 档时延承诺 |
+
+文件数、PDF页数、正文 tokens、平均 chunk 长度、向量维度与更新比例全部记录；文件数量不单独代表负载。主目标是单机单写入者、多读者；多租户、高可用和分布式不进入首版。
+
+### 1.3 本版推荐
+
+| 项 | 推荐决定 |
+|---|---|
+| 编排与接口 | Python + Pydantic + 官方 MCP Python SDK |
+| 文档解析 | Markdown/文本快速路径；PDF/Office 使用 Docling 并做格式验收 |
+| 结构/状态 | SQLite，负责来源、版本、树、任务、发布 manifest |
+| 搜索引擎 | 优先验证 LanceDB OSS，统一正文 BM25、向量、过滤与搜索表版本 |
+| 精确检索 | ripgrep 或具资源限制的等价实现；原始匹配与语义检索明确分开 |
+| embedding | E5-small CPU 候选，BGE-M3/Qwen3-Embedding-0.6B 质量对照；评测后冻结默认模型 |
+| 排序 | 词法+dense 的 RRF 基线；首轮即对比小候选 cross-encoder 精排 |
+| 聚类 | scikit-learn 公共 KMeans/MiniBatchKMeans，产品记录分裂关系 |
+| 代表文本 | 原文代表块 + 去重复 + 覆盖多个子节点；SVD 不默认启用 |
+| 上线方式 | 先原型验证引擎契约，再结构阅读闭环，最后增加主题导航 |
+
+推荐不等于已经证明最优。若 SQLite FTS5 + sqlite-vec 在真实负载上同时满足过滤、质量和时延门，可以选择更少存储组件的方案；不为换栈而换栈。
+
+## 2. 用户任务与范围
+
+| 场景 | 入口 | 完成标准 |
+|---|---|---|
+| 精确查编号/原句 | search literal/regex | 返回原始匹配、定位与可枚举的剩余命中 |
+| 问制度、流程、研究结论 | search hybrid → read | 结论有原文，关键条件与例外得到处理 |
+| 浏览仓库有什么 | browse topics/structure | 自动主题与真实章节标识清楚 |
+| 比较所有文件 | browse inventory → 批量 search/read | 文件集合与未处理文件可核对 |
+| 跨文档追踪关联 | search/read 多轮 | 继续搜索依据新发现，关联由证据支持 |
+| 刚编辑文档就查询 | search/read + freshness | 最新观察状态准确；旧内容不伪装最新 |
+
+首版必需格式：Markdown、TXT、DOCX、含文本层 PDF、转写 Markdown。扫描 PDF 的 OCR 为独立质量/耗时档；PPTX、HTML、CSV/XLSX 在格式测试通过后扩大支持。表格原文读取属于能力，公式重算、电子表格分析引擎与图片内容生成不属于首版。
+
+非目标：自动整理/移动用户文件、自动撰写 Wiki、关系三元组抽取、合同有效性自动裁决、全盘监听、必须经主题树才能检索、默认上云处理所有文件。
+
+## 3. 核心概念：三种结构各司其职
+
+| 结构 | 描述什么 | 技术表示 | 不负责什么 |
+|---|---|---|---|
+| 原文结构树 | 文件/章节/段落/表格的包含顺序 | 邻接关系 + source locator | 不推断跨文档语义 |
+| 主题导航树 | 内容相近的章节/文档分组 | 聚类层次 + 多对多成员引用 | 不保证检索复杂度，不代表事实关系 |
+| 物理检索索引 | 词项与向量的高效候选搜索 | 倒排、flat 或 ANN | 不作为 Agent 阅读的语义目录 |
+
+```mermaid
+flowchart LR
+    A[原始文件] --> B[结构解析与来源映射]
+    B --> C[章节与正文块]
+    C --> D[词法与向量索引]
+    C --> E[章节表示与主题导航]
+    Q[Agent 问题] --> S[混合或精确搜索]
+    D --> S
+    E --> V[浏览与范围选择]
+    S --> R[按来源批量阅读]
+    V --> R
+    C --> R
+    R --> G[Agent 判断与表达]
+```
+
+同一文档可以出现在多个主题，底层只有一份规范文档结构。系统整体是带类型的 DAG，浏览结果可以呈现为树。主题计数分为唯一文档数与成员引用数；全仓文件数量以 inventory 为准。
+
+## 4. 功能规格
+
+| ID | 能力 | 优先级 | 硬要求 |
+|---|---|---|---|
+| F01 | 结构解析与原文定位 | P0 | 读序、标题、表格和来源可验证 |
+| F02 | 身份/版本/发布代次 | P0 | 解析版本变化不沿用错误节点引用 |
+| F03 | hybrid/literal/regex 搜索 | P0 | scope 前置；搜索语义与分页语义明确 |
+| F04 | 按目标批量阅读 | P0 | 不静默截断，预算及剩余范围可见 |
+| F05 | 文件清单与章节浏览 | P0 | 固定快照可完整枚举 |
+| F06 | 增量就绪与崩溃恢复 | P0 | 来源、正文、检索代次一致，不读半成品 |
+| F07 | 模型/分词/精排对照 | P0 验证 | 选型有质量与硬件耗时证据 |
+| F08 | 主题导航与原文代表 | P1 | 单例不丢，分组不改文件，跨主题引用可追溯 |
+| F09 | 主题补充召回 | P2 实验 | 相对 dense+BM25 有新增证据价值才启用 |
+| F10 | SVD 代表文本 | P2 研究 | 不退化、优于代表块基线才产品化 |
+
+## 5. 解析与规范文档模型
+
+### 5.1 解析路线
+
+快速文本路径：直接读取 TXT；Markdown 用 markdown-it-py 的解析 token 与源码行映射构建树，列表、代码块和表格由语法决定，不能靠标题正则独立解析整份 Markdown。[markdown-it-py](https://markdown-it-py.readthedocs.io/en/latest/using.html)
+
+PDF/Office 路径：Docling 为首选候选，保留其结构、版面和 provenance，再映射到产品的最小文档模型。不能只导出 Markdown 后丢弃来源结构。扫描件按页触发 OCR，正文不可读与解析失败分别记录。[Docling IR](https://docling-project.github.io/docling/concepts/docling_document/)、[格式支持](https://docling-project.github.io/docling/usage/supported_formats/)
+
+解析器选择基于标注样本的读序、标题层级、表格与定位表现，不能只根据“支持 PDF”列表决定。正文抽取成功不等于树解析正确。
+
+### 5.2 最小 IR
+
+| 对象 | 字段/约束 |
+|---|---|
+| Document | document_id、source_revision、parse_revision、media_type、relative_path |
+| Node | node_id、parent_id、kind、ordinal、text_ref、locator、structure_origin |
+| SourceRange | text 行/字节、PDF 页/坐标、Office 结构路径、表格行列、音频时间 |
+| Relation | contains、explicit_reference；语义成员关系另表 |
+| Warning | unsupported_locator、ambiguous_heading、ocr_required、partial_table 等事实状态 |
+
+结构来源区分 explicit、layout_inferred、synthetic_container。无标题内容可挂在中性容器下；不生成假装来自作者的标题。结构树无环，每个原文节点只有一个结构父节点。
+
+纯文本字节位置对应原始编码/换行，规范化文本的偏移另存映射。PDF 读取的是提取文本时，明确 `text_kind=extracted`，不称作逐字节原文件。DOCX 未排版时不伪造页码。表格合并单元格与跨页问题在输出中保留未恢复状态。
+
+### 5.3 切分与 embedding 输入
+
+原文 block 与检索 chunk 分开。chunk 可覆盖若干连续 blocks，也可对应超长 block 的子范围。节点身份不等于 embedding chunk 身份。
+
+默认尝试每 chunk 约 320 个模型 tokens，实际总长度包含模型前缀与标题；受所选模型上限约束。长列表/表格/段落允许分片，保留引导句、表头与完整 block 引用，不由模型 tokenizer 静默截断。长上下文模型也需要评测，不因支持 32K 就整篇嵌入。
+
+heading_path、标题与原文分别存储。检索输入可带标题，但代表选择要测量标题/模板重复是否主导向量。长文档不能因 chunks 多就无限主导主题分组；可用每文档样本权重和结构代表候选限制影响。
+
+## 6. embedding、聚类与 SVD
+
+### 6.1 模型选型与冻结
+
+| 候选 | 用途 | 已知功能边界 | 选择门 |
+|---|---|---|---|
+| multilingual-e5-small | CPU 默认候选 | 384 维，512-token 输入，检索/聚类模板有区别 | CPU P95、中文短问、长文切片召回 |
+| BGE-M3 | 多语质量对照 | 模型提供 dense/sparse/multi-vector 能力；首轮只测 dense，避免把三种机制同时加入 | 与 E5 同预算质量/成本比较 |
+| Qwen3-Embedding-0.6B | 指令式 embedding 对照 | 支持任务指令与可变输出维度 | 模板正确性、CPU/GPU延迟、领域召回 |
+| BGE-reranker-v2-m3 | 质量模式精排候选 | 输入 query 与 passage，输出相关性评分 | 精排 20/40 候选的真实耗时与条件保留 |
+
+来源：[E5 模型卡](https://huggingface.co/intfloat/multilingual-e5-small/raw/main/README.md)、[BGE-M3](https://huggingface.co/BAAI/bge-m3)、[Qwen3](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B)、[BGE reranker](https://huggingface.co/BAAI/bge-reranker-v2-m3)。模型卡能力不代表在本文仓库上的排名；CPU 候选也不构成亚秒推理保证。
+
+模型配置冻结 model ID、权重 revision、tokenizer revision、pooling、归一化、任务模板、维度及量化方式。配置 ID 进入缓存和索引 metadata；不同配置的向量不混用。查询 embedding 批量执行、缓存；文件 embedding 按内容 hash 复用。
+
+检索向量可作为章节聚类的低成本候选；聚类专用模板重新嵌入作为对照，额外成本单列。均值向量、代表块向量集合均需测试，不能假定整文均值就是文档语义。
+
+### 6.2 聚类策略
+
+先做一层主题导航，证明可读性与任务收益，再增加必要的层次。推荐使用 scikit-learn 公共 KMeans API，产品按成员规模与聚类收益决定是否继续分裂；每次分裂记录 parent_id、成员与参数。BisectingKMeans/MiniBatchKMeans 可作为批量性能对照，不读取库的私有树对象来形成持久化协议。[scikit-learn](https://scikit-learn.org/stable/modules/generated/sklearn.cluster.BisectingKMeans.html)
+
+使用归一化输入，但区分欧氏 KMeans 与 spherical KMeans。初始化随机种子固定；平分、空簇、过小簇有确定处理；数据无明显分组时允许更宽导航。单例与离群材料始终在原文清单可达。
+
+一个章节有一个主要主题，可按校准的距离与间隔增加次级引用。一个文档通过不同章节出现在多个主题。次级归属、分支数、深度与拆分阈值属于可调参数，不作为“最佳实践常数”。
+
+每次编辑先更新对应章节表示。主题生成采用批量窗口：短期分配至当前冻结质心，累计变化或导航质量退化后构建新代次。全局重聚类费用单列；不设计每个击键都精确维护全仓聚类。
+
+### 6.3 默认代表文本
+
+为每个主题选择质心附近原文候选，去除完全重复后按多个文档/子章节分配代表名额。代表文本固定上限，保留节点引用。主题标签优先使用原文标题与区分性词语；标签差时使用“主题 017”，不以生成式编写新概念名作为建树前提。
+
+主题代表文本属于 navigation；原文证据从其引用节点读取。多样性不是每题强制多来源配额，也不能覆盖相关性约束。
+
+### 6.4 SVD 研究项及退出条件
+
+设 `M=UΣVᵀ`，能量贡献评分为 `Σ(j≤k) σ_j²U_ij²`。当 k 等于矩阵秩时，它等于候选向量的平方长度；逐行归一化后全部为 1。因此高能量保留阈值不是代表性保证。[SVD 定义](https://numpy.org/doc/stable/reference/generated/numpy.linalg.svd.html)；退化结论为本次数学推导。
+
+SVD 只在低秩信号清楚、分数有区分度且胜过代表块基线时考虑采用。必测正交单位向量、同模板不同事实、少数关键例外和重复文本。记录有效秩、代表覆盖、分数分散度与选句成本；不把“保留 95% 数值能量”写成“保留 95% 信息”。
+
+不通过时不启用、不占据核心建设里程碑。相关思路可参考 [SVD-RAG](https://arxiv.org/html/2607.10316v1)，但其小规模实验不能为本产品提供性能担保。
+
+## 7. 存储引擎独立选型
+
+### 7.1 比较矩阵
+
+| 组合 | 功能适配 | 性能关注点 | 运行代价 | 本版结论 |
+|---|---|---|---|---|
+| SQLite FTS5 + sqlite-vec | 状态/正文/向量可集中；轻量 | 短中文词、范围过滤、扫描规模和并发 | 最少组件，CJK词法需明确设计 | 轻量对照；达标即可选 |
+| SQLite + LanceDB OSS | 结构状态与搜索分工；FTS/dense/filter/version集中于搜索表 | 索引维护、过滤选择性、未索引尾部、MVCC保留 | 2 个存储组件，需发布协议 | 独立单机产品首选验证 |
+| SQLite + Tantivy + FAISS/USearch | 索引可独立优化 | 跨索引过滤、删除、融合与绑定能力 | 多份索引同步，自研接口较多 | 非默认；明确瓶颈时再考虑 |
+| 状态库 + Qdrant Server | dense/sparse/hybrid、payload过滤和服务并发 | payload索引、召回参数、服务资源 | 多一个本地/服务器进程 | L档/服务式候选，不作为首版必需 |
+| PostgreSQL + 扩展 | 事务与服务管理集中 | ANN、中文词法扩展和本机资源 | 服务常驻与分发较重 | 服务式备选，不为桌面默认启动 |
+
+依据：[LanceDB hybrid](https://docs.lancedb.com/search/hybrid-search)、[Qdrant hybrid](https://qdrant.tech/documentation/search/hybrid-queries/)、[Qdrant client local mode](https://github.com/qdrant/qdrant-client)、[USearch bindings](https://github.com/unum-cloud/usearch)。本矩阵是适配判断，未实测吞吐排名。
+
+### 7.2 LanceDB 的采用条件
+
+采用当前支持的 Lance-native FTS，不能混用旧 Tantivy-only 参数。中文分词在官方 Python API 中有 Jieba 路径，ICU 可用于混合语言；需要打包词典/模型并验证锁定版本在目标 OS 上可用。默认英文空白分词不能自动作为中文质量基线。[FTS 文档](https://docs.lancedb.com/search/full-text-search)
+
+新行尚未进入物理索引时，搜索应覆盖未索引尾部；不启用跳过尾部的快速模式来兑现延迟目标。后台维护以尾部规模与延迟为依据，不能只设一个全局固定周期。更新和索引维护能力均以 OSS 实际提供范围为准，不能引用 Enterprise 自动管理来设计 OSS。[索引维护](https://docs.lancedb.com/indexing/vector-index)
+
+以下门有任一失败，先暂停该选型：中文分词不可部署；范围过滤不能满足候选正确性；更新后新内容不可见；版本句柄无法安全保留；M档P95或内存预算失败。此时评估矩阵中的下一候选，不在产品内长期并列多套检索后端。
+
+### 7.3 物理向量索引
+
+S档先使用 exact 检索作为正确性基准。M/L档对比 exact、IVF_FLAT 和库实际提供的 IVF_HNSW_FLAT/量化变体，不能将 LanceDB 的 IVF 内 HNSW 称作独立顶层 HNSW。量化需单独测召回损失。[向量索引类型](https://docs.lancedb.com/indexing/vector-index)
+
+过滤选择率低、候选范围小时，exact 可以是合理执行计划；大范围时 ANN 可能更合适。按照候选数量与成本模型选择执行方式，并用 exact Top-K 校验 ANN Recall@K。索引参数不能只从数据总量推导，不跨硬件复用未经验证的阈值。
+
+## 8. 版本、增量与一致性
+
+### 8.1 四类版本
+
+| 标识 | 含义 |
+|---|---|
+| source_revision | 原始文件内容 hash |
+| parse_revision | source_revision + parser/IR版本 + 解析配置 |
+| representation_revision | 模型/任务模板/tokenizer/切分规则/输入hash |
+| publication_epoch | 对外可读的一组结构与搜索表版本 |
+
+document_id 独立于文件名；明确 rename 可保留身份，模糊的删除+新增不猜测。节点 ID 在同 parse_revision 内稳定，解析器变化可产生新节点。相同文字不同文件保留各自来源，不能仅按内容 hash 合并文档身份。
+
+### 8.2 存储职责
+
+SQLite：repositories、documents、document_versions、nodes、source_ranges、topics、memberships、jobs、publications、query_handles。正文规范化缓存可落 SQLite 或内容寻址文件，路径由 SQLite 管理。
+
+LanceDB：检索 chunks、标题/正文检索字段、vector、document_id、parse_revision、结构祖先/范围过滤字段。搜索数据是派生投影。索引数据可以删重建；原文件不写入索引服务私有的唯一主本。
+
+### 8.3 发布协议：先准备，再切换可读指针
+
+每个 root 只有一个发布写入者。读请求先读取 SQLite 的 manifest：`publication_epoch → {catalog_epoch, search_table_version, model_config, coverage}`，随后只读这组版本，不直接打开搜索表 latest。
+
+1. 捕获文件版本并稳定读取；创建带 job_id 的准备记录，解析新 IR。开始/结束状态不一致的文件重新排队。
+2. 将新 document_versions、nodes 写为 prepared，不改变活动目录版本。
+3. 写入该批文档的搜索投影，在搜索表中替换旧 chunks。删除限定于本批 document_id，避免“源集合未匹配删除”误删全仓。写入必须幂等并验证业务键唯一性。
+4. 验证变更文档的 chunk 集合、文本范围和模型配置一致；取得已提交搜索表 version。向量未好时可发布词法就绪版本，vector 字段缺失不生成假向量。
+5. SQLite 短事务一次发布新 catalog_epoch 与 search_table_version。此后新查询才看到新版本。
+6. 新 vector/主题就绪时走同一协议发布下一代；后台 optimize 产生的新物理版本也通过发布者管理。
+
+词法覆盖包含全部已解析当前 chunks；dense 覆盖仅包含当前 representation_revision 且 vector_ready 的 chunks，返回各自分母与缺失数。G0 必须验证所选引擎对空向量与部分就绪索引的行为；不能用全零向量填充，也不能把 dense 较小的覆盖集称作整仓已就绪。
+
+SQLite 事务不是跨库分布式事务。上述 protocol 是应用层发布设计，需故障注入验证。LanceDB 支持表版本与版本读取，但版本保留、写入确认和索引完整性必须在锁定版本上验证。[版本接口](https://docs.lancedb.com/tables/versioning)、[更新接口](https://docs.lancedb.com/tables/update)
+
+### 8.4 崩溃恢复和清理
+
+manifest 未发布时，prepared 数据对用户不可见。重启后，写入者根据 journal 完整重放同一批次，或将搜索写入头恢复到最后已发布的搜索快照后重建；不能在混入未发布变化的 head 上继续下一批并直接发布。manifest 已发布则按其指针恢复，旧节点与搜索版本在句柄租约结束后清理。
+
+query handle 初始 TTL 为 10 分钟、受内存/磁盘预算限制；活动版本加保留保护。自动维护不能清除仍被 manifest/句柄引用的版本。超预算提前过期返回明确错误，不静默换新快照。节点历史仅用于短期一致读取，不提供永久历史档案产品承诺。
+
+### 8.5 新鲜度与读取
+
+search 报告 indexed_at、source_observed_at 和 known_changed/pending 文件数。它反映索引视图，不能无条件声称与此刻全部磁盘文件一致。监听是提示，周期 reconciliation 校正漏事件。
+
+对于已经观察到修改或删除、但新投影尚未发布的文件，默认当前查询在候选生成前排除其旧版本并列入 pending/unavailable；显式快照查询可以返回旧版本且标记历史状态。查询记录该观察集合的水位，分页中若当前视图发生变化则失效重开，不能在已排序结果后直接删项并声称仍是完整Top-K。
+
+read 默认按 expected source_revision 核验目标原文件；严格模式在本次读取中核对内容 hash，计入 I/O 耗时。源文件已变化返回 source_changed，而不是换成新段落沿用旧引用。显式 snapshot 阅读可使用短期缓存并标注历史版本；不把旧缓存称为当前原文。
+
+## 9. Agent 工具契约
+
+### 9.1 三项核心能力
+
+`repo.search` 找候选，`repo.read` 读证据，`repo.browse` 看范围。管理/健康状态可另有工具，但日常检索不要求额外发现接口。工具名是本稿规范名，可由 MCP schema 直接暴露，与某个大项目工具前缀无关。
+
+search 内部机械并行，read 支持批量；工具报告状态，Agent 判断下一步和答案充分性。工具数量不是评测成绩，三个工具也不构成最高效的先验证明。
+
+### 9.2 search：分请求范围、共享预算
+
+```json
+{
+  "requests": [
+    {"qid": "q1", "query": "延期交付如何处理", "mode": "hybrid", "scope": {"root_id": "r1"}},
+    {"qid": "q2", "query": "豁免", "mode": "literal", "scope": {"root_id": "r1", "document_ids": ["d2"]}}
+  ],
+  "max_output_tokens": 2500,
+  "max_output_bytes": 24000
+}
+```
+
+数组起始上限 8 个请求，每个请求最多取 40 个词法、40 个 dense 候选，融合后最多保留 60 个；返回条数由预算控制。它们是待调优默认值，不是服务能力承诺。每题留最低结果配额，超出部分按候选排序分配；批量部分超时逐题返回状态。
+
+预算参数可省略并使用服务默认值；支持整批 deadline_ms，后端子任务共享剩余时间。超出模型或服务查询长度上限时返回 query_too_long，不静默截掉问题条件。质量模式与低延迟模式是明确的调用配置，超时会报告未执行的精排阶段。
+
+scope 先规范化：root 与 document/node/topic 范围取交集。省略集合表示不增加限制；显式空集合表示空范围，避免把空过滤误解成全仓。topic scope 固定其 generation，并标记统计成员范围。
+
+返回每题 qid、hits、候选句柄、cursor、publication_epoch、通道状态、原文 excerpt、heading_path、source_revision、parse_revision、citation、parent_id、估计章节大小。数值 score 是相关性或排序信息，不是答案正确概率。
+
+### 9.3 搜索分页与覆盖语义
+
+literal/regex：按文档 ID 与原文位置稳定排序，可分页枚举匹配；达到扫描/输出/超时上限时返回 `scan_complete=false` 和续查 cursor。regex 不支持的语法明确报错，不降为语义查询。
+
+hybrid：cursor 遍历固定候选结果集，返回 `candidate_set_complete`；它仅表示本次候选已经读完。响应始终标记 `semantic_exhaustive=false`。需要“所有文件都检查”时先 inventory，再分文件搜索/读取。
+
+handle 保存 query 配置、scope、publication_epoch、排序后的候选 ID 和去重状态，受 TTL 与总量限制。过期返回 handle_expired；跨快照续读返回 snapshot_changed。命中不够时 Agent 可以新搜，不伪造“继续”是同一批结果。
+
+### 9.4 read：原文与阅读大小可控
+
+```json
+{
+  "targets": [
+    {"node_id": "n1", "source_revision": "s1", "parse_revision": "p1", "view": "context"},
+    {"node_id": "n2", "source_revision": "s2", "parse_revision": "p2", "view": "section"}
+  ],
+  "consistency": "current",
+  "max_output_tokens": 5000,
+  "max_output_bytes": 48000
+}
+```
+
+view = exact/context/section。exact 返回目标原文；context 返回必要前后文；section 返回最近完整小节，过大则提供局部范围与剩余 cursor。每批 targets 上限起步为 16。topic 是导航对象，不能直接作为整仓原文读取；browse(topic) 提供代表原文的可读 refs。
+
+每项状态为 ok/partial/source_changed/source_deleted/parse_unavailable。返回 returned_ranges、unread_ranges、source_check_at、citation 与 cursor。合并相同版本的重叠范围，保留不同来源与版本差异。表格按行分页时附表头；正文未恢复的部分明确标记。
+
+源文件未变但请求的parse_revision已不可读时返回parse_revision_unavailable；不得在新解析结构中按同名标题猜测旧node_id。调用方可重新浏览该文档获取新节点。
+
+### 9.5 browse：导航与枚举分开
+
+view = inventory/structure/topics。inventory 对一个 publication_epoch 完整分页，含文件解析/向量状态。structure 返回真实结构节点与大小。topics 返回统计标签、成员引用、代表块、唯一文档数和未归类入口。
+
+coverage 只记录能机械验证的事实：files_enumerated、files_search_attempted、files_with_read_ranges、unavailable_files、remaining_cursor。不能从“读过一段”计算“整份文档已理解”，也不输出 host 自评的语义覆盖通过标志。
+
+### 9.6 预算与传输
+
+`max_output_tokens` 在已知目标 tokenizer 时精确计数，否则是尽力满足的目标，返回 tokenizer_id 与 token_count_kind。`max_output_bytes` 是服务返回内容的硬限，不保证 MCP 客户端包装后仍占相同 tokens。
+
+服务规定最小可接受响应预算（初值1024字节）与最大值；小于最小值直接返回budget_too_small，避免错误元数据本身都装不下的无解契约。所有限制的服务默认值通过工具schema提供。
+
+元数据也占预算。正常命中卡片优先提供原文、来源、范围、继续读入口；距离、解析后端和通道耗时放可选 diagnostics，避免每次几十个字段吞掉上下文。结果内容是数据，不提升为工具权限或系统指令。
+
+## 10. 搜索与阅读执行计划
+
+### 10.1 默认流程
+
+```text
+解析范围与发布快照
+  → BM25候选 + dense候选（并行）
+  → 按原文范围去重 + RRF
+  → 质量模式：小候选集 cross-encoder
+  → 预算化原文卡片
+  → Agent 按需批量读取局部/小节
+```
+
+相关性先于来源配额；完全相同范围去重，版本不同不可抹平。topic 默认不增加第三路融合，只有实验证明新增原文证据价值才开启。
+
+RRF 用于不同通道名次融合；不能将 BM25 分数、余弦值和聚类距离直接相加。精排输入保留 query、短标题和候选原文；超过模型窗口时分片评分并保留引用，不能静默截掉规则的“除外”部分。最终回答仍由 Agent 读取证据后完成。[Retrieve and rerank](https://sbert.net/examples/sentence_transformer/applications/retrieve_rerank/README.html)
+
+### 10.2 范围过滤与 ANN 质量
+
+root/文档/章节范围同时作用于 BM25 与 dense 候选生成。为 document_id、kind、必要范围字段建立可用的标量索引。API 接受过滤不等于执行计划已前置，PoC 要检查候选范围与计划。[LanceDB 过滤](https://docs.lancedb.com/search/filtering)
+
+禁止全局 Top-10 后丢掉范围外结果并称作“范围内 Top-10”。如果某过滤无法高效下推，应对合法候选范围做 exact；超时则如实返回 partial，不能静默遗漏。
+
+### 10.3 精确检索与中文
+
+中文 BM25 采用经过验证的分词与查询同处理；短词、编号和原句走 literal。literal 定义默认区分大小写、Unicode 字符原样匹配；大小写折叠、规范化等变化必须由参数显式选择，保留 source offset 映射。
+
+regex 可使用 ripgrep 默认 Rust regex 语义，配置模式长度、扫描字节和 deadline。工具根据授权文件清单传入参数，避免拼 shell 指令；导出的规范文本按 document_id 映射回来源。[ripgrep](https://github.com/BurntSushi/ripgrep)
+
+### 10.4 上下文展开
+
+先在章节内合并相邻命中，保留标题与适用范围。父章节太大时返回邻近小节而非提升到文档根。跨文档关系由显式原文链接或 Agent 新查询追踪；向量近邻不自动生成“相关规定已全部补齐”的承诺。
+
+## 11. 运行架构与开源组件
+
+| 模块 | 组件建议 | 产品自建部分 |
+|---|---|---|
+| MCP/协议 | 官方 Python SDK、Pydantic | scope、分页、阅读与错误契约 |
+| 调度 | Python asyncio + 有界 worker进程 | 单写入者、取消、批量任务、资源预算 |
+| 文本结构 | markdown-it-py | IR映射、字节/行号与树构造 |
+| PDF/Office | Docling | provenance适配、解析质量分级 |
+| 数值 | NumPy/SciPy/scikit-learn | 分裂记录、主题生命周期、代表策略 |
+| 推理 | Sentence Transformers/Transformers | 模型配置、缓存、预算与输入模板 |
+| 搜索 | LanceDB OSS | 查询计划、exact/ANN选择、去重 |
+| 结构状态 | SQLite | 节点模型、发布manifest、任务与句柄 |
+| 精确扫描 | ripgrep | 文本映射与范围限制 |
+
+官方 SDK：[MCP Python](https://github.com/modelcontextprotocol/python-sdk)。产品自建的是数据语义、阅读契约和生命周期，不重写向量数据库、Markdown语法或矩阵分解。
+
+计算重活不在 Python for 循环内执行；交给引擎、向量化库和模型 runtime。CPU-bound 解析/推理从接口事件循环隔离，进程通信传批量 IDs、文件或 Arrow 数据，避免逐候选 JSON 往返。BLAS、PyTorch、OCR 与检索线程池共享整机预算，不能各自开满核心。
+
+S档起步一个接口进程、一个有界后台 worker；质量模型按配置载入，不要求多份进程各加载一套大权重。GPU型和CPU型需要不同的batch/并发配置。优化基于profile，不先指定必须把主运行时改写成某语言。
+
+依赖与模型权重分别锁定。上游许可证、模型许可、native wheels/动态库和词典分发在发布时核对；不将“开源项目”当作所有内含模型均可任意分发的结论。
+
+## 12. 性能与容量验收
+
+### 12.1 指标分解
+
+检索服务端：query embedding、FTS、dense、过滤、精排、卡片序列化。完整 Agent 任务：工具往返、阅读量、模型推理和生成全部纳入。冷启动、热缓存和索引积压分别报告。
+
+索引：解析/OCR、chunk、embedding、FTS/ANN维护、主题与代表选择、发布及清理分别统计。不能用“已有 embedding 后 0.1 秒建树”代表完整入库速度。
+
+### 12.2 拟目标与实验矩阵
+
+| 项 | M档首轮验收目标 | 条件 |
+|---|---|---|
+| 热 browse/read 已解析缓存 | P95 ≤300 ms | 指定范围；严格源hash I/O另列并报告总耗时 |
+| 词法/过滤/向量/融合 | P95 ≤1 s | 不含 query embedding；精确扫描独立统计 |
+| CPU hybrid 工具端到端 | P95 ≤2 s | 本地模型已热，最长128 query tokens，无精排；未验证 |
+| 精排质量模式 | 新增耗时/收益单列 | 20/40候选、不同长度，不套用上述2秒 |
+| 小文本变更到词法可见 | 95% ≤5 s | ≤100 KB、空任务队列 |
+| 正确性 | 版本误指、范围泄漏、静默截断=0 | 确定性测试与故障注入样本 |
+
+容量矩阵为 N=1万/10万/100万、维度384/1024；过滤保留100%/10%/1%/0.1%；并发1/4，L档另测16；未索引尾部0/1%/10%。报告内存、磁盘、索引构建与更新负载。
+
+10万×384×float32原始向量约153.6 MB；10万×1024约409.6 MB；100万×1024约4.096 GB。均未含原文、索引、元数据、模型权重或版本保留，不等于实际RSS。压缩仅在召回门通过后采用。
+
+### 12.3 质量门优先于速度门
+
+ANN先与相同范围exact Top-K比较，目标Recall@20≥0.98作为初始门；这是近邻一致性，不等于答案召回。达不到时增大搜索努力或对该范围改用exact。主题分组不能替代这个门。
+
+性能目标是在锁定基准环境上的可审查要求，不是对所有用户机器的承诺。所有硬件、模型版本、后台压力和缓存条件均随报告提交。
+
+## 13. 质量评测与上线顺序
+
+### 13.1 对照设计
+
+| 组 | 配置 | 问题 |
+|---|---|---|
+| A | 文件/grep + 原始阅读 | 当前简单方法能做到什么 |
+| B | BM25+dense+RRF | 混合召回本身贡献多少 |
+| C | B + 结构化批量阅读 | 树与阅读契约是否减少遗漏和重复 |
+| D | C + cross-encoder | 排序是否已能解决问题 |
+| E | 最佳C/D + 主题导航 | 探索/多文档任务是否受益 |
+| F | E + 主题候选召回 | 是否增加新证据而非重复投票 |
+| G | E/F + SVD代表选择 | 是否优于普通代表块 |
+
+同一模型、总token预算、语料版本和任务范围对照。排序参数与模板只在开发集调整；按文档族拆分留出集，不能把同文换标题算新增独立样本。
+
+探索阶段先用120题诊断失败类型；正式优劣结论由基线通过率、可接受最小差异与配对方差决定所需样本量，必要时扩充数百题。人工盲评关键条件、引用和错误归因；模型judge只作辅助，并抽样核验偏差。多次运行报告区间，不用6道题改善就宣称稳健提高5pp。
+
+### 13.2 不同层分别验收
+
+解析：读序、标题、表格与locator；检索：证据Recall与ANN近邻一致性；阅读：重复率、重要条件覆盖和输出量；Agent：答案正确性、无依据断言、遗漏与轮次；导航：查找耗时、分组可理解性与主题稳定性。
+
+结构正确性硬门先通过。新增层不得以明显增加条件遗漏换取tokens下降；成本与质量差异的上线阈值在评审中冻结，区间不确定时不宣布取胜。
+
+## 14. 交付阶段与决策门
+
+| 阶段 | 可交付结果 | 决策门 |
+|---|---|---|
+| G0 引擎/模型PoC | 固定版本的中文FTS、范围过滤、版本读取、模型输入与基本耗时报告 | 功能与部署支持实际成立；决定最终搜索组合 |
+| G1 原文阅读闭环 | 解析、search/read/browse、版本与失败返回 | 格式测试、分页、范围、批量和故障恢复通过 |
+| G2 质量基线 | embedding、RRF、精排对照；真实Agent任务 | C/D有可解释质量和成本；模型冻结 |
+| G3 仓库主题导航 | 跨文档引用、代表文本、增量主题生成 | 导航价值成立；检索不中断 |
+| G4 可选增强 | 主题召回/SVD/量化等独立实验 | 每项单独通过门；无收益不启用 |
+
+每阶段都保留完整的检索阅读能力。本文不承诺并行维护全部候选引擎，不把PoC实验配置全部变成产品开关。
+
+## 15. 开放项、风险与核验状态
+
+| 项 | 状态/处理 |
+|---|---|
+| 目标OS/分发方式 | 默认本机服务；native wheel、模型与词典实际打包在G0验证 |
+| 最终默认embedding | 有候选与选择门，尚无实测胜者 |
+| LanceDB OSS关键能力 | 上游文档支持相关方向；锁版API、性能、snapshot/维护语义需PoC |
+| 双存储一致性 | 已定义发布协议；必须故障注入，不能仅靠代码审阅声称完成 |
+| PDF结构准确率 | 待标注样本；不以格式支持表代替 |
+| 聚类和SVD收益 | 未验证；默认无SVD，主题先用于导航 |
+| 变更新鲜度 | 观察时间与发布代次显式；不存在无代价全仓实时hash保证 |
+| 费用/上云 | 本地模型路线可用；远程provider只能显式配置，不自动发送原文 |
+
+## 16. 来源与交付边界
+
+本稿依据截至2026-09-10查询的官方文档、模型卡与上游实现，来源已在相应决策附近给出。外部资料证明组件功能，不证明本产品集成、吞吐或准确率。独立选型、SVD退化推导、发布协议与验收目标属于本次设计。
+
+本次交付为评审报告与v0.2 PRD。未安装依赖、未运行解析/embedding/检索基准、未修改任何产品实现。原型验证需另行执行，其结果才能将“推荐候选”升级为“已验证选型”。
