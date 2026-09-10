@@ -128,9 +128,21 @@ PDF/Office 路径：Docling 为首选候选，保留其结构、版面和 proven
 
 原文 block 与检索 chunk 分开。chunk 可覆盖若干连续 blocks，也可对应超长 block 的子范围。节点身份不等于 embedding chunk 身份。
 
+语义边界切分旨在尽量保持局部表达完整，不保证一组论点、条件或步骤处于同一 chunk。例如原文有四个观点，前三个完整落入 chunk A，第四个完整落入 chunk B；只召回 A 时，第四个观点仍在索引中，但未进入本次阅读。切分边界不能作为论述已完整的信号。
+
 默认尝试每 chunk 约 320 个模型 tokens，实际总长度包含模型前缀与标题；受所选模型上限约束。长列表/表格/段落允许分片，保留引导句、表头与完整 block 引用，不由模型 tokenizer 静默截断。长上下文模型也需要评测，不因支持 32K 就整篇嵌入。
 
 heading_path、标题与原文分别存储。检索输入可带标题，但代表选择要测量标题/模板重复是否主导向量。长文档不能因 chunks 多就无限主导主题分组；可用每文档样本权重和结构代表候选限制影响。
+
+### 5.4 文档内 chunk 顺序与续读
+
+每个 chunk 保存 document_id、source_revision、parse_revision、chunk_id、chunk_seq、node_refs 与原文范围。chunk_seq 是同一文档在固定 publication_epoch 所发布切分结果中的零基连续序号，按解析后的原文阅读顺序生成；不是相关性排名、观点编号或全仓编号。结构节点的 ordinal 只表达兄弟节点顺序，不能替代文档内 chunk_seq。切分规则变化可以重排序号，序号不承担跨版本稳定身份。
+
+同一快照中，prev/next 由文档 ID 和序号查询派生，不另存一套需同步的链表。关系覆盖全部已生成 chunks，包括尚未生成 embedding 的块。chunk_count 仅在该文档完整切分完成时报告为总量，否则为 null，并报告顺序覆盖未完成；最后一个已就绪 chunk 不冒充文档结束。解析未恢复的原文范围仍由解析状态报告，连续序号不能证明解析无遗漏。
+
+标题树提供向上读取章节的路径，chunk 顺序提供沿原文向前、向后读取的路径，两者共同构成原文阅读层。相邻块无需再次通过向量阈值或 Top-K 筛选。顺序元数据作为工具返回的位置事实，不拼入正文或 embedding 文本。
+
+首版不依赖 LLM 识别“论述组”。原文显式列表、步骤组可沿结构节点读取；无法确定组边界时保留未知状态和续读入口。chunk 序号只能表明原文位置与后文可达性，不能机械判定四个观点已经读全；固定 overlap 或固定补一个相邻块也不提供这一保证。
 
 ## 6. embedding、聚类与 SVD
 
@@ -218,7 +230,7 @@ document_id 独立于文件名；明确 rename 可保留身份，模糊的删除
 
 SQLite：repositories、documents、document_versions、nodes、source_ranges、topics、memberships、jobs、publications、query_handles。正文规范化缓存可落 SQLite 或内容寻址文件，路径由 SQLite 管理。
 
-LanceDB：检索 chunks、标题/正文检索字段、vector、document_id、parse_revision、结构祖先/范围过滤字段。搜索数据是派生投影。索引数据可以删重建；原文件不写入索引服务私有的唯一主本。
+LanceDB：检索 chunks、标题/正文检索字段、vector、document_id、parse_revision、chunk_seq、node_refs、原文范围与结构祖先/范围过滤字段。同一文档同一发布快照内 chunk_seq 唯一；文档和序号范围查找不依赖向量就绪。搜索数据是派生投影。索引数据可以删重建；原文件不写入索引服务私有的唯一主本。
 
 ### 8.3 发布协议：先准备，再切换可读指针
 
@@ -278,6 +290,8 @@ scope 先规范化：root 与 document/node/topic 范围取交集。省略集合
 
 返回每题 qid、hits、候选句柄、cursor、publication_epoch、通道状态、原文 excerpt、heading_path、source_revision、parse_revision、citation、parent_id、估计章节大小。数值 score 是相关性或排序信息，不是答案正确概率。
 
+每条 chunk 命中另带 chunk_id、position={seq,total} 和 adjacent={prev,next} 可读引用；total 未知时为 null。相邻引用绑定同一文档与 publication_epoch，已到文档端点时为空，顺序未就绪时另报 boundary_unknown。卡片的末尾只是本次返回范围结束；snippet 被截短时，同时保留本块剩余原文的读取入口。position/adjacent 不随检索重排而变化。
+
 ### 9.3 搜索分页与覆盖语义
 
 literal/regex：按文档 ID 与原文位置稳定排序，可分页枚举匹配；达到扫描/输出/超时上限时返回 `scan_complete=false` 和续查 cursor。regex 不支持的语法明确报错，不降为语义查询。
@@ -302,7 +316,11 @@ handle 保存 query 配置、scope、publication_epoch、排序后的候选 ID �
 
 view = exact/context/section。exact 返回目标原文；context 返回必要前后文；section 返回最近完整小节，过大则提供局部范围与剩余 cursor。每批 targets 上限起步为 16。topic 是导航对象，不能直接作为整仓原文读取；browse(topic) 提供代表原文的可读 refs。
 
+target 也支持 {chunk_id, publication_epoch, view}，与 node_id 目标二选一；服务从指定快照解析其原文范围与结构引用，再按 consistency 检查来源。相邻引用可直接作为 target 读取，也可与父章节引用批量读取；快照过期按 §9.3 返回 handle_expired，不凭旧序号读取新版本。continuation cursor 延续当前阅读范围，相邻引用则定位原文中的前后块，两者不与搜索候选 cursor 混用。
+
 每项状态为 ok/partial/source_changed/source_deleted/parse_unavailable。返回 returned_ranges、unread_ranges、source_check_at、citation 与 cursor。合并相同版本的重叠范围，保留不同来源与版本差异。表格按行分页时附表头；正文未恢复的部分明确标记。
+
+响应另带本次 scope 及其前后边界状态 available/end/unknown；end 只表示指定原文范围的端点。预算不足时保留局部原文与剩余范围/续读引用，不把输出截止改报为章节结束。按原文范围去重，避免 overlap 或多个命中的邻接展开重复计入阅读量；相邻块的引用与定位仍各自保留。
 
 源文件未变但请求的parse_revision已不可读时返回parse_revision_unavailable；不得在新解析结构中按同名标题猜测旧node_id。调用方可重新浏览该文档获取新节点。
 
@@ -352,6 +370,8 @@ regex 可使用 ripgrep 默认 Rust regex 语义，配置模式长度、扫描�
 ### 10.4 上下文展开
 
 先在章节内合并相邻命中，保留标题与适用范围。父章节太大时返回邻近小节而非提升到文档根。跨文档关系由显式原文链接或 Agent 新查询追踪；向量近邻不自动生成“相关规定已全部补齐”的承诺。
+
+命中块同时暴露原文序号、相邻引用和父级结构，Agent 可选择继续读块或展开章节。结构已识别的列表/步骤组按该范围分页读取；未识别组边界时不把 chunk 末尾、页末或固定相邻窗口当成语义完成条件。后继块即使语义检索未命中，仍可由序号直接读取。对于“有四点、当前只见三点”等证据状态，工具报告原文与未读范围，是否补读及何时收束由 Agent 决定。
 
 ## 11. 运行架构与开源组件
 
@@ -425,6 +445,8 @@ ANN先与相同范围exact Top-K比较，目标Recall@20≥0.98作为初始门�
 ### 13.2 不同层分别验收
 
 解析：读序、标题、表格与locator；检索：证据Recall与ANN近邻一致性；阅读：重复率、重要条件覆盖和输出量；Agent：答案正确性、无依据断言、遗漏与轮次；导航：查找耗时、分组可理解性与主题稳定性。
+
+跨块完整性专项验收：使用与业务评测集隔离的合成材料，将四个观点的第 3/4 点分到相邻 chunks，并使第 4 点不进入初始 Top-K；另覆盖跨三块、跨页、无显式编号、例外条件在后块、overlap、尚无向量和切分版本更新。结构层检查全部已解析原文范围仍可达、顺序正确、跨版本不误读；工具层检查定位/相邻读取不依赖再次召回、预算截断可续读；Agent 层在相同总预算下比较有无顺序与续读入口的完整回答率、末项/例外遗漏率、读取 tokens 和调用数。序号存在、工具可读和 Agent 实际读全分别验收，不相互替代。
 
 结构正确性硬门先通过。新增层不得以明显增加条件遗漏换取tokens下降；成本与质量差异的上线阈值在评审中冻结，区间不确定时不宣布取胜。
 
