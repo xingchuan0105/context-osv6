@@ -40,4 +40,6 @@ D3.1 上传提交恢复及笔记 PUT 接口修正后，最新自动门为 73 项
 
 当前程序运行时，可从源仓库执行 `pwsh -NoProfile -ExecutionPolicy Bypass -File desktop_gpui/scripts/build-acceptance.ps1`。它用实际源码和锁文件生成独立名称的 Windows 验收 exe，复用编译缓存，核对原程序哈希不变，并写入构建结果与源码哈希；不要求关闭窗口，也不会自动启动新程序。脚本运行仍遵守本批耗时授权。
 
+UI 收口已覆盖公共壳、聊天、工作区资料/笔记和服务面板，支持原生模态抽屉与本机明暗/折叠偏好。最新 78 项共享/无头测试通过，另有 24 张原生 DirectX 截图；范围和余项见 [界面验收记录](../docs/desktop/2026-09-10-gpui-ui-finish-acceptance.md)。同步后运行 `pwsh -NoProfile -ExecutionPolicy Bypass -File desktop_gpui/scripts/render-previews.ps1` 可复现截图：使用独立测试特性程序、一个隐藏窗口和合成数据，自动写入 `target/acceptance/visual/`；不显示/操作桌面、不访问真实模型。普通 `ui` 程序不含该模式。
+
 受管进程验收从源仓库执行 `pwsh -NoProfile -ExecutionPolicy Bypass -File desktop_gpui/scripts/accept-managed.ps1`，使用已构建的 Windows API/worker/migrate 和便携 PG/Redis；`-BuildDir`、`-PortableRuntime` 可指定构建产物。默认选择 18190/15439/16389，端口已被占用则立即失败。每次生成独立目录，写入 `steps.json`、`tests.log` 和 `result.json`，核对既有进程身份和测试进程残留，不操作桌面或调用模型。`-DataPlaneOnly` 单独验证真实 PG/Redis、角色、扩展、写入及重启持久化，不需要产品 sidecar；这层通过不代表产品迁移/API/worker 已通过。

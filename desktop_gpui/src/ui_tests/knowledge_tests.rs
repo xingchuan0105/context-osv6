@@ -2,7 +2,7 @@ use super::*;
 use crate::knowledge_view::Panel;
 use serde_json::json;
 
-fn enter(h: &Harness, cx: &mut TestAppContext) {
+pub(super) fn enter(h: &Harness, cx: &mut TestAppContext) {
     h.connect(cx);
     h.click(cx, "workspaces-nav");
     h.wait(cx, |v| v.knowledge.workspaces.len() == 2);
@@ -11,7 +11,7 @@ fn enter(h: &Harness, cx: &mut TestAppContext) {
         v.knowledge.documents.len() == 2 && v.sessions.len() == 1
     });
 }
-fn edit(h: &Harness, cx: &mut TestAppContext, id: &'static str, value: &str) {
+pub(super) fn edit(h: &Harness, cx: &mut TestAppContext, id: &'static str, value: &str) {
     h.frame(cx, |window, cx| {
         window.click(id, cx);
         window.input(value, cx);
@@ -380,7 +380,17 @@ fn pending_document_can_submit_without_in_memory_upload_task(cx: &mut TestAppCon
         .unwrap()
         .fail_complete
         .store(false, Ordering::SeqCst);
-    h.click(cx, "complete-doc-uploaded-document");
+    h.frame(cx, |window, cx| {
+        window.scroll(
+            "knowledge-panel-scroll",
+            gpui_kit::ScrollDelta::Pixels(gpui_kit::point(px(0.), px(-2000.))),
+            cx,
+        );
+        let button = window.find("complete-doc-uploaded-document");
+        let scroll = window.find("knowledge-panel-scroll");
+        assert!(button.visible() && button.bounds().bottom() <= scroll.bounds().bottom());
+        window.click("complete-doc-uploaded-document", cx);
+    });
     h.wait(cx, |v| {
         v.knowledge
             .documents
@@ -459,6 +469,8 @@ fn narrow_workspace_panels_and_unsaved_note_leave_confirmation(cx: &mut TestAppC
         assert!(window.find("save-note").visible());
         assert!(window.find("close-knowledge-panel").visible());
     });
+    // The narrow view is now modal: explicitly dismiss it before using background navigation.
+    h.click(cx, "close-knowledge-panel");
     h.click(cx, "workspaces-nav");
     h.click(cx, "accept-knowledge-confirm");
     h.wait(cx, |v| {

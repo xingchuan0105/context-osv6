@@ -1,17 +1,47 @@
 use crate::*;
+use ui::{action, badge, card, icon, muted};
 
 impl ChatApp {
     pub(super) fn render_services(&self, cx: &mut Context<Self>) -> Div {
         let busy = self.services.busy();
-        let mut body = div().flex().flex_col().gap_5().w_full().max_w(px(760.));
-        body = body.child(div().text_lg().child(self.services.phase.label()));
+        let mut body = div().flex().flex_col().gap_4().w_full().max_w(px(880.));
+        body = body
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap_2()
+                    .mb_3()
+                    .child(div().text_size(px(28.)).child("让本机随时准备好"))
+                    .child(muted("查看连接与处理状态，管理此客户端启动的服务。", cx)),
+            )
+            .child(
+                card(cx)
+                    .flex()
+                    .items_center()
+                    .gap_3()
+                    .child(icon(IconName::HardDrive))
+                    .child(
+                        div()
+                            .flex_1()
+                            .child("本机运行状态")
+                            .child(muted(self.services.phase.label(), cx)),
+                    )
+                    .child(badge(
+                        if self.token.is_some() {
+                            "已连接"
+                        } else if busy {
+                            "准备中"
+                        } else {
+                            "未连接"
+                        },
+                        cx,
+                    )),
+            );
         if let Some(error) = &self.services.error {
             body = body.child(
-                div()
-                    .p_3()
-                    .border_1()
-                    .border_color(cx.theme().border)
-                    .rounded_md()
+                card(cx)
+                    .border_color(cx.theme().danger)
                     .child(error.clone())
                     .child(
                         div()
@@ -111,7 +141,7 @@ impl ChatApp {
             ));
             let logs = snapshot.logs.clone();
             body = body.child(
-                Button::new("open-service-logs")
+                action("open-service-logs", IconName::FolderOpen, "")
                     .label(if snapshot.attached {
                         "打开服务运行目录"
                     } else {
@@ -122,8 +152,7 @@ impl ChatApp {
             );
         }
         let mut actions = div().flex().flex_wrap().gap_2().child(
-            Button::new("refresh-services")
-                .label("刷新状态")
+            action("refresh-services", IconName::RotateCw, "刷新状态")
                 .disabled(busy || self.exiting)
                 .on_click(cx.listener(|this, _, _, cx| {
                     this.services.phase = Phase::Checking;
@@ -170,54 +199,29 @@ impl ChatApp {
                     .on_click(cx.listener(|this, _, _, cx| this.stop_services(cx))),
             );
         }
-        body = body.child(actions);
-        div()
-            .flex()
-            .flex_col()
-            .flex_1()
-            .min_w_0()
-            .h_full()
-            .child(
-                div()
-                    .h(px(52.))
-                    .flex_shrink_0()
-                    .px_4()
-                    .flex()
-                    .items_center()
-                    .gap_3()
-                    .child(
-                        Button::new("back-to-chat")
-                            .ghost()
-                            .label("返回聊天")
-                            .disabled(self.exiting)
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.show_services = false;
-                                cx.notify();
-                            })),
-                    )
-                    .child("本机服务"),
-            )
-            .child(
-                div()
-                    .id("service-content")
-                    .flex_1()
-                    .min_h_0()
-                    .overflow_y_scroll()
-                    .p_6()
-                    .child(body)
-                    .test_support(),
-            )
+        body = body.child(card(cx).child(actions));
+        div().flex().flex_col().flex_1().min_w_0().min_h_0().child(
+            div()
+                .id("service-content")
+                .flex_1()
+                .min_h_0()
+                .overflow_y_scroll()
+                .px_4()
+                .py_6()
+                .flex()
+                .flex_col()
+                .items_center()
+                .child(body)
+                .test_support(),
+        )
     }
 }
 
 fn service_row(title: &str, status: &str, detail: &str, cx: &App) -> Div {
-    div()
+    card(cx)
         .flex()
         .flex_col()
         .gap_1()
-        .pb_3()
-        .border_b_1()
-        .border_color(cx.theme().border)
         .child(
             div()
                 .flex()
@@ -225,7 +229,7 @@ fn service_row(title: &str, status: &str, detail: &str, cx: &App) -> Div {
                 .justify_between()
                 .gap_2()
                 .child(title.to_owned())
-                .child(status.to_owned()),
+                .child(badge(status.to_owned(), cx)),
         )
         .child(
             div()

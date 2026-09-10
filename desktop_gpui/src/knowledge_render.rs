@@ -1,24 +1,32 @@
 use super::*;
 use desktop_gpui::workspace::{Action, status_label};
 use knowledge_view::{Confirm, Destination, Panel};
+use ui::{action, badge, card, icon, muted};
 
 impl ChatApp {
-    pub(super) fn render_overview(&self, cx: &mut Context<Self>) -> Stateful<Div> {
+    pub(super) fn render_overview(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let mut content = div()
             .id("workspace-overview")
+            .test_support()
             .flex()
             .flex_col()
-            .flex_1()
+            .w_full()
+            .max_w(px(1120.))
             .min_w_0()
-            .h_full()
-            .p_4()
             .gap_4()
-            .overflow_y_scroll()
-            .child(div().text_2xl().child("工作区"))
-            .child("资料、会话和笔记在工作区内持续保留。")
             .child(
                 div()
                     .flex()
+                    .flex_col()
+                    .gap_2()
+                    .mb_3()
+                    .child(div().text_size(px(28.)).child("你的知识空间"))
+                    .child(muted("每个工作区独立保存资料、对话和笔记。", cx)),
+            )
+            .child(
+                card(cx)
+                    .flex()
+                    .flex_wrap()
                     .gap_2()
                     .items_center()
                     .child(
@@ -27,10 +35,16 @@ impl ChatApp {
                             .test_support()
                             .flex_1()
                             .min_w_0()
-                            .child(Textarea::new(&self.knowledge.name)),
+                            .min_w(px(180.))
+                            .child(
+                                Textarea::new(&self.knowledge.name)
+                                    .aria_label("工作区名称")
+                                    .h(px(40.)),
+                            ),
                     )
                     .child(
                         Button::new("create-workspace")
+                            .icon(icon(IconName::Plus))
                             .primary()
                             .label("创建工作区")
                             .disabled(
@@ -48,24 +62,37 @@ impl ChatApp {
                     ),
             )
             .child(
-                Button::new("refresh-workspaces")
-                    .ghost()
-                    .label("刷新工作区")
+                action("refresh-workspaces", IconName::RotateCw, "刷新工作区")
                     .disabled(self.token.is_none())
                     .on_click(
                         cx.listener(|this, _, _, cx| this.knowledge_action(Action::List, cx)),
                     ),
             );
         if self.token.is_none() {
-            content = content.child("请先在个人聊天或本机服务面板连接本机服务。");
+            content =
+                content.child(card(cx).child(muted("先连接本机服务，即可创建和查看工作区。", cx)));
         }
         if self.knowledge.busy(|a| matches!(a, Action::List)) {
-            content = content.child("正在加载工作区…");
+            content = content.child(muted("正在加载工作区…", cx));
         } else if self.knowledge.workspaces.is_empty() {
-            content = content.child("还没有工作区，创建一个开始整理资料。");
+            content = content.child(
+                card(cx)
+                    .py_6()
+                    .flex()
+                    .flex_col()
+                    .items_center()
+                    .gap_3()
+                    .child(icon(IconName::Folder))
+                    .child("还没有工作区")
+                    .child(muted("输入名称，创建你的第一个知识空间。", cx)),
+            );
         }
         if let Some(error) = &self.knowledge.error {
-            content = content.child(div().child(error.clone()));
+            content = content.child(
+                card(cx)
+                    .border_color(cx.theme().danger)
+                    .child(error.clone()),
+            );
         }
         for workspace in &self.knowledge.workspaces {
             let item = workspace.clone();
@@ -73,30 +100,76 @@ impl ChatApp {
                 Button::new(SharedString::from(format!("workspace-{}", item.id)))
                     .ghost()
                     .w_full()
+                    .h(px(84.))
+                    .rounded(px(12.))
+                    .border_1()
+                    .border_color(cx.theme().border)
                     .child(
                         div()
                             .w_full()
                             .min_w_0()
-                            .text_ellipsis()
-                            .child(format!("{} · {} 份资料", item.name, item.document_count)),
+                            .flex()
+                            .items_center()
+                            .gap_4()
+                            .child(
+                                div()
+                                    .p_3()
+                                    .rounded_lg()
+                                    .bg(cx.theme().muted)
+                                    .child(icon(IconName::Folder)),
+                            )
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .flex()
+                                    .flex_col()
+                                    .gap_1()
+                                    .child(
+                                        div()
+                                            .text_size(px(16.))
+                                            .text_ellipsis()
+                                            .child(item.name.clone()),
+                                    )
+                                    .child(muted(
+                                        format!("{} 份资料 · 对话与笔记", item.document_count),
+                                        cx,
+                                    )),
+                            )
+                            .child(icon(IconName::ChevronRight)),
                     )
                     .on_click(cx.listener(move |this, _, window, cx| {
                         this.navigate(Destination::Workspace(item.clone()), window, cx)
                     })),
             );
         }
-        content
+        div()
+            .id("overview-scroll")
+            .test_support()
+            .flex_1()
+            .min_h_0()
+            .overflow_y_scroll()
+            .px_4()
+            .py_6()
+            .flex()
+            .flex_col()
+            .items_center()
+            .child(content)
     }
 
-    pub(super) fn render_confirm(&self, cx: &mut Context<Self>) -> Stateful<Div> {
+    pub(super) fn render_confirm(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let leaving = matches!(self.knowledge.confirm, Some(Confirm::Leave(_)));
         div()
             .id("knowledge-confirm")
             .flex_1()
             .min_w_0()
+            .min_h_0()
+            .overflow_y_scroll()
             .p_6()
             .flex()
             .flex_col()
+            .justify_center()
+            .items_center()
             .gap_4()
             .child(if leaving {
                 "笔记有未保存的修改"
@@ -147,10 +220,11 @@ impl ChatApp {
         &self,
         wide: bool,
         cx: &mut Context<Self>,
-    ) -> Stateful<Div> {
+    ) -> impl IntoElement + use<> {
         let panel = self.knowledge.panel.unwrap_or(Panel::Documents);
         let mut content = div()
             .id("knowledge-panel")
+            .test_support()
             .flex()
             .flex_col()
             .h_full()
@@ -158,6 +232,7 @@ impl ChatApp {
             .min_w_0()
             .p_4()
             .gap_3()
+            .bg(cx.theme().sidebar)
             .when(wide, |v| {
                 v.w(px(336.))
                     .flex_shrink_0()
@@ -165,28 +240,62 @@ impl ChatApp {
                     .border_color(cx.theme().border)
             })
             .when(!wide, |v| v.flex_1())
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .child(match panel {
-                        Panel::Documents => "工作区资料",
-                        Panel::Notes => "工作区笔记",
-                        Panel::Preview => "来源原文",
-                    })
-                    .child(
-                        Button::new("close-knowledge-panel")
-                            .ghost()
-                            .label("收起")
+            .when(wide, |v| {
+                v.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .child(match panel {
+                            Panel::Documents => "工作区资料",
+                            Panel::Notes => "工作区笔记",
+                            Panel::Preview => "来源原文",
+                        })
+                        .child(
+                            action("close-knowledge-panel", IconName::PanelRightClose, "收起")
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    this.knowledge.panel = None;
+                                    cx.notify();
+                                })),
+                        ),
+                )
+            });
+        content = content.child(
+            div()
+                .flex()
+                .gap_1()
+                .child(
+                    action("panel-documents", IconName::FileText, "资料")
+                        .selected(matches!(panel, Panel::Documents))
+                        .on_click(cx.listener(|v, _, _, cx| {
+                            v.knowledge.panel = Some(Panel::Documents);
+                            cx.notify();
+                        })),
+                )
+                .child(
+                    action("panel-notes", IconName::BookOpen, "笔记")
+                        .selected(matches!(panel, Panel::Notes))
+                        .on_click(cx.listener(|v, _, _, cx| {
+                            v.knowledge.panel = Some(Panel::Notes);
+                            cx.notify();
+                        })),
+                )
+                .when(!wide, |v| {
+                    v.child(div().flex_1()).child(
+                        action("close-knowledge-panel", IconName::PanelRightClose, "收起")
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.knowledge.panel = None;
                                 cx.notify();
                             })),
-                    ),
-            );
+                    )
+                }),
+        );
         if let Some(error) = &self.knowledge.error {
-            content = content.child(div().text_sm().child(error.clone()));
+            content = content.child(
+                card(cx)
+                    .border_color(cx.theme().danger)
+                    .child(muted(error.clone(), cx)),
+            );
         }
         let mut body = div()
             .id("knowledge-panel-scroll")
@@ -201,9 +310,7 @@ impl ChatApp {
             Panel::Documents => {
                 body =
                     body.child(
-                        Button::new("refresh-materials")
-                            .ghost()
-                            .label("刷新资料")
+                        action("refresh-materials", IconName::RotateCw, "刷新资料")
                             .disabled(self.knowledge.busy(|a| matches!(a, Action::Load)))
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.knowledge_action(Action::Load, cx)
@@ -224,7 +331,7 @@ impl ChatApp {
                         continue;
                     }
                     let path = upload.path.clone();
-                    let mut row = div()
+                    let mut row = card(cx)
                         .min_w_0()
                         .child(
                             div().text_ellipsis().child(
@@ -270,7 +377,22 @@ impl ChatApp {
                     body = body.child(row);
                 }
                 if self.knowledge.documents.is_empty() {
-                    body = body.child("还没有资料，使用顶栏“添加资料”选择文件。");
+                    body = body.child(
+                        card(cx)
+                            .flex()
+                            .flex_col()
+                            .gap_2()
+                            .child(icon(IconName::FileText))
+                            .child("添加第一份资料")
+                            .child(muted("支持文档、Excel 和 PPT，处理完成后即可提问。", cx))
+                            .child(
+                                action("panel-add-document", IconName::Plus, "添加资料")
+                                    .disabled(self.token.is_none())
+                                    .on_click(
+                                        cx.listener(|v, _, window, cx| v.pick_document(window, cx)),
+                                    ),
+                            ),
+                    );
                 }
                 for document in &self.knowledge.documents {
                     let id = document.id.clone();
@@ -278,16 +400,29 @@ impl ChatApp {
                     let delete_id = id.clone();
                     let retry_id = id.clone();
                     let ready = document.status == "completed";
-                    let mut row = div()
+                    let mut row = card(cx)
                         .flex()
                         .flex_col()
                         .min_w_0()
                         .gap_2()
-                        .border_b_1()
-                        .border_color(cx.theme().border)
-                        .pb_3()
-                        .child(div().text_ellipsis().child(document.file_name.clone()))
-                        .child(div().text_sm().child(status_label(&document.status)))
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap_2()
+                                .child(icon(IconName::FileText))
+                                .child(
+                                    div()
+                                        .min_w_0()
+                                        .text_ellipsis()
+                                        .child(document.file_name.clone()),
+                                ),
+                        )
+                        .child(
+                            div()
+                                .flex()
+                                .child(badge(status_label(&document.status), cx)),
+                        )
                         .child(
                             div()
                                 .flex()
@@ -364,11 +499,13 @@ impl ChatApp {
                 let saving = self
                     .knowledge
                     .busy(|a| matches!(a, Action::SaveNote { .. } | Action::DeleteNote(_)));
-                body = body.child(Button::new("new-note").ghost().label("新建笔记").on_click(
-                    cx.listener(|this, _, window, cx| {
-                        this.navigate(Destination::Note(None), window, cx)
-                    }),
-                ));
+                body =
+                    body.child(muted("记录想法与结论，笔记不会自动加入问答资料。", cx))
+                        .child(action("new-note", IconName::Plus, "新建笔记").on_click(
+                            cx.listener(|this, _, window, cx| {
+                                this.navigate(Destination::Note(None), window, cx)
+                            }),
+                        ));
                 for note in &self.knowledge.notes {
                     let note = note.clone();
                     body =
@@ -390,15 +527,27 @@ impl ChatApp {
                         );
                 }
                 body = body
+                    .child(muted("标题", cx))
                     .child(
-                        div()
-                            .id("note-title")
-                            .test_support()
-                            .child(Textarea::new(&self.knowledge.note_title).disabled(saving)),
+                        div().id("note-title").test_support().child(
+                            Textarea::new(&self.knowledge.note_title)
+                                .aria_label("笔记标题")
+                                .h(px(40.))
+                                .disabled(saving),
+                        ),
                     )
+                    .child(muted(
+                        if self.knowledge.dirty(cx) {
+                            "正文 · 未保存"
+                        } else {
+                            "正文"
+                        },
+                        cx,
+                    ))
                     .child(
                         div().id("note-content").test_support().child(
                             Textarea::new(&self.knowledge.note_content)
+                                .aria_label("笔记正文")
                                 .disabled(saving)
                                 .h(px(220.)),
                         ),
@@ -491,7 +640,16 @@ impl ChatApp {
             row = row.child(
                 Button::new(SharedString::from(format!("citation-{key}-{index}")))
                     .ghost()
-                    .label(format!("[{}] {}", index + 1, citation.doc_name))
+                    .icon(icon(IconName::FileText))
+                    .max_w_full()
+                    .tooltip(citation.doc_name.clone())
+                    .child(
+                        div()
+                            .min_w_0()
+                            .text_ellipsis()
+                            .text_size(px(12.))
+                            .child(format!("[{}] {}", index + 1, citation.doc_name)),
+                    )
                     .disabled(citation.tombstone || doc.is_empty())
                     .on_click(
                         cx.listener(move |this, _, _, cx| this.preview_document(doc.clone(), cx)),

@@ -56,7 +56,11 @@
 | D4 | BYOK、角色、云登录、钱包、Publish | 未开始 |
 | D5 | updater、深链、单实例、浏览器打开、MCP/CLI | 未开始 |
 
-2026-09-10 D3.2 前置门：发现 Windows 简化解析器缺少 Excel/PPT 支持，改为打包后端已有 AnyDoc。9 项真实 CLI 解析、73 项共享/无头回归及独立 Windows 程序构建通过。完整 worker 入库、嵌入、RAG 和安装升级仍待验证；[Office 解析包证据](2026-09-10-gpui-office-parser-acceptance.md)。
+2026-09-10 D3.2 前置门：发现 Windows 简化解析器缺少 Excel/PPT 支持，改为打包后端已有 AnyDoc。9 项真实 CLI 解析、73 项共享/无头回归及独立 Windows 程序构建通过；[Office 解析包证据](2026-09-10-gpui-office-parser-acceptance.md)。
+
+2026-09-10 D3.2 后续真实门（覆盖上表 D3 的早期“真实入库/RAG 待验”状态）：修复 Windows 原生 DuckDB、PPTX 校验和目录写入后，87 项原生定向测试通过，真实旅程 1 条/13 步通过：DOCX/XLSX/PPTX 上传与 worker 入库、正文/目录回读、3 次限定文档 RAG 与引用、计量/扣费/审计和清理。结论限 Windows 三份合成办公文件；其余知识能力、安装升级与三平台对等仍待验。[完整证据](2026-09-10-gpui-office-rag-acceptance.md)，提交 `6387bf93`。
+
+2026-09-10 UI 收口：公共壳、聊天、工作区资料/笔记与服务面板完成本批实施。78 项共享/无头测试通过，24 张原生 DirectX 截图生成；六类页面各复核桌面/窄屏一张，中文句号窄屏单独换行列为非阻断余项。用户未逐项确认本次视觉，D4–D6 状态不变。[本批计划](../plans/2026-09-10-gpui-ui-finish.md) · [测试、原生截图及产物](2026-09-10-gpui-ui-finish-acceptance.md)。
 
 ## D6 三平台验收
 

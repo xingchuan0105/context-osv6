@@ -13,6 +13,7 @@ use web_sdk::TurnStatus;
 mod fixture;
 mod knowledge_fixture;
 mod knowledge_tests;
+mod presentation_tests;
 use fixture::Fixture;
 
 struct Harness {
@@ -31,7 +32,9 @@ impl Harness {
             .open_window(size(px(width), px(height)), |window, cx| {
                 let app = cx.new(|cx| ChatApp::new(window, cx));
                 view = Some(app.clone());
-                Root::new(app, window, cx)
+                app.update(cx, |v, _| v.preferences = Default::default());
+                let surface = cx.new(|cx| crate::ui::Surface::new(app, cx));
+                Root::new(surface, window, cx)
             })
             .into();
         let harness = Self {
@@ -251,7 +254,13 @@ fn chat_layout_keeps_controls_inside_short_and_narrow_windows(cx: &mut TestAppCo
     let h = Harness::new(cx, 1280., 720.);
     h.connect(cx);
     for mode in [ThemeMode::Light, ThemeMode::Dark] {
-        for (width, height) in [(1440., 900.), (1280., 720.), (768., 600.), (640., 480.)] {
+        for (width, height) in [
+            (1440., 900.),
+            (1280., 720.),
+            (768., 600.),
+            (640., 480.),
+            (390., 720.),
+        ] {
             cx.simulate_window_resize(h.window, size(px(width), px(height)));
             h.frame(cx, |window, cx| Theme::change(mode, Some(window), cx));
             for long in [false, true] {

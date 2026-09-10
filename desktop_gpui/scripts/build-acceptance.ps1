@@ -1,8 +1,10 @@
-param([string]$Workspace = 'C:\dev\context-osv6')
+param([string]$Workspace = 'C:\dev\context-osv6', [switch]$VisualPreview)
 $ErrorActionPreference = 'Stop'
 $project = Join-Path ([IO.Path]::GetFullPath($Workspace)) 'desktop_gpui'
 $target = Join-Path $project 'target'
 $name = 'desktop-gpui-acceptance-' + (Get-Date -Format 'yyyyMMdd-HHmmss')
+$features = if ($VisualPreview) { 'headless-tests' } else { 'ui' }
+if ($VisualPreview) { $name = $name.Replace('-acceptance-', '-visual-') }
 $runDir = Join-Path $target ('acceptance\build\' + $name)
 New-Item -ItemType Directory -Path $runDir | Out-Null
 $manifestPath = Join-Path $project 'Cargo.toml'
@@ -25,9 +27,10 @@ $liveBinary = Join-Path $target 'debug\desktop-gpui.exe'
 $before = if (Test-Path -LiteralPath $liveBinary) { (Get-FileHash -LiteralPath $liveBinary).Hash } else { $null }
 $previousJobs = $env:CARGO_BUILD_JOBS
 $started = Get-Date
+Push-Location $project
 try {
     $env:CARGO_BUILD_JOBS = '2'
-    & cargo build --locked --manifest-path (Join-Path $runDir 'Cargo.toml') --target-dir $target --features ui --bin $name *> (Join-Path $runDir 'build.log')
+    & cargo build --locked --manifest-path (Join-Path $runDir 'Cargo.toml') --target-dir $target --features $features --bin $name *> (Join-Path $runDir 'build.log')
     if ($LASTEXITCODE -ne 0) { throw "Build failed; see $runDir\build.log" }
     $artifact = Join-Path $target ("debug\$name.exe")
     if (-not (Test-Path -LiteralPath $artifact)) { throw 'Build did not produce the acceptance executable.' }
@@ -40,9 +43,11 @@ try {
         ok = $true; artifact = $artifact; sha256 = (Get-FileHash -LiteralPath $artifact).Hash
         seconds = [math]::Round(((Get-Date) - $started).TotalSeconds, 2)
         sourceHashes = $hashes; developmentBinaryUnchanged = $true
-        note = 'Production ui feature; actual source and lockfile; acceptance manifest only changes source paths and binary name. Not launched.'
+        features = $features
+        note = 'Actual source and lockfile; acceptance manifest only changes source paths and binary name. Not launched. headless-tests artifacts are for test-only visual capture.'
     } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $runDir 'result.json') -Encoding utf8
     Get-Content -LiteralPath (Join-Path $runDir 'result.json')
 } finally {
     $env:CARGO_BUILD_JOBS = $previousJobs
+    Pop-Location
 }
