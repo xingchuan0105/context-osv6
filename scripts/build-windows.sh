@@ -110,10 +110,17 @@ if not skip_sidecars:
         resources["../runtime/bin/python"] = "python/"
     else:
         print("build-windows: warning: runtime/bin/python not staged; sandbox bridge will fall back to PATH probing", file=sys.stderr)
-    # Stdlib-only document parsers driven by the bundled python (MARKITDOWN_BIN /
-    # ANYDOC_BIN written into client.env by native_stack when present).
-    if (desktop / "runtime/parsers/markitdown-lite.cmd").is_file():
-        resources["../runtime/parsers"] = "runtime/parsers"
+    # Text wrapper and pinned anydoc package use the bundled Python. A package
+    # without the Office dependency must fail during packaging, not after upload.
+    office_files = (
+        "runtime/bin/python/anydoc/_anydoc.pyd",
+        "runtime/bin/python/anydoc_extract/main.py",
+        "runtime/parsers/anydoc-extract.cmd",
+        "runtime/parsers/anydoc-package.json",
+    )
+    if not all((desktop / file).is_file() for file in office_files):
+        raise SystemExit("build-windows: Office parser not staged; run stage-desktop-sidecars.sh")
+    resources["../runtime/parsers"] = "runtime/parsers"
     if not (desktop / "runtime/parsers/lit/lit.exe").is_file():
         print("build-windows: note: runtime/parsers/lit not staged; PDF ingest will report 'lit CLI' missing on the client", file=sys.stderr)
     # Agent-loop runtime assets: avrag-api/worker load modes/*.yaml + prompts/*.md

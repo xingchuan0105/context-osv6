@@ -219,6 +219,13 @@ if [[ "$IS_WINDOWS_TRIPLE" == "1" ]]; then
   }
   stage_python_bundle
 
+  # Office uses the same backend library, including Excel/PowerPoint support.
+  # Staging verifies the pinned wheel; embedded Python needs no pip at runtime.
+  python3 "$ROOT/scripts/stage-desktop-office.py" \
+    --python-dir "$RUNTIME_BIN/python" \
+    --parsers-dir "$ROOT/desktop/runtime/parsers" \
+    || die "Windows Office parser staging failed"
+
   # liteparse CLI (lit.exe) + pdfium.dll → runtime/parsers/lit/ (PDF ingest;
   # native_stack writes LITEPARSE_BIN into client.env when lit.exe is present).
   stage_lit_parser() {

@@ -133,11 +133,15 @@ test-only `E2E_ENABLED=true` (disables local HTTP rate limiting) and a
 temporary `BYOK_MASTER_KEY` so the provider-secret route can encrypt a dummy row.
 
 Document parsing is provisioned by the install tree itself: `runtime/parsers/`
-ships stdlib-only `markitdown-lite` / `anydoc-lite` wrappers driven by the
-bundled Python, plus `runtime/parsers/lit/` (cross-built `lit.exe` +
+ships the stdlib `markitdown-lite` text wrapper and `anydoc-extract` using the
+backend's pinned `firecrawl-anydoc` Windows wheel in bundled Python, plus
+`runtime/parsers/lit/` (cross-built `lit.exe` +
 `pdfium.dll`) for the PDF route. The desktop shell writes `MARKITDOWN_BIN` /
 `ANYDOC_BIN` / `LITEPARSE_BIN` into `client.env` when they are present. No
-host-side parser install is needed for text/office/PDF ingest.
+host-side parser install is needed. `scripts/stage-desktop-office.py` verifies
+the Office wheel SHA256 and records the package/wrapper identity. The previous
+`anydoc-lite` only handled DOCX/CSV; it did not support Excel/PowerPoint.
+Office parsing, full ingestion and real RAG are separate acceptance gates.
 
 Optional timeout overrides:
 

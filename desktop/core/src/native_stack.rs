@@ -508,9 +508,9 @@ fn write_client_env(
     let mig = migrations
         .map(|p| p.display().to_string())
         .unwrap_or_default();
-    // Bundled parser shims (install tree `runtime/parsers/`, dev tree
-    // `desktop/runtime/parsers/`): stdlib-only parsers driven by the bundled
-    // python, so text/office ingest works without a host-provided markitdown.
+    // Bundled parsers (install tree `runtime/parsers/`, dev tree
+    // `desktop/runtime/parsers/`): text wrapper plus the same anydoc library
+    // as the backend, driven by isolated embedded Python.
     // Windows-only: the shims are .cmd wrappers; other platforms keep the
     // ingestion defaults (PATH probing).
     let mut parsers_env = String::new();
@@ -518,7 +518,7 @@ fn write_client_env(
         if let Some(bins_rt) = bins_runtime_home() {
             let dir = bins_rt.join("parsers");
             let md = dir.join("markitdown-lite.cmd");
-            let ad = dir.join("anydoc-lite.cmd");
+            let ad = dir.join("anydoc-extract.cmd");
             // Cross-built liteparse CLI; pdfium.dll sits next to lit.exe and is
             // found by liteparse-pdfium-sys runtime search (exe dir rule).
             let lit = dir.join("lit").join("lit.exe");
