@@ -41,8 +41,10 @@
 
 | # | 能力 | 状态 | 证据 |
 |---|---|---|---|
-| D1.1 | gpui-kit 依赖锁定 rev / 窗口 / composer / 中文 IME（真实输入无重复字） | Windows 构建、原生窗口与 composer 已验证；中文 IME 候选/组字待验 | [2026-09-09 D1](../plans/2026-09-09-gpui-chat-task.md)；[09-10 用户窗口验收](2026-09-10-windows-big-object-build.md) |
+| D1.1 | gpui-kit 依赖锁定 rev / 窗口 / composer / 中文 IME（真实输入无重复字） | 验证(win)：构建通过；原生窗口、composer 及中文 IME 候选/组字经用户确认 | [2026-09-09 D1](../plans/2026-09-09-gpui-chat-task.md)；[09-10 用户窗口验收](2026-09-10-windows-big-object-build.md) |
 | D1.2 | 共享 reducer 流式显示、local session 真 API、停止、历史（独立验收 API 127.0.0.1:18082） | 验证(win)：真实回答、流式、停止保留正文、停止后续聊、切换会话恢复均经用户确认 | [共享套件验收](2026-09-09-gpui-tauri-suite-acceptance.md) 31 项通过；[09-10 真实接口及用户窗口证据](2026-09-10-windows-big-object-build.md)。不包含客户端重启恢复或服务端模型取消的验证 |
+
+2026-09-10：D1 Windows 基础聊天验收通过。Markdown 渲染、会话名称仍待修复，完整视觉与客户端对等未验收；D2–D6 状态不变，Tauri 保留。
 
 ## D2–D5 桌面对等
 
