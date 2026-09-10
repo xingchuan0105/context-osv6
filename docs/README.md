@@ -63,7 +63,8 @@
 
 ## 待评审设计
 
-- [仓库树独立版 PRD v0.2](plans/2026-09-10-repository-tree-prd-v0.2.md) — 2026-09-10：脱离大项目背景的功能与性能设计；Python 编排、LanceDB/SQLite 独立选型、解析与精排前移、发布快照与评测门；待原型验证。
+- [仓库树产品 PRD v0.3](plans/2026-09-10-repository-tree-prd-v0.3.md) — 2026-09-10：规则驱动的新文档归档；物理目录/分类元数据作为第一层索引，原文树与 chunk 顺序支持阅读，向量主题作为补充；待原型验证。
+- [仓库树独立版 PRD v0.2（前序方案）](plans/2026-09-10-repository-tree-prd-v0.2.md) — 独立技术选型、发布快照、chunk 顺序与续读契约；v0.3 将自动归档从非目标提升为核心功能，本稿保留供对照。
 - [仓库树 PRD 独立技术评审](reviews/2026-09-10-repository-tree-prd-independent-review.md) — 11 项发现、SVD 评分退化推导、开源组件对比与 v0.2 修订依据。
 - [Subtex 仓库树 PRD v0.1（前序集成方案）](plans/2026-09-10-subtex-repository-tree-prd.md) — 原稿保留供评审对照；其项目复用选型不构成 v0.2 独立技术决策。
 
