@@ -39,7 +39,7 @@ try {
     $ignored = if ($match.Success) { [int]$match.Groups[4].Value } else { 0 }
     $ok = $exitCode -eq 0 -and $match.Success -and $passed -gt 0 -and $failed -eq 0 -and $ignored -eq 0
     $hashes = [ordered]@{}
-    foreach ($file in @('Cargo.lock', 'src/main.rs', 'src/service_view.rs', 'src/ui_tests.rs', 'src/ui_tests/fixture.rs', 'src/runtime.rs', 'src/services.rs', '../desktop/core/src/local_product.rs', '../desktop/core/src/local_stack.rs', '../desktop/core/src/native_stack.rs', '../desktop/core/src/process_deadline.rs', '../desktop/core/src/runtime_lease.rs', '../desktop/core/src/runtime_ports.rs', '../desktop/core/src/win_cmd.rs')) {
+    foreach ($file in @('Cargo.lock', 'src/main.rs', 'src/service_view.rs', 'src/ui_tests.rs', 'src/ui_tests/fixture.rs', 'src/ui_tests/knowledge_fixture.rs', 'src/ui_tests/knowledge_tests.rs', 'src/runtime.rs', 'src/services.rs', 'src/session.rs', 'src/workspace.rs', 'src/knowledge_view.rs', 'src/knowledge_render.rs', '../desktop/core/src/api_proxy.rs', '../desktop/core/src/local_product.rs', '../desktop/core/src/local_stack.rs', '../desktop/core/src/native_stack.rs', '../desktop/core/src/process_deadline.rs', '../desktop/core/src/runtime_lease.rs', '../desktop/core/src/runtime_ports.rs', '../desktop/core/src/win_cmd.rs')) {
         $hashes[$file] = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $project $file)).Hash
     }
     [ordered]@{

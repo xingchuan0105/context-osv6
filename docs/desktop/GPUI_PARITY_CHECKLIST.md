@@ -52,7 +52,7 @@
 | # | 能力 | 状态 |
 |---|---|---|
 | D2 | 栈状态、启动迁移、进程/日志、退出收摊 UI（S0–S6，不依赖预装 Docker） | 验证(win)：共享/无头 60 项通过；真实 PG/Redis 4 步及迁移/API/worker/本机会话 8 步通过，S2/S6 启动失败恢复、超时中退出、进程归属和清理自动门关闭。无需逐项人工确认；GPU 像素、系统文件管理器与 macOS/Linux 待验。[接线证据](2026-09-10-gpui-services.md) · [无头 UI](2026-09-10-gpui-headless-acceptance.md) · [受管进程 E2E](2026-09-10-gpui-managed-acceptance.md) |
-| D3 | Workspace、文件、入库、引用、会话与笔记 | 未开始 |
+| D3 | Workspace、文件、入库、引用、会话与笔记 | 部分验证(win)：工作区总览/创建、作用域会话、文件上传/状态、引用原文、笔记及草稿保护已实现。52 项共享核心/聊天/HTTP、17 项无头 UI（含 8 项工作区旅程）及独立 Windows 生产 UI 构建通过；真实解析/嵌入/RAG、其余知识能力和 macOS/Linux 待验，不标记全量完成。[D3 任务](../plans/2026-09-10-gpui-workspace-task.md) · [自动验收](2026-09-10-gpui-workspace-acceptance.md) |
 | D4 | BYOK、角色、云登录、钱包、Publish | 未开始 |
 | D5 | updater、深链、单实例、浏览器打开、MCP/CLI | 未开始 |
 

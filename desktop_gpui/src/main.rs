@@ -22,6 +22,10 @@ use web_sdk::TurnStatus;
 
 mod markdown_view;
 mod service_view;
+mod knowledge_view;
+mod knowledge_render;
+use knowledge_view::{Knowledge, Destination, Panel};
+use desktop_gpui::workspace::Action as KnowledgeAction;
 #[cfg(all(test, feature = "headless-tests"))]
 mod ui_tests;
 
@@ -42,6 +46,7 @@ struct ChatApp {
     show_services: bool,
     exiting: bool,
     exit_ready: bool,
+    knowledge: Knowledge,
 }
 
 impl ChatApp {
@@ -52,11 +57,12 @@ impl ChatApp {
                 .rows(3)
                 .placeholder("输入问题…")
         });
-        cx.spawn(async move |this, cx| {
+        let knowledge = Knowledge::new(window, cx);
+        cx.spawn_in(window, async move |this, cx| {
             while let Some(update) = updates.next().await {
                 if this
-                    .update(cx, |this, cx| {
-                        this.apply(update, cx);
+                    .update_in(cx, |this, window, cx| {
+                        this.apply(update, window, cx);
                         cx.notify();
                     })
                     .is_err()
@@ -66,6 +72,12 @@ impl ChatApp {
             }
         })
         .detach();
+        cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor().timer(std::time::Duration::from_secs(3)).await;
+                if this.update(cx, |this, cx| this.poll_documents(cx)).is_err() { break; }
+            }
+        }).detach();
         let weak = cx.entity().downgrade();
         window.on_window_should_close(cx, move |_, cx| {
             weak.update(cx, |this, cx| {
@@ -98,10 +110,11 @@ impl ChatApp {
             show_services: false,
             exiting: false,
             exit_ready: false,
+            knowledge,
         }
     }
 
-    fn apply(&mut self, update: Update, cx: &mut Context<Self>) {
+    fn apply(&mut self, update: Update, window: &mut Window, cx: &mut Context<Self>) {
         match update {
             Update::ServicePhase(phase) => {
                 if !self.exiting && self.services.phase != Phase::Stopping {
@@ -161,7 +174,9 @@ impl ChatApp {
                             self.services.phase = Phase::Ready;
                             self.services.error = None;
                             self.notice = "本地会话已连接".into();
-                            self.host.sessions(token.clone());
+                            self.host.sessions(token.clone(), self.knowledge.scope());
+                            if self.knowledge.overview { self.knowledge_action(KnowledgeAction::List, cx); }
+                            if self.knowledge.active.is_some() { self.knowledge_action(KnowledgeAction::Load, cx); }
                         } else {
                             self.notice = "本地会话未返回凭据，请重试".into();
                             self.services.phase = Phase::Failed;
@@ -175,7 +190,8 @@ impl ChatApp {
                     }
                 }
             }
-            Update::Sessions(result) => match result {
+            Update::Workspace(reply) => self.apply_knowledge(reply, window, cx),
+            Update::Sessions(scope, result) if scope == self.knowledge.scope() => match result {
                 Ok(sessions) => {
                     self.sessions = sessions;
                     self.title_error = None;
@@ -194,11 +210,7 @@ impl ChatApp {
                 self.loading = false;
                 match result {
                     Ok(messages) => {
-                        self.conversation.messages = messages
-                            .into_iter()
-                            .filter(|m| m.role == "user" || m.role == "assistant")
-                            .map(|m| (m.role, m.content))
-                            .collect();
+                        self.conversation.restore(messages);
                         self.notice = "历史已恢复".into();
                     }
                     Err(error) => self.notice = format!("历史加载失败：{error}；点击会话重试"),
@@ -222,7 +234,7 @@ impl ChatApp {
                     };
                 }
                 if let Some(token) = &self.token {
-                    self.host.sessions(token.clone());
+                    self.host.sessions(token.clone(), self.knowledge.scope());
                 }
             }
             _ => {}
@@ -253,6 +265,8 @@ impl ChatApp {
             token,
             query,
             self.conversation.session_id.clone(),
+            self.knowledge.scope(),
+            self.knowledge.selected.iter().cloned().collect(),
             generation,
         ));
         self.scroll.scroll_to_bottom();
@@ -289,6 +303,11 @@ impl ChatApp {
     }
 
     fn request_exit(&mut self, cx: &mut Context<Self>) {
+        if self.knowledge.dirty(cx) {
+            self.knowledge.confirm = Some(knowledge_view::Confirm::Leave(Destination::Exit));
+            cx.notify();
+            return;
+        }
         if self.exiting {
             return;
         }
@@ -305,7 +324,8 @@ impl Drop for ChatApp {
 }
 
 impl Render for ChatApp {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let wide = window.viewport_size().width >= px(1100.);
         let streaming = self.conversation.turn.status == TurnStatus::Streaming;
         let empty = self.conversation.messages.is_empty()
             && self.conversation.turn.answer_text.is_empty()
@@ -321,7 +341,7 @@ impl Render for ChatApp {
             .id("sidebar")
             .flex()
             .flex_col()
-            .w(px(248.))
+            .w(px(if window.viewport_size().width < px(900.) { 148. } else { 248. }))
             .flex_shrink_0()
             .h_full()
             .p_4()
@@ -329,15 +349,22 @@ impl Render for ChatApp {
             .border_r_1()
             .border_color(cx.theme().border)
             .child(div().text_lg().child("Context-OS"))
+            .child(Button::new("personal-nav").ghost().label("个人聊天")
+                .selected(!self.knowledge.overview && self.knowledge.active.is_none())
+                .on_click(cx.listener(|this, _, window, cx| this.navigate(Destination::Personal, window, cx))))
+            .child(Button::new("workspaces-nav").ghost().label("工作区")
+                .selected(self.knowledge.overview || self.knowledge.active.is_some())
+                .on_click(cx.listener(|this, _, window, cx| this.navigate(Destination::Overview, window, cx))))
             .child(
                 Button::new("new-chat")
-                    .label("新对话")
+                    .label(if self.knowledge.active.is_some() { "工作区新对话" } else { "新对话" })
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.stop();
                         this.loading = false;
                         this.conversation.reset(None);
                         this.notice.clear();
                         this.show_services = false;
+                        this.knowledge.overview = false;
                         cx.notify();
                     })),
             )
@@ -345,7 +372,7 @@ impl Render for ChatApp {
                 div()
                     .text_sm()
                     .text_color(cx.theme().muted_foreground)
-                    .child("个人聊天 · 历史会话"),
+                    .child(if self.knowledge.active.is_some() { "工作区 · 历史会话" } else { "个人聊天 · 历史会话" }),
             );
         if let Some(error) = &self.title_error {
             sidebar = sidebar.child(
@@ -356,7 +383,7 @@ impl Render for ChatApp {
                         .tooltip(error.clone())
                         .on_click(cx.listener(|this, _, _, _| {
                             if let Some(token) = &this.token {
-                                this.host.sessions(token.clone());
+                                this.host.sessions(token.clone(), this.knowledge.scope());
                             }
                         })),
                 ),
@@ -397,6 +424,10 @@ impl Render for ChatApp {
                     })),
             );
         }
+        if self.knowledge.confirm.is_some() {
+            return div().flex().size_full().bg(cx.theme().background).text_color(cx.theme().foreground)
+                .child(sidebar.overflow_y_scroll()).child(self.render_confirm(cx));
+        }
         if self.show_services {
             return div()
                 .flex()
@@ -405,6 +436,14 @@ impl Render for ChatApp {
                 .text_color(cx.theme().foreground)
                 .child(sidebar.overflow_y_scroll())
                 .child(self.render_services(cx));
+        }
+        if self.knowledge.overview {
+            return div().flex().size_full().bg(cx.theme().background).text_color(cx.theme().foreground)
+                .child(sidebar.overflow_y_scroll()).child(self.render_overview(cx));
+        }
+        if !wide && self.knowledge.panel.is_some() {
+            return div().flex().size_full().bg(cx.theme().background).text_color(cx.theme().foreground)
+                .child(sidebar.overflow_y_scroll()).child(self.render_knowledge_panel(false, cx));
         }
         let mut messages = div()
             .id("messages")
@@ -428,6 +467,9 @@ impl Render for ChatApp {
                 role,
                 text,
             ));
+            if let Some(citations) = self.conversation.citations.get(&index) {
+                messages = messages.child(self.citation_row(&format!("history-{index}"), citations, cx));
+            }
         }
         if !self.conversation.turn.answer_text.is_empty() {
             messages = messages.child(render_message(
@@ -435,6 +477,8 @@ impl Render for ChatApp {
                 "assistant",
                 &self.conversation.turn.answer_text,
             ));
+            let citations = self.conversation.turn.citations.iter().map(web_sdk::CitationView::from_value).collect::<Vec<_>>();
+            messages = messages.child(self.citation_row("current", &citations, cx));
         }
         if self.loading {
             messages = messages.child(
@@ -449,9 +493,11 @@ impl Render for ChatApp {
                     .w_full()
                     .max_w(px(760.))
                     .pb_6()
-                    .child(div().text_2xl().mb_3().child("今天想聊些什么？"))
+                    .child(div().text_2xl().mb_3().child(if self.knowledge.active.is_some() { "围绕资料开始提问" } else { "今天想聊些什么？" }))
                     .child(div().text_color(cx.theme().muted_foreground).child(
-                        if self.token.is_some() {
+                        if self.knowledge.active.is_some() {
+                            "添加资料后在此提问。笔记单独保存，不会自动加入检索资料。"
+                        } else if self.token.is_some() {
                             "提一个问题，或继续左侧的历史对话。"
                         } else {
                             "连接本机服务后，即可开始聊天并恢复历史记录。"
@@ -491,6 +537,7 @@ impl Render for ChatApp {
                     .on_click(cx.listener(|this, _, window, cx| this.send(window, cx))),
             );
         }
+        let panel = if wide && self.knowledge.panel.is_some() { Some(self.render_knowledge_panel(true, cx)) } else { None };
         div()
             .flex()
             .size_full()
@@ -506,13 +553,19 @@ impl Render for ChatApp {
                     .h_full()
                     .child(
                         div()
-                            .h(px(52.))
+                            .min_h(px(52.))
                             .flex_shrink_0()
                             .px_4()
                             .flex()
+                            .flex_wrap()
+                            .gap_2()
                             .items_center()
                             .justify_between()
-                            .child("个人聊天")
+                            .child(div().min_w_0().text_ellipsis().child(self.knowledge.active.as_ref().map(|w| w.name.clone()).unwrap_or_else(|| "个人聊天".into())))
+                            .when(self.knowledge.active.is_some(), |header| header.child(div().flex().flex_wrap().gap_1()
+                                .child(Button::new("workspace-documents").ghost().label("资料").on_click(cx.listener(|this, _, _, cx| { this.knowledge.panel = Some(Panel::Documents); cx.notify(); })))
+                                .child(Button::new("workspace-notes").ghost().label("笔记").on_click(cx.listener(|this, _, _, cx| { this.knowledge.panel = Some(Panel::Notes); cx.notify(); })))
+                                .child(Button::new("add-workspace-document").ghost().label("添加资料").disabled(self.token.is_none()).on_click(cx.listener(|this, _, window, cx| this.pick_document(window, cx))))))
                             .child(
                                 Button::new("local-services")
                                     .ghost()
@@ -568,6 +621,7 @@ impl Render for ChatApp {
                     )
                     .when(empty, |content| content.child(div().flex_1())),
             )
+            .children(panel)
     }
 }
 

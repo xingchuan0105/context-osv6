@@ -8,6 +8,7 @@ pub struct Conversation {
     pub session_id: Option<String>,
     pub messages: Vec<(String, String)>,
     pub turn: ChatTurnState,
+    pub citations: std::collections::BTreeMap<usize, Vec<web_sdk::CitationView>>,
 }
 
 impl Conversation {
@@ -16,6 +17,7 @@ impl Conversation {
             return None;
         }
         if !self.turn.answer_text.is_empty() {
+            self.citations.insert(self.messages.len(), self.turn.citations.iter().map(web_sdk::CitationView::from_value).collect());
             self.messages
                 .push(("assistant".into(), self.turn.answer_text.clone()));
         }
@@ -48,8 +50,19 @@ impl Conversation {
         self.generation += 1;
         self.session_id = session_id;
         self.messages.clear();
+        self.citations.clear();
         self.turn = ChatTurnState::default();
         self.generation
+    }
+
+    pub fn restore(&mut self, messages: Vec<contracts::chat::ChatMessage>) {
+        self.messages.clear();
+        self.citations.clear();
+        for message in messages.into_iter().filter(|m| m.role == "user" || m.role == "assistant") {
+            let citations = message.citations.iter().filter_map(|c| serde_json::to_value(c).ok()).map(|v| web_sdk::CitationView::from_value(&v)).collect();
+            self.citations.insert(self.messages.len(), citations);
+            self.messages.push((message.role, message.content));
+        }
     }
 }
 

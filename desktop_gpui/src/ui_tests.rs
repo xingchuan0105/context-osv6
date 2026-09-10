@@ -11,6 +11,8 @@ use std::{
 use web_sdk::TurnStatus;
 
 mod fixture;
+mod knowledge_fixture;
+mod knowledge_tests;
 use fixture::Fixture;
 
 struct Harness {

@@ -95,6 +95,7 @@ fn shared_fixture_streams_before_completion_and_preserves_personal_scope() {
         "synthetic".into(),
         "中文问题".into(),
         Some("sess-100".into()),
+        None, vec![],
         generation,
     );
     while conversation.turn.answer_text.is_empty() {
@@ -136,7 +137,7 @@ fn upstream_configuration_error_reaches_host_instead_of_hanging() {
         write!(socket, "HTTP/1.1 503 Service Unavailable\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
     });
     let (host, mut updates) = Host::new().unwrap();
-    let _cancel = host.chat_at(base, "synthetic".into(), "ping".into(), None, 9);
+    let _cancel = host.chat_at(base, "synthetic".into(), "ping".into(), None, None, vec![], 9);
     match next(&host, &mut updates) {
         Update::End(9, Err(error)) => assert!(error.contains("LLM client is not configured")),
         _ => panic!("configuration error was lost"),
@@ -150,7 +151,7 @@ fn unavailable_local_api_reaches_host_as_error() {
     let base = format!("http://{}", listener.local_addr().unwrap());
     drop(listener);
     let (host, mut updates) = Host::new().unwrap();
-    let _cancel = host.chat_at(base, "synthetic".into(), "ping".into(), None, 3);
+    let _cancel = host.chat_at(base, "synthetic".into(), "ping".into(), None, None, vec![], 3);
     assert!(matches!(next(&host, &mut updates), Update::End(3, Err(_))));
 }
 
@@ -294,9 +295,9 @@ fn local_session_and_history_over_http() {
     assert!(session.ready);
     let token = session.token.unwrap();
     assert!(dir.join("local_session.json").is_file());
-    host.sessions(token.clone());
+    host.sessions(token.clone(), None);
     match next(&host, &mut updates) {
-        Update::Sessions(Ok(sessions)) => {
+        Update::Sessions(None, Ok(sessions)) => {
             assert_eq!(
                 sessions.len(),
                 2,
@@ -314,9 +315,9 @@ fn local_session_and_history_over_http() {
         }
         _ => panic!("missing title was not persisted"),
     }
-    host.sessions(token.clone());
+    host.sessions(token.clone(), None);
     match next(&host, &mut updates) {
-        Update::Sessions(Ok(sessions)) => {
+        Update::Sessions(None, Ok(sessions)) => {
             assert_eq!(sessions[0].title.as_deref(), Some("首条中文问题"));
             assert_eq!(sessions[1].title.as_deref(), Some("自定标题"));
         }

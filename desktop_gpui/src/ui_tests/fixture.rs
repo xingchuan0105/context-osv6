@@ -5,7 +5,7 @@ use std::{
     net::{TcpListener, TcpStream},
     sync::{
         Arc, Mutex,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
     },
     thread::{self, JoinHandle},
     time::Duration,
@@ -16,6 +16,9 @@ pub struct Fixture {
     pub hold_auth: Arc<AtomicBool>,
     pub finish_stream: Arc<AtomicBool>,
     pub requests: Arc<Mutex<Vec<(String, Value)>>>,
+    pub knowledge: Arc<Mutex<super::knowledge_fixture::KnowledgeFixture>>,
+    pub hold_notes: Arc<AtomicBool>,
+    pub waiting_notes: Arc<AtomicUsize>,
     stop: Arc<AtomicBool>,
     server: Option<JoinHandle<()>>,
 }
@@ -55,11 +58,17 @@ impl Fixture {
         let finish_stream = Arc::new(AtomicBool::new(false));
         let stop = Arc::new(AtomicBool::new(false));
         let requests = Arc::new(Mutex::new(Vec::new()));
+        let knowledge = Arc::new(Mutex::new(super::knowledge_fixture::KnowledgeFixture::new()));
+        let knowledge_server = knowledge.clone();
+        let hold_notes = Arc::new(AtomicBool::new(false));
+        let waiting_notes = Arc::new(AtomicUsize::new(0));
         let flags = (
             healthy.clone(),
             hold_auth.clone(),
             finish_stream.clone(),
             stop.clone(),
+            hold_notes.clone(),
+            waiting_notes.clone(),
         );
         let recorded = requests.clone();
         let server = thread::spawn(move || {
@@ -69,7 +78,8 @@ impl Fixture {
                     Ok((socket, _)) => {
                         let flags = flags.clone();
                         let recorded = recorded.clone();
-                        workers.push(thread::spawn(move || serve(socket, flags, recorded)));
+                        let knowledge = knowledge_server.clone();
+                        workers.push(thread::spawn(move || serve(socket, flags, recorded, knowledge)));
                     }
                     Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                         thread::sleep(Duration::from_millis(2))
@@ -86,6 +96,9 @@ impl Fixture {
             hold_auth,
             finish_stream,
             requests,
+            knowledge,
+            hold_notes,
+            waiting_notes,
             stop,
             server: Some(server),
         }
@@ -120,8 +133,10 @@ type Flags = (
     Arc<AtomicBool>,
     Arc<AtomicBool>,
     Arc<AtomicBool>,
+    Arc<AtomicBool>,
+    Arc<AtomicUsize>,
 );
-fn serve(mut socket: TcpStream, flags: Flags, requests: Arc<Mutex<Vec<(String, Value)>>>) {
+fn serve(mut socket: TcpStream, flags: Flags, requests: Arc<Mutex<Vec<(String, Value)>>>, knowledge: Arc<Mutex<super::knowledge_fixture::KnowledgeFixture>>) {
     // Winsock may inherit the listener's nonblocking mode on accepted sockets.
     socket.set_nonblocking(false).unwrap();
     socket
@@ -155,7 +170,7 @@ fn serve(mut socket: TcpStream, flags: Flags, requests: Arc<Mutex<Vec<(String, V
         .unwrap_or(0);
     let mut bytes = vec![0; size];
     socket.read_exact(&mut bytes).unwrap();
-    let payload = if bytes.is_empty() {
+    let payload = if headers.starts_with("PUT /uploads/") { json!({"size":bytes.len()}) } else if bytes.is_empty() {
         Value::Null
     } else {
         serde_json::from_slice(&bytes).unwrap()
@@ -179,14 +194,16 @@ fn serve(mut socket: TcpStream, flags: Flags, requests: Arc<Mutex<Vec<(String, V
         }
     }
     if route == "POST /api/v1/chat" {
-        assert_eq!(payload["capabilities"], json!([]));
-        assert_eq!(payload["agent_type"], "chat");
-        let start = json!({"event":"start","request_id":"ui-r","session_id":"ui-history"});
+        let rag = payload["workspace_id"].is_string();
+        assert_eq!(payload["capabilities"], if rag { json!(["rag"]) } else { json!([]) });
+        assert_eq!(payload["agent_type"], if rag { "rag" } else { "chat" });
+        let session = if rag { "workspace-history" } else { "ui-history" };
+        let start = json!({"event":"start","request_id":"ui-r","session_id":session});
         let first =
             json!({"event":"token","request_id":"ui-r","message_id":1,"content":"第一段中文"});
         let last =
             json!({"event":"token","request_id":"ui-r","message_id":1,"content":"，完成回答。"});
-        let done = json!({"event":"done","request_id":"ui-r","session_id":"ui-history","message_id":1,"payload":{"answer":"第一段中文，完成回答。","answer_blocks":[],"session_id":"ui-history","agent_type":"chat","sources":[],"citations":[],"trace":{"mode":"chat"},"degrade_trace":[]}});
+        let done = json!({"event":"done","request_id":"ui-r","session_id":session,"message_id":1,"payload":{"answer":"第一段中文，完成回答。","answer_blocks":[],"session_id":session,"agent_type": if rag { "rag" } else { "chat" },"sources":[],"citations": if rag { vec![json!({"citation_id":1,"doc_id":"ui-document","doc_name":"年度资料.txt","score":1.0})] } else { vec![] },"trace":{"mode":"chat"},"degrade_trace":[]}});
         let frame = |v: &Value| format!("event: {}\ndata: {v}\n\n", v["event"].as_str().unwrap());
         let first_frames = format!("{}{}", frame(&start), frame(&first));
         let last_frames = format!("{}{}", frame(&last), frame(&done));
@@ -195,6 +212,17 @@ fn serve(mut socket: TcpStream, flags: Flags, requests: Arc<Mutex<Vec<(String, V
             thread::sleep(Duration::from_millis(2));
         }
         let _ = socket.write_all(last_frames.as_bytes()); // Cancellation may have closed transport.
+        return;
+    }
+    let response = knowledge.lock().unwrap().respond(parts[0], parts[1], &payload);
+    if let Some((status, value)) = response {
+        if route == "GET /api/v1/workspaces/workspace-ui/notes" && flags.4.load(Ordering::SeqCst) {
+            flags.5.fetch_add(1, Ordering::SeqCst);
+            while flags.4.load(Ordering::SeqCst) && !flags.3.load(Ordering::SeqCst) { thread::sleep(Duration::from_millis(2)); }
+            flags.5.fetch_sub(1, Ordering::SeqCst);
+        }
+        let value = value.to_string();
+        let _ = write!(socket, "HTTP/1.1 {status} Fixture\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{value}", value.len());
         return;
     }
     let value = match route.as_str() {

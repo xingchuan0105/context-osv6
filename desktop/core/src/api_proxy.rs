@@ -242,6 +242,31 @@ pub async fn upload_bytes(
         .decode(body_base64.as_bytes())
         .map_err(|e| HostError::bad_request("invalid_body", format!("base64: {e}")))?;
 
+    put_upload(url, content_type, bytes).await
+}
+
+/// Native file picker adapter; REST metadata validation precedes reading file bytes.
+pub async fn upload_local_file(
+    url: String,
+    content_type: String,
+    path: std::path::PathBuf,
+    expected_size: u64,
+) -> Result<serde_json::Value, HostError> {
+    assert_desktop_upload_url(&url, &product_api_base_url())?;
+    let bytes = tokio::task::spawn_blocking(move || {
+        let bytes = std::fs::read(&path)
+            .map_err(|e| HostError::bad_request("file_read", format!("读取文件失败：{e}")))?;
+        if bytes.len() as u64 != expected_size {
+            return Err(HostError::bad_request("file_changed", "文件大小已变化，请重新选择"));
+        }
+        Ok(bytes)
+    }).await.map_err(|e| HostError::internal(e.to_string()))??;
+    put_upload(url, Some(content_type), bytes).await
+}
+
+async fn put_upload(url: String, content_type: Option<String>, bytes: Vec<u8>) -> Result<serde_json::Value, HostError> {
+    let base = product_api_base_url();
+
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(UPLOAD_TIMEOUT_SECS))
         .build()

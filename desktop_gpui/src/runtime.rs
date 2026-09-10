@@ -20,7 +20,8 @@ pub enum Update {
     ServiceSnapshot(Result<Snapshot, String>),
     ServicesStopped(Result<(), String>),
     Login(Result<desktop_core::LocalSessionStatus, String>),
-    Sessions(Result<Vec<ChatSession>, String>),
+    Sessions(Option<String>, Result<Vec<ChatSession>, String>),
+    Workspace(crate::workspace::Reply),
     SessionTitle(Result<ChatSession, String>),
     History(u64, Result<Vec<ChatMessage>, String>),
     Event(u64, ChatEvent),
@@ -85,13 +86,21 @@ impl Host {
         });
     }
 
-    pub fn sessions(&self, token: String) {
+    pub fn workspace(&self, token: String, workspace: Option<String>, request: u64, action: crate::workspace::Action) {
+        let sender = self.sender.clone();
+        self.runtime.spawn(async move {
+            let result = crate::workspace::execute(&token, workspace.as_deref(), &action).await;
+            let _ = sender.unbounded_send(Update::Workspace(crate::workspace::Reply { request, workspace, action, result }));
+        });
+    }
+
+    pub fn sessions(&self, token: String, workspace: Option<String>) {
         let sender = self.sender.clone();
         self.runtime.spawn(async move {
             let result = async {
                 let value = desktop_core::api_call(
                     "GET".into(),
-                    web_sdk::conversation_api::sessions_url(""),
+                    crate::workspace::session_list_path(workspace.as_deref()),
                     None,
                     Some(token.clone()),
                 )
@@ -103,7 +112,7 @@ impl Host {
                 Ok::<Vec<ChatSession>, String>(
                     list.sessions
                         .into_iter()
-                        .filter(|s| s.workspace_id.is_none())
+                        .filter(|s| s.workspace_id == workspace)
                         .collect(),
                 )
             }
@@ -111,11 +120,11 @@ impl Host {
             let sessions = match result {
                 Ok(sessions) => sessions,
                 Err(error) => {
-                    let _ = sender.unbounded_send(Update::Sessions(Err(error)));
+                    let _ = sender.unbounded_send(Update::Sessions(workspace, Err(error)));
                     return;
                 }
             };
-            let _ = sender.unbounded_send(Update::Sessions(Ok(sessions.clone())));
+            let _ = sender.unbounded_send(Update::Sessions(workspace, Ok(sessions.clone())));
             // Show the list immediately; resolve only missing titles, at most four at once.
             let mut titles = futures::stream::iter(sessions.into_iter().filter(|s| !has_title(s)))
                 .map(|session| name_session(token.clone(), session))
@@ -161,6 +170,8 @@ impl Host {
         token: String,
         query: String,
         session_id: Option<String>,
+        workspace_id: Option<String>,
+        doc_scope: Vec<String>,
         generation: u64,
     ) -> CancellationToken {
         self.chat_at(
@@ -168,6 +179,8 @@ impl Host {
             token,
             query,
             session_id,
+            workspace_id,
+            doc_scope,
             generation,
         )
     }
@@ -178,13 +191,15 @@ impl Host {
         token: String,
         query: String,
         session_id: Option<String>,
+        workspace_id: Option<String>,
+        doc_scope: Vec<String>,
         generation: u64,
     ) -> CancellationToken {
         let cancel = CancellationToken::new();
         let cancellation = cancel.clone();
         let sender = self.sender.clone();
         self.runtime.spawn(async move {
-            let request = serde_json::json!({"query":query,"session_id":session_id,"capabilities":[],"agent_type":"chat","stream":true,"request_id":uuid::Uuid::new_v4().to_string()});
+            let request = chat_request(query, session_id, workspace_id, doc_scope);
             let events = sender.clone();
             // Dropping the future cancels even before headers or while upstream is silent.
             let result = tokio::select! {
@@ -197,6 +212,17 @@ impl Host {
         });
         cancel
     }
+}
+
+fn chat_request(query: String, session_id: Option<String>, workspace_id: Option<String>, doc_scope: Vec<String>) -> serde_json::Value {
+    let mut request = serde_json::json!({"query":query,"session_id":session_id,"capabilities":[],"agent_type":"chat","stream":true,"request_id":uuid::Uuid::new_v4().to_string()});
+    if let Some(workspace) = workspace_id {
+        request["workspace_id"] = workspace.into();
+        request["capabilities"] = serde_json::json!(["rag"]);
+        request["agent_type"] = "rag".into();
+        request["doc_scope"] = doc_scope.into();
+    }
+    request
 }
 
 impl Drop for Host {
@@ -248,6 +274,19 @@ mod tests {
     use std::{io::Read, net::TcpListener, sync::mpsc, time::Duration};
 
     #[test]
+    fn personal_requests_cannot_reuse_workspace_retrieval_scope() {
+        let personal = chat_request("question".into(), None, None, vec!["stale-document".into()]);
+        assert_eq!(personal["capabilities"], serde_json::json!([]));
+        assert_eq!(personal["agent_type"], "chat");
+        assert!(personal.get("workspace_id").is_none());
+        assert!(personal.get("doc_scope").is_none());
+        let workspace = chat_request("question".into(), Some("session-a".into()), Some("workspace-a".into()), vec!["document-a".into()]);
+        assert_eq!(workspace["workspace_id"], "workspace-a");
+        assert_eq!(workspace["doc_scope"], serde_json::json!(["document-a"]));
+        assert_eq!(workspace["capabilities"], serde_json::json!(["rag"]));
+    }
+
+    #[test]
     fn cancel_closes_connection_while_waiting_for_headers() {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let base = format!("http://{}", listener.local_addr().unwrap());
@@ -273,7 +312,7 @@ mod tests {
             closed_tx.send(()).unwrap();
         });
         let (host, _updates) = Host::new().unwrap();
-        let cancel = host.chat_at(base, "synthetic".into(), "question".into(), None, 1);
+        let cancel = host.chat_at(base, "synthetic".into(), "question".into(), None, None, vec![], 1);
         ready_rx.recv_timeout(Duration::from_secs(5)).unwrap();
         cancel.cancel();
         closed_rx.recv_timeout(Duration::from_secs(2)).unwrap();
