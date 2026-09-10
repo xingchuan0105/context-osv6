@@ -3,7 +3,7 @@
 LLM-facing prompt assets for the agent, ingestion helpers, and chat postprocess.
 Product rag/search/dual retrieve = **Lead + channel Workers**; pure chat remains single-agent SaC.
 
-**Authoring rules (repo law — see root `AGENTS.md`):**
+**Authoring rules:** [LLM guidance](../../docs/agent/llm-guidance.md) defines location, voice, host markers, and user-channel boundaries; [backend agent rules](../AGENTS.md) route implementation work.
 
 1. All LLM-facing prose lives under this tree. No hardcoded instruction strings in Rust.
 2. **Third-person environment language** (what is true / what is available), not orders (“you must / don’t”).

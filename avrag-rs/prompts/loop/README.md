@@ -11,7 +11,7 @@
 | **Disaster user prose** | `prompts/loop/disaster/*` | User bubble **only** when format gate or token ceiling leaves no legal model draft — full replacement, **never** a host footnote on a draft |
 | **Forbidden** | ~~evidence-missing-disclosure~~ / ~~verify-ceiling-disclosure~~ | Removed: host must not append diagnostics to `answer` |
 
-See root `AGENTS.md` §「User channel」and `docs/engineering/2026-08-10-harness-llm-user-channel-philosophy-diagnosis.md` §17.
+See [LLM guidance — User channel](../../../docs/agent/llm-guidance.md#user-channel) and [harness/LLM/user-channel design](../../../docs/engineering/2026-08-10-harness-llm-user-channel-philosophy-diagnosis.md) §17.
 
 ## Voice
 

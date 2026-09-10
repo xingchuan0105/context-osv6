@@ -1,4 +1,4 @@
-Status: extracted from AGENTS/CLAUDE for progressive disclosure. AGENTS.md links here.
+Scope: backend product architecture. Read when directed by [backend agent rules](../../avrag-rs/AGENTS.md). [Repository design principles](../../AGENTS.md) take precedence over historical implementation notes.
 
 # Product App Architecture (backend `avrag-rs`) — **mandatory for new work**
 
@@ -32,14 +32,14 @@ AppState is a **composition root + face factory** (still holds fat infra context
 | T2 | **Write forever outside ReAct ToolCatalog**; `write_refine_*` only via `write_refine::tool_specs_for_pool` (Write control ring) |
 | T3 | Chat/RAG/Search tool **execute** only through `ToolCatalog` / `dispatch_tool` |
 | T4 | **No C4**: Capability / Skill / Tool stay three layers (ADR-0006 §5a) |
-| T5 | Behavior-preserving slices; daily verify with **L1** (`bash scripts/test-l1.sh` or targeted `cargo test -p …`) |
+| T5 | Behavior-preserving slices for the **current** contract; verify with targeted `cargo test -p …` / L1. This does not permit dual APIs or compatibility shims. |
 | T6 | Solo local trunk; do not expand CI theater for architecture work |
 | T7 | **Cloud workbench line: `workspace` is the sole reusable/manageable/shareable persistent-knowledge container** replacing `notebook`; a user-owned Conversation may have no workspace (see below). **Agent-plugin line (Subtex, PRD `docs/plans/2026-09-06-directory-plugin-prd.md`): the user's project directory is the sole master**; indexes are derived/disposable, no ingest copies. Inbox (F6) moves files only after confirm, only into an attached root. |
-| T8 | **No product `org`**: tenant/ownership root is **`user_id` / `owner_user_id`**; Conversation resources may scope by **`conversation_id`**, and only Workspace-bound resources require **`workspace_id`**. Migration in progress — **do not add new org surface area** |
+| T8 | **No product `org`**: tenant/ownership root is **`user_id` / `owner_user_id`**; Conversation resources may scope by **`conversation_id`**, and only Workspace-bound resources require **`workspace_id`**. Do not add new org surface area. |
 
 ## Workspace supersedes notebook (sole persistent-knowledge container — cloud workbench line)
 
-**Canonical product term: `workspace`.** `notebook` is a **legacy alias only** (pre-rename residual). Do **not** reintroduce `notebook` as the primary name.
+**Canonical product term: `workspace`.** `notebook` is a legacy name, not an accepted alias in the current product contract. When replacing a legacy path, remove it rather than preserve compatibility; keep cleanup within the requested scope.
 
 **Product-line scope (2026-09-06):** this container rule governs the **cloud workbench line**. The desktop-agent plugin line (Subtex, PRD `docs/plans/2026-09-06-directory-plugin-prd.md`) treats the **user's project directory as the sole master**; its indexes are derived and disposable (no ingest copies), and it must not create workspace/notebook/global-KB surfaces.
 
@@ -50,7 +50,7 @@ AppState is a **composition root + face factory** (still holds fat infra context
 | API / JSON / tool schemas / error messages / new tests | Prefer **`workspace`** (`workspace_id`, `scope=workspace`, `WorkspaceApp`, …) |
 | Domain enums / Product Apps | **`Workspace`**, `state.workspace()` — never new `Notebook*` product APIs |
 | Wire labels (tool results, SSE, registry) | Emit **`workspace`**, not `notebook` |
-| Incoming legacy values | May **accept** `notebook` as a one-way alias → map to workspace; **never** invent new notebook-first paths |
+| Incoming legacy values | Use the current `workspace` contract; do not add or preserve a `notebook` compatibility alias when replacing the path |
 | Local vars in old tests | Fine if unexported; **do not** copy into new public contracts or mock tool args as the preferred spelling |
 
 * When a test or mock fails because product returns `workspace` and the test expected `notebook` (or the reverse): **fix product/schema/wire toward `workspace`**, not "align tests back to notebook."

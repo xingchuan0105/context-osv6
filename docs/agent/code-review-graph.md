@@ -1,4 +1,4 @@
-Status: extracted from AGENTS/CLAUDE for progressive disclosure. AGENTS.md links here.
+Scope: code structure, relationships, search, and index maintenance. Entry point: [repository agent rules](../../AGENTS.md).
 
 # Knowledge Graph (code-review-graph) — query **and** update
 
@@ -38,7 +38,15 @@ code-review-graph status          # graph stats
 code-review-graph detect-changes  # risk-scored impact of current diff
 ```
 
-After graph hits, open the cited files with the editor/read tools. Use `semble` for semantic chunk search; use **code-review-graph** for structure and relations; use **grep** only for exact literal / exhaustive string checks.
+After graph hits, open the cited files with the editor/read tools. Use `semble` for semantic chunk search, `tgrep` for repo-wide pattern search, and `rg` / `grep` for one-shot exact strings. Structure and relationship questions still start with **code-review-graph**.
+
+## Repo-wide pattern search (tgrep)
+
+- Binary: `~/.local/bin/tgrep`; the trigram index lives in `.tgrep/` at the repository root.
+- Run from the root: `tgrep "pattern" .`. Supported ripgrep-like flags include `-i`, `-F`, `-g`, `-t`, `-l`, and `--json`.
+- A subdirectory path looks for that tree's own index. Use `--index-path .tgrep` or a root-relative glob such as `-g 'avrag-rs/**'` to query the repository index.
+- After large tree changes, rebuild with `tgrep index .`, following the root time-cost rule. Use the on-disk index; do not run `tgrep serve` on this WSL because of memory use.
+- Never commit `.tgrep/` or `.code-review-graph/`.
 
 ## When to **update** the graph (mandatory bookkeeping)
 
