@@ -141,8 +141,8 @@ fn monorepo_root() -> Option<PathBuf> {
     None
 }
 
-fn env_file_path(root: &Path) -> PathBuf {
-    root.join("desktop/runtime/client.env")
+fn env_file_path() -> Option<PathBuf> {
+    crate::native_stack::runtime_home().map(|root| root.join("client.env"))
 }
 
 fn migrations_dir(root: &Path) -> PathBuf {
@@ -151,9 +151,9 @@ fn migrations_dir(root: &Path) -> PathBuf {
 
 fn default_runtime_endpoints() -> (String, u16, String, u16) {
     let pg_host = env_or("CLIENT_PG_HOST", "127.0.0.1");
-    let pg_port: u16 = env_or("CLIENT_PG_PORT", "5433").parse().unwrap_or(5433);
+    let pg_port: u16 = crate::runtime_ports::postgres();
     let redis_host = env_or("CLIENT_REDIS_HOST", "127.0.0.1");
-    let redis_port: u16 = env_or("CLIENT_REDIS_PORT", "6380").parse().unwrap_or(6380);
+    let redis_port: u16 = crate::runtime_ports::redis();
     (pg_host, pg_port, redis_host, redis_port)
 }
 
@@ -186,7 +186,7 @@ fn build_status() -> LocalStackStatus {
 
     let root = monorepo_root();
     let script = root.as_ref().map(|r| script_path(r).display().to_string());
-    let env_path = root.as_ref().map(|r| env_file_path(r));
+    let env_path = env_file_path();
     let env_exists = env_path
         .as_ref()
         .map(|p| p.is_file())
@@ -212,25 +212,25 @@ fn build_runtime_config() -> ClientRuntimeConfig {
 
     let database_url = env_or(
         "DATABASE_URL",
-        &format!("postgres://avrag:avrag@{pg_host}:{pg_port}/avrag_client"),
+        &crate::local_product::read_env_file_value("DATABASE_URL")
+            .unwrap_or_else(|| format!("postgres://avrag_runtime:avrag@{pg_host}:{pg_port}/avrag_client")),
     );
     let redis_url = env_or("REDIS_URL", &format!("redis://{redis_host}:{redis_port}/0"));
     let retrieval_backend = env_or("RETRIEVAL_BACKEND", "pgvector");
 
     let root = monorepo_root();
-    let env_path = root.as_ref().map(|r| env_file_path(r));
+    let env_path = env_file_path();
     let env_exists = env_path
         .as_ref()
         .map(|p| p.is_file())
         .unwrap_or(false);
-    let migrations = root.as_ref().map(|r| migrations_dir(r).display().to_string());
+    let migrations = crate::local_product::read_env_file_value("AVRAG_MIGRATIONS_DIR")
+        .or_else(|| root.as_ref().map(|r| migrations_dir(r).display().to_string()));
 
-    let note = if root.is_none() {
-        "Monorepo root not found. Set CONTEXT_OS_ROOT or run scripts from the repo. Packaged clients will use bundled stack paths later.".into()
-    } else if !env_exists {
-        "Run ensure_local_stack (or `bash scripts/desktop-local-stack.sh ensure`) to start native Postgres+pgvector + Redis (no Docker), write client.env, and apply migrations.".into()
+    let note = if !env_exists {
+        "本机配置尚未生成；连接本机服务后初始化数据库与缓存，随后执行产品迁移。".into()
     } else {
-        "Data plane ready (STACK_MODE prefer native, RETRIEVAL_BACKEND=pgvector). Start product with bash scripts/desktop-local-product.sh ensure (API :18080). Desktop chat remains BYOK; REST via api_call.".into()
+        "本机配置已生成；端口、产品健康与数据库迁移状态分别检查。".into()
     };
 
     ClientRuntimeConfig {
@@ -295,7 +295,7 @@ pub fn get_client_runtime_config() -> ClientRuntimeConfig {
 }
 
 /// Bring up data plane: **Rust native first** (no bash/Docker), then bash script fallback.
-/// Hard timeout so a stuck `pg_ctl`/pipe cannot freeze the UI forever.
+/// Native commands enforce their deadline and are reaped before returning.
 /// `device_id` seeds local identity uuids; `relay_env` (cloud metered relay
 /// block, if a cloud session exists) is embedded into client.env.
 pub async fn ensure_local_stack(
@@ -303,36 +303,17 @@ pub async fn ensure_local_stack(
     relay_env: Option<String>,
 ) -> Result<EnsureLocalStackResult, HostError> {
     let docker = crate::docker_status::docker_status_snapshot();
-    const NATIVE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(90);
 
     // 1) Pure-Rust native path when pg_ctl + redis-server are available.
     if crate::native_stack::native_tools_available() {
         let device_owned = device_id.map(str::to_string);
         let ensure =
             move || crate::native_stack::ensure_native(device_owned.as_deref(), relay_env);
-        let report = match tokio::time::timeout(NATIVE_TIMEOUT, tokio::task::spawn_blocking(ensure))
+        // Dropping a timed-out spawn_blocking handle does not stop its work.
+        // Await completion so Services can record every process before cleanup.
+        let report = tokio::task::spawn_blocking(ensure)
             .await
-        {
-            Ok(Ok(r)) => r,
-            Ok(Err(e)) => {
-                return Err(HostError::internal(format!("native ensure join: {e}")));
-            }
-            Err(_) => {
-                let status = build_status();
-                let config = build_runtime_config();
-                return Ok(EnsureLocalStackResult {
-                    ok: false,
-                    message: format!(
-                        "本机数据面启动超时（{secs}s）。请查看 %LOCALAPPDATA%\\Context-OS Client\\logs\\ensure-native.log 与 postgres-native.log",
-                        secs = NATIVE_TIMEOUT.as_secs()
-                    ),
-                    stdout: String::new(),
-                    stderr: "timeout".into(),
-                    status,
-                    config,
-                });
-            }
-        };
+            .map_err(|e| HostError::internal(format!("native ensure join: {e}")))?;
         let status = build_status();
         let config = build_runtime_config();
         if report.ok && status.overall_ok {

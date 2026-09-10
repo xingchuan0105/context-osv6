@@ -13,6 +13,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::host_error::HostError;
+use crate::process_deadline::Deadline;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct LocalProductStatus {
@@ -161,7 +162,7 @@ fn client_env_path() -> Option<PathBuf> {
     monorepo_root().map(|r| r.join("desktop/runtime/client.env"))
 }
 
-fn read_env_file_value(key: &str) -> Option<String> {
+pub(crate) fn read_env_file_value(key: &str) -> Option<String> {
     let path = client_env_path()?;
     let raw = fs::read_to_string(path).ok()?;
     for line in raw.lines() {
@@ -213,10 +214,13 @@ fn client_api_base() -> String {
             return v.trim().trim_end_matches('/').to_string();
         }
     }
+    if std::env::var_os("CLIENT_API_PORT").is_some() {
+        return format!("http://127.0.0.1:{}", crate::runtime_ports::api());
+    }
     if let Some(v) = read_env_file_value("AVRAG_PUBLIC_BASE_URL") {
         return v.trim_end_matches('/').to_string();
     }
-    "http://127.0.0.1:18080".into()
+    format!("http://127.0.0.1:{}", crate::runtime_ports::api())
 }
 
 fn client_api_host_port() -> (String, u16) {
@@ -243,40 +247,28 @@ fn probe_tcp(host: &str, port: u16) -> bool {
 }
 
 fn pid_alive(pidfile: &Path) -> bool {
-    let Ok(raw) = fs::read_to_string(pidfile) else {
-        return false;
+    let Some(pid) = fs::read_to_string(pidfile).ok().and_then(|v| v.trim().parse::<u32>().ok())
+        .filter(|pid| *pid > 1) else { return false };
+    let Some(actual) = crate::win_cmd::process_executable(pid) else { return false };
+    let Some(component) = pidfile.file_stem().and_then(|v| v.to_str()) else { return false };
+    resolve_product_bin(&format!("avrag-{component}"))
+        .is_some_and(|expected| same_executable(&actual, &expected))
+}
+
+fn same_executable(actual: &Path, expected: &Path) -> bool {
+    let normalize = |path: &Path| {
+        path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
+            .to_string_lossy().trim_start_matches(r"\\?\").to_string()
     };
-    let pid = raw.trim();
-    if pid.is_empty() {
-        return false;
-    }
-    if Path::new(&format!("/proc/{pid}")).exists() {
-        return true;
-    }
-    #[cfg(unix)]
-    {
-        return Command::new("kill")
-            .args(["-0", pid])
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .map(|s| s.success())
-            .unwrap_or(false);
-    }
-    #[cfg(windows)]
-    {
-        // Best-effort: tasklist is heavy; treat non-empty pid file as maybe alive.
-        // Health probe is authoritative for API.
-        let _ = pid;
-        return true;
-    }
-    #[cfg(not(any(unix, windows)))]
-    {
-        false
-    }
+    if cfg!(windows) { normalize(actual).eq_ignore_ascii_case(&normalize(expected)) }
+    else { normalize(actual) == normalize(expected) }
 }
 
 fn stop_pidfile(pidfile: &Path) {
+    if !pid_alive(pidfile) {
+        let _ = fs::remove_file(pidfile);
+        return;
+    }
     if let Ok(raw) = fs::read_to_string(pidfile) {
         let pid = raw.trim();
         if !pid.is_empty() {
@@ -484,15 +476,18 @@ fn spawn_with_env(
 
     crate::win_cmd::hide_and_detach(&mut cmd);
 
-    let child = cmd
+    let mut child = cmd
         .spawn()
         .map_err(|e| format!("spawn {}: {e}", bin.display()))?;
     if let Some(parent) = pid_path.parent() {
         fs::create_dir_all(parent).ok();
     }
-    fs::write(pid_path, format!("{}\n", child.id())).map_err(|e| e.to_string())?;
+    if let Err(error) = fs::write(pid_path, format!("{}\n", child.id())) {
+        crate::process_deadline::terminate_and_wait(&mut child)?;
+        return Err(format!("record product process: {error}"));
+    }
     // Detach: drop Child without wait so process keeps running.
-    std::mem::forget(child);
+    drop(child);
     Ok(())
 }
 
@@ -503,6 +498,7 @@ fn spawn_with_env(
 /// no DDL rights. Fails product start on any non-zero exit — an unmigrated or
 /// ungranted database only produces a worse API failure.
 fn run_product_migrations(
+    deadline: &Deadline,
     env_pairs: &[(String, String)],
     log_dir: &Path,
     log: &mut String,
@@ -527,8 +523,8 @@ fn run_product_migrations(
     cmd.stdin(Stdio::null())
         .stdout(Stdio::from(out))
         .stderr(Stdio::from(out_err));
-    let status = cmd
-        .status()
+    let status = deadline
+        .status(&mut cmd)
         .map_err(|e| format!("spawn {}: {e}", migrate_bin.display()))?;
     if !status.success() {
         return Err(format!(
@@ -536,17 +532,17 @@ fn run_product_migrations(
             migrate_log.display()
         ));
     }
-    crate::native_stack::apply_runtime_grants(log)?;
+    crate::native_stack::apply_runtime_grants(deadline, log)?;
     log.push_str(format!("migrations ok ({})\n", migrate_bin.display()).as_str());
     Ok(())
 }
 
-fn wait_api_healthy(secs: u64, log: &mut String) -> bool {
+fn wait_api_healthy(startup: &Deadline, secs: u64, log: &mut String) -> bool {
     let deadline = Instant::now() + Duration::from_secs(secs);
     let (host, port) = client_api_host_port();
     let base = client_api_base();
     let url = format!("{base}/health");
-    while Instant::now() < deadline {
+    while Instant::now() < deadline && startup.check().is_ok() {
         // Prefer TCP first — Windows curl can stall and make cold-start feel frozen.
         if probe_tcp(&host, port) {
             if probe_health(&url).is_ok() {
@@ -562,6 +558,7 @@ fn wait_api_healthy(secs: u64, log: &mut String) -> bool {
 
 /// Pure-Rust product bring-up for install + monorepo (no bash required).
 fn ensure_product_native() -> Result<String, String> {
+    let deadline = &Deadline::after(Duration::from_secs(90));
     let mut log = String::new();
     if api_healthy() && pid_alive(&run_log_dir().0.join("worker.pid")) {
         return Ok("product API already healthy".into());
@@ -631,18 +628,20 @@ fn ensure_product_native() -> Result<String, String> {
         // (storage-pg's role guard and grants leave DDL to it; the API pool
         // never migrates). sqlx's ledger makes the every-start re-run a
         // no-op when clean, so version upgrades pick up new migrations.
-        run_product_migrations(&env_pairs, &log_dir, &mut log)?;
+        run_product_migrations(deadline, &env_pairs, &log_dir, &mut log)?;
         stop_pidfile(&api_pid);
         log.push_str("starting avrag-api\n");
+        deadline.check()?;
         spawn_with_env(&api_bin, &env_pairs, &api_log, &api_pid, None)?;
     }
     if !pid_alive(&worker_pid) {
         stop_pidfile(&worker_pid);
         log.push_str("starting avrag-worker\n");
+        deadline.check()?;
         spawn_with_env(&worker_bin, &env_pairs, &worker_log, &worker_pid, None)?;
     }
 
-    if wait_api_healthy(45, &mut log) && pid_alive(&worker_pid) {
+    if wait_api_healthy(deadline, 45, &mut log) && pid_alive(&worker_pid) {
         Ok(format!(
             "product API ready at {} (native spawn)\n{log}",
             client_api_base()
@@ -765,7 +764,7 @@ pub async fn ensure_local_product() -> Result<EnsureLocalProductResult, HostErro
         }
         Err(native_err) => {
             // 2) Bash monorepo fallback.
-            if monorepo_root().is_some() {
+            if !cfg!(windows) && monorepo_root().is_some() {
                 let script_result = tokio::task::spawn_blocking(|| run_product_script("ensure"))
                     .await
                     .map_err(|e| HostError::internal(format!("ensure product join: {e}")))?;
@@ -806,8 +805,8 @@ pub async fn ensure_local_product() -> Result<EnsureLocalProductResult, HostErro
         }
     }
 
-    // Native returned Ok message but health still false — try bash if available.
-    if monorepo_root().is_some() {
+    // Windows native failures stay within the native lifecycle; never launch WSL/Git bash.
+    if !cfg!(windows) && monorepo_root().is_some() {
         if let Ok((code, stdout, stderr)) = tokio::task::spawn_blocking(|| run_product_script("ensure"))
             .await
             .map_err(|e| HostError::internal(format!("ensure product join: {e}")))?
@@ -856,7 +855,7 @@ pub async fn stop_local_product() -> Result<EnsureLocalProductResult, HostError>
 
     let mut stdout = format!("--- native ---\n{native_log}\n");
     let mut stderr = String::new();
-    if monorepo_root().is_some() {
+    if !cfg!(windows) && monorepo_root().is_some() {
         if let Ok((code, out, err)) = tokio::task::spawn_blocking(|| run_product_script("stop"))
             .await
             .map_err(|e| HostError::internal(format!("stop product script join: {e}")))?
@@ -907,6 +906,21 @@ pub fn product_api_base_url() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn stale_or_unrelated_pid_is_not_a_worker_and_is_not_stopped() {
+        let dir = std::env::temp_dir().join(format!("cos-worker-pid-{}", uuid::Uuid::new_v4()));
+        fs::create_dir(&dir).unwrap();
+        let file = dir.join("worker.pid");
+        fs::write(&file, u32::MAX.to_string()).unwrap();
+        assert!(!pid_alive(&file));
+        fs::write(&file, std::process::id().to_string()).unwrap();
+        assert!(!pid_alive(&file));
+        stop_pidfile(&file);
+        assert!(crate::win_cmd::process_executable(std::process::id()).is_some());
+        assert!(!file.exists());
+        fs::remove_dir(dir).unwrap();
+    }
 
     #[test]
     fn health_uses_the_configured_api_url_port() {

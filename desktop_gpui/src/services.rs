@@ -5,6 +5,9 @@ use desktop_core::{
 };
 use std::path::PathBuf;
 
+// A concurrent Host must take its ownership snapshot after the preceding startup.
+static MANAGED_START: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum Phase {
     #[default]
@@ -96,6 +99,7 @@ impl Services {
         mut progress: impl FnMut(Phase),
     ) -> Result<desktop_core::LocalSessionStatus, String> {
         progress(Phase::Checking);
+        let _startup = if self.attached { None } else { Some(MANAGED_START.lock().await) };
         let snapshot = self.snapshot().await?;
         if self.attached {
             if !snapshot.product.api_ok {

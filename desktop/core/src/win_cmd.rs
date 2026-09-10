@@ -53,6 +53,9 @@ pub fn process_executable(pid: u32) -> Option<PathBuf> {
     }
 }
 
+#[cfg(windows)]
+pub fn process_parent(pid: u32) -> Option<u32> { win::parent_pid(pid) }
+
 /// Kill named processes whose executable path sits under any of `roots`.
 pub fn kill_named_under(names: &[&str], roots: &[PathBuf]) -> Vec<String> {
     #[cfg(windows)]
@@ -152,6 +155,19 @@ mod win {
             }
         }
         out
+    }
+
+    pub(super) fn parent_pid(pid: u32) -> Option<u32> {
+        let snap = snapshot()?;
+        unsafe {
+            let mut pe: PROCESSENTRY32W = std::mem::zeroed();
+            pe.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
+            if Process32FirstW(snap.0, &mut pe) == 0 { return None; }
+            loop {
+                if pe.th32ProcessID == pid { return Some(pe.th32ParentProcessID); }
+                if Process32NextW(snap.0, &mut pe) == 0 { return None; }
+            }
+        }
     }
 
     pub fn kill_tree(pid: u32) -> u32 {

@@ -51,7 +51,7 @@
 
 | # | 能力 | 状态 |
 |---|---|---|
-| D2 | 栈状态、启动迁移、进程/日志、退出收摊 UI（S0–S6，不依赖预装 Docker） | 已实现服务面板与生命周期接线；原 45 项加无头 UI 9 项共 54 项通过，9 项另各重复 3 次通过。面板交互、草稿、布局及关闭等待改由自动回归验证，无需逐项人工确认；受管环境 S2/S6 进程 E2E 待验。[接线证据](2026-09-10-gpui-services.md) · [自动验收证据](2026-09-10-gpui-headless-acceptance.md) |
+| D2 | 栈状态、启动迁移、进程/日志、退出收摊 UI（S0–S6，不依赖预装 Docker） | 验证(win)：共享/无头 60 项通过；真实 PG/Redis 4 步及迁移/API/worker/本机会话 8 步通过，S2/S6 启动失败恢复、超时中退出、进程归属和清理自动门关闭。无需逐项人工确认；GPU 像素、系统文件管理器与 macOS/Linux 待验。[接线证据](2026-09-10-gpui-services.md) · [无头 UI](2026-09-10-gpui-headless-acceptance.md) · [受管进程 E2E](2026-09-10-gpui-managed-acceptance.md) |
 | D3 | Workspace、文件、入库、引用、会话与笔记 | 未开始 |
 | D4 | BYOK、角色、云登录、钱包、Publish | 未开始 |
 | D5 | updater、深链、单实例、浏览器打开、MCP/CLI | 未开始 |

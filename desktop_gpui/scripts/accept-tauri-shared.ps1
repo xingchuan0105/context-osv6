@@ -1,7 +1,8 @@
 param(
     [string]$Workspace = 'C:\dev\context-osv6',
     [switch]$WithHttpFixture,
-    [switch]$WithHeadlessUi
+    [switch]$WithHeadlessUi,
+    [switch]$WithManagedProcesses
 )
 $ErrorActionPreference = 'Stop'
 $project = Join-Path $Workspace 'desktop_gpui'
@@ -27,6 +28,9 @@ try {
     }
     if ($WithHeadlessUi) {
         & (Join-Path $PSScriptRoot 'accept-headless.ps1') -Workspace $Workspace
+    }
+    if ($WithManagedProcesses) {
+        & (Join-Path $PSScriptRoot 'accept-managed.ps1') -Workspace $Workspace
     }
     Write-Output "Requested host/UI suites passed. GPU pixels, system IME and real provider acceptance remain separate. Logs: $logs"
 } finally {

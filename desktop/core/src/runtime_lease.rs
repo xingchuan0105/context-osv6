@@ -56,11 +56,19 @@ impl ProcessSnapshot {
             [
                 (Component::Api, "run/api.pid"),
                 (Component::Worker, "run/worker.pid"),
-                (Component::Postgres, "data/pg-native/postmaster.pid"),
+                (Component::Postgres, "run/postgres-native.pid"),
                 (Component::Redis, "run/redis-native.pid"),
             ]
             .into_iter()
             .filter_map(|(component, file)| read_record(component, root.join(file)))
+            .filter(|_record| {
+                // Separate Windows clients can share a runtime directory. Only the
+                // process that actually spawned a sidecar may adopt its PID record.
+                #[cfg(windows)]
+                { crate::win_cmd::process_parent(_record.pid) == Some(std::process::id()) }
+                #[cfg(not(windows))]
+                { true }
+            })
             .collect(),
         )
     }
@@ -119,7 +127,10 @@ fn stop_record(process: &ProcessRecord) -> Result<(), String> {
         return Ok(());
     }
     let result = if process.component == Component::Postgres {
-        crate::native_stack::stop_owned_postgres(process.file.parent().expect("pidfile directory"))
+        crate::native_stack::stop_owned_postgres(
+            &process.file.parent().and_then(Path::parent).expect("runtime directory")
+                .join("data/pg-native"),
+        )
     } else {
         stop_process(process.pid);
         if crate::win_cmd::process_executable(process.pid).as_ref() == Some(&process.executable) {
@@ -132,9 +143,8 @@ fn stop_record(process: &ProcessRecord) -> Result<(), String> {
         }
     };
     result?;
-    // PostgreSQL manages its own postmaster.pid. Never remove a replacement's file.
-    if process.component != Component::Postgres
-        && fs::read_to_string(&process.file)
+    // Never remove a replacement process record. PG manages postmaster.pid separately.
+    if fs::read_to_string(&process.file)
             .ok()
             .and_then(|s| s.trim().parse::<u32>().ok())
             == Some(process.pid)
@@ -167,6 +177,20 @@ fn stop_process(pid: u32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn another_parent_process_is_never_adopted() {
+        let root = std::env::temp_dir().join(format!("cos-parent-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(root.join("run")).unwrap();
+        let file = root.join("run/api.pid");
+        fs::write(&file, std::process::id().to_string()).unwrap();
+        assert_ne!(crate::win_cmd::process_parent(std::process::id()), Some(std::process::id()));
+        assert!(ProcessSnapshot::at(&root).0.is_empty());
+        fs::remove_file(file).unwrap();
+        fs::remove_dir(root.join("run")).unwrap();
+        fs::remove_dir(root).unwrap();
+    }
     fn process(component: Component, pid: u32) -> ProcessRecord {
         ProcessRecord {
             component,

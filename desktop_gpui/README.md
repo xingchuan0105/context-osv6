@@ -2,7 +2,7 @@
 
 Context-OS 原生 GPUI 客户端，独立 Cargo 工程。共享 `desktop-core` 的本机会话和 HTTP/SSE 传输，以及 `contracts` / `web-sdk` 的会话协议、解码与 reducer；不引入第二套聊天接口。
 
-当前切片：本地连接、个人会话列表和历史、逐段正文、多行输入、停止。个人聊天 capabilities 为空；附件、工作区和云登录尚未接入。现网 Tauri 仍继续发货，不能据此宣布 GPUI 全量对等。
+当前切片：本地连接、个人会话列表和历史、逐段正文、多行输入、停止、Markdown 阅读，以及本机服务面板和受管启动/退出。个人聊天 capabilities 为空；附件、工作区和云登录尚未接入。现网 Tauri 仍继续发货，不能据此宣布 GPUI 全量对等。
 
 ## Windows 开发
 
@@ -29,3 +29,9 @@ Windows 原生链路开发验收使用 `pwsh -NoProfile -ExecutionPolicy Bypass 
 ## 复用 Tauri 套件
 
 同步后执行 `pwsh -NoProfile -ExecutionPolicy Bypass -File desktop_gpui/scripts/accept-tauri-shared.ps1 -WithHttpFixture`。原 shared-core lib 和流测试直接复用，另有 GPUI Host 适配测试；HTTP 用例仅使用测试进程内的 loopback 夹具。完整范围见 [验收报告](../docs/desktop/2026-09-09-gpui-tauri-suite-acceptance.md)。
+
+增加 `-WithHeadlessUi` 可自动验证 GPUI 的真实视图、点击、输入、滚动和布局，使用 TestPlatform，不操作桌面。增加 `-WithManagedProcesses` 则验证真实隔离进程：冷初始化、迁移失败、修复重试、本机会话、其他宿主退出、启动超时及进程清理。
+
+Windows D2 自动门已通过：共享/无头 60 项、真实数据栈 4 步、真实产品进程 8 步。范围与结果路径见 [受管进程验收记录](../docs/desktop/2026-09-10-gpui-managed-acceptance.md)；不代表 GPU 像素、系统集成或三平台安装验收。
+
+受管进程验收从源仓库执行 `pwsh -NoProfile -ExecutionPolicy Bypass -File desktop_gpui/scripts/accept-managed.ps1`，使用已构建的 Windows API/worker/migrate 和便携 PG/Redis；`-BuildDir`、`-PortableRuntime` 可指定构建产物。默认选择 18190/15439/16389，端口已被占用则立即失败。每次生成独立目录，写入 `steps.json`、`tests.log` 和 `result.json`，核对既有进程身份和测试进程残留，不操作桌面或调用模型。`-DataPlaneOnly` 单独验证真实 PG/Redis、角色、扩展、写入及重启持久化，不需要产品 sidecar；这层通过不代表产品迁移/API/worker 已通过。
