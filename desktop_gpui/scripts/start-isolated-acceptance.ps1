@@ -59,9 +59,12 @@ Wait-Port 16380
 }
 # Only model settings are reused. Identity, secrets and storage belong to this run.
 foreach ($line in Get-Content (Join-Path $sourceRoot 'avrag-rs\.env')) {
-    if ($line -match '^(AGENT_LLM_[A-Z_]+|PLATFORM_OFFICIAL_RATES_JSON)=(.*)$') { [Environment]::SetEnvironmentVariable($Matches[1], $Matches[2].Trim().Trim('"').Trim("'"), 'Process') }
+    if ($line -match '^(AGENT_LLM_[A-Z_]+|QUICK_CHAT_LLM_[A-Z_]+|DASHSCOPE_API_KEY|PLATFORM_OFFICIAL_RATES_JSON)=(.*)$') { [Environment]::SetEnvironmentVariable($Matches[1], $Matches[2].Trim().Trim('"').Trim("'"), 'Process') }
 }
 $env:DATABASE_URL='postgres://avrag_runtime:avrag@127.0.0.1:15433/avrag_client'
+if (-not $env:QUICK_CHAT_LLM_API_KEY -and -not $env:DASHSCOPE_API_KEY) { throw 'Quick Chat credentials are missing.' }
+if (-not $env:PLATFORM_OFFICIAL_RATES_JSON) { throw 'Official model rates are missing.' }
+$null = $env:PLATFORM_OFFICIAL_RATES_JSON | ConvertFrom-Json
 $env:MIGRATION_DATABASE_URL='postgres://avrag:avrag@127.0.0.1:15433/avrag_client'
 $env:REDIS_URL='redis://127.0.0.1:16380/0'
 $env:REDIS_ADDR='127.0.0.1:16380'

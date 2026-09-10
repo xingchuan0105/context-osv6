@@ -21,3 +21,7 @@
 用户窗口连接成功、会话已创建，但发送返回 `No official price row for dashscope/qwen3.8-flash`。项目 .env 已有该模型的价格表，验收脚本只传 AGENT_LLM 配置而漏传 PLATFORM_OFFICIAL_RATES_JSON。
 
 两条隔离环境脚本补传原价格表；upgrade 脚本新增 Refresh 模式，不重复创建数据库/迁移/覆盖程序，仅按已记录 PID 和路径核对后刷新独立 API。09-10 08:52 刷新后 /health 为 ok。测试签名/加密密钥开始持久化到受限权限的 current-secrets.json；首次切换前核对 user_provider_secrets 为 0，未破坏已存 BYOK 数据。首次切换需要重新连接，后续刷新复用密钥。旧库与安装版服务未动，价格门通过和真实模型输出仍待用户重试确认。
+
+08:55 用户重试出现 LLM client is not configured。核对 AppConfig 后确认个人聊天使用 QUICK_CHAT_LLM，密钥默认读取 DASHSCOPE_API_KEY，而验收脚本只传了 AGENT_LLM。两条脚本补齐 QUICK_CHAT_LLM_* / DASHSCOPE_API_KEY，并增加密钥和价格 JSON 的启动前检查。
+
+08:57 真实 API 复验通过：请求 7cc2bf3f-7518-4c08-bd04-2ea2d12d6a31，session 34a97cc6-a14c-4b88-850a-5e23c745a802，收到 token 与 done，回答“连接正常”。done 记录 dashscope/qwen3.8-flash，prompt 1186 / completion 12 tokens。重新读取 messages 得到用户问题和 assistant 回答，workspace_id_at_send=null。SSE 证据保存于隔离 logs/quick-chat-live.sse。该证据为接口真实模型/历史持久化通过；GPUI 用户窗口重试、长正文流式和停止仍待验。
