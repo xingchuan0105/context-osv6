@@ -1,6 +1,6 @@
 # PRD v0.3：规则归档、仓库树与 Agent 文档检索服务
 
-日期：2026-09-10 · 状态：独立技术方案草案，待原型验证
+日期：2026-09-10 · 状态：独立技术方案草案，先行原型已运行、待用户试用
 
 **产品定义：** 面向本地文档仓库，文档进入时根据用户目录规则、名称、有限原文、类型和时间信息归档，形成用户可见、Agent 可读取的仓库目录与分类索引。目录内保留文档的标题树和 chunk 前后顺序；向量提供跨目录关联与直接检索；Agent 可按预算定位、展开和连续读取原文。
 
@@ -9,6 +9,10 @@
 **版本关系：** 本版承接[独立评审](../reviews/2026-09-10-repository-tree-prd-independent-review.md)和[v0.2](2026-09-10-repository-tree-prd-v0.2.md)，将“自动整理文件不在范围内”修订为“规则驱动的新文档归档是核心功能”。v0.2 保留原方案及 chunk 顺序设计；[v0.1](2026-09-10-subtex-repository-tree-prd.md)保留前序集成方案。本版借鉴 Genaima 的文件角色与目录路由方式，不继承其技术栈、业务分类或项目专有路径。
 
 **本次新增决策：** 仓库第一层导航来自可编辑的文件夹体系及归档元数据；无须等待全仓向量聚类或递归摘要才能使用。向量主题作为补充视图，不能自动重排物理文件夹。分类允许有界、按需的 LLM 调用，不把“完全零 LLM”作为产品目标。
+
+**开工修订（2026-09-10）：** 用户确认 Windows 原生优先、embedding 使用在线服务且不本地部署；解析优先验证现有仓库采用的 LiteParse/AnyDoc 组件。首轮不安装 Docling 或本地推理框架。独立工程位于 `C:\Users\xingc\Documents\Codex\repository-tree`，W0 验证状态独立记录，尚不构成正式验收。
+
+**先行原型：** 用户进一步要求先验证原型体验。独立工程已提供本地浏览器界面和 MCP，采用 SQLite＋NumPy 精确向量检索打通归档、检索及续读。已有目录绑定、快照、聚类/SVD 和规模性能仍按本文正式要求推进；原型不代表这些能力已经实现。详见[原型交付记录](2026-09-10-repository-tree-prototype.md)。
 
 ## 1. 目标、假设与决策摘要
 
@@ -38,11 +42,11 @@
 | 第一层组织 | 用户目录规则 → 文档识别 → 主目录归档；目录树和元数据直接形成导航索引 |
 | 分类成本 | 文件与入口事实优先，有限内容抽取补充；歧义时按需分类，按规则决定自动归档或待处理 |
 | 编排与接口 | Python + Pydantic + 官方 MCP Python SDK |
-| 文档解析 | Markdown/文本快速路径；PDF/Office 使用 Docling 并做格式验收 |
+| 文档解析 | Markdown/文本快速路径；PDF 验证 LiteParse，Office 验证 AnyDoc，保留结构与来源定位 |
 | 结构/状态 | SQLite，负责来源、规则/分类记录、文件操作账本、版本、树、任务与发布 manifest |
 | 搜索引擎 | 优先验证 LanceDB OSS，统一正文 BM25、向量、过滤与搜索表版本 |
 | 精确检索 | ripgrep 或具资源限制的等价实现；原始匹配与语义检索明确分开 |
-| embedding | E5-small CPU 候选，BGE-M3/Qwen3-Embedding-0.6B 质量对照；评测后冻结默认模型 |
+| embedding | 在线服务；W0 复用 SiliconFlow Pro/BAAI/bge-m3，验证 1024 维与接口限制，不部署本地模型 |
 | 排序 | 词法+dense 的 RRF 基线；首轮即对比小候选 cross-encoder 精排 |
 | 聚类 | scikit-learn 公共 KMeans/MiniBatchKMeans，产品记录分裂关系 |
 | 代表文本 | 原文代表块 + 去重复 + 覆盖多个子节点；SVD 不默认启用 |
@@ -182,7 +186,9 @@ search 可检索名称、目录说明、分类字段和原文；scope 新增 fol
 
 快速文本路径：直接读取 TXT；Markdown 用 markdown-it-py 的解析 token 与源码行映射构建树，列表、代码块和表格由语法决定，不能靠标题正则独立解析整份 Markdown。[markdown-it-py](https://markdown-it-py.readthedocs.io/en/latest/using.html)
 
-PDF/Office 路径：Docling 为首选候选，保留其结构、版面和 provenance，再映射到产品的最小文档模型。不能只导出 Markdown 后丢弃来源结构。扫描件按页触发 OCR，正文不可读与解析失败分别记录。[Docling IR](https://docling-project.github.io/docling/concepts/docling_document/)、[格式支持](https://docling-project.github.io/docling/usage/supported_formats/)
+PDF 路径优先验证 LiteParse 的原生文本、页码、坐标与结构输出；Office 优先验证 AnyDoc 的结构模型。借鉴既有仓库的格式路由，不沿用只输出扁平文本的 `anydoc_lite.py` 或只保留 Markdown 的来源映射。PDF 版面推断与作者显式标题分开记录；DOCX 保留结构定位，不伪造页码。扫描件/OCR 是独立能力，默认不触发云端 OCR。[LiteParse](https://github.com/run-llama/liteparse)、[AnyDoc](https://github.com/firecrawl/anydoc)
+
+Docling 从首轮默认依赖移出；仅在复杂格式样本表明现有解析不能达标时，作为单独候选重新评估。首版不安装整套布局/OCR模型以验证普通文本 PDF。
 
 解析器选择基于标注样本的读序、标题层级、表格与定位表现，不能只根据“支持 PDF”列表决定。正文抽取成功不等于树解析正确。
 
@@ -224,16 +230,15 @@ heading_path、标题与原文分别存储。检索输入可带标题，但代�
 
 ### 6.1 模型选型与冻结
 
-| 候选 | 用途 | 已知功能边界 | 选择门 |
+| 在线配置 | 用途 | 功能边界 | 选择门 |
 |---|---|---|---|
-| multilingual-e5-small | CPU 默认候选 | 384 维，512-token 输入，检索/聚类模板有区别 | CPU P95、中文短问、长文切片召回 |
-| BGE-M3 | 多语质量对照 | 模型提供 dense/sparse/multi-vector 能力；首轮只测 dense，避免把三种机制同时加入 | 与 E5 同预算质量/成本比较 |
-| Qwen3-Embedding-0.6B | 指令式 embedding 对照 | 支持任务指令与可变输出维度 | 模板正确性、CPU/GPU延迟、领域召回 |
-| BGE-reranker-v2-m3 | 质量模式精排候选 | 输入 query 与 passage，输出相关性评分 | 精排 20/40 候选的真实耗时与条件保留 |
+| SiliconFlow Pro/BAAI/bge-m3 | W0 已配置基线 | 预期 1024 维 dense；不传未受支持的 dimensions 参数 | 实际维度、输入/批量边界、延迟、成本与领域召回 |
+| 其他在线 embedding | 后续必要对照 | 以 provider 实际暴露的模型、模板、维度为准 | 同语料、预算、服务条件下比较；不为对照下载本地权重 |
+| 在线 reranker | 可选质量模式 | 独立调用和成本；不跟随 embedding 自动启用 | 20/40 候选的真实耗时与条件保留 |
 
-来源：[E5 模型卡](https://huggingface.co/intfloat/multilingual-e5-small/raw/main/README.md)、[BGE-M3](https://huggingface.co/BAAI/bge-m3)、[Qwen3](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B)、[BGE reranker](https://huggingface.co/BAAI/bge-reranker-v2-m3)。模型卡能力不代表在本文仓库上的排名；CPU 候选也不构成亚秒推理保证。
+来源：[SiliconFlow embedding 接口](https://siliconflow.readme.io/reference/createembedding)、[BGE-M3 模型卡](https://huggingface.co/BAAI/bge-m3)。开源模型具有的 sparse/multi-vector 能力，不等于在线接口同时返回这些能力。
 
-模型配置冻结 model ID、权重 revision、tokenizer revision、pooling、归一化、任务模板、维度及量化方式。配置 ID 进入缓存和索引 metadata；不同配置的向量不混用。查询 embedding 批量执行、缓存；文件 embedding 按内容 hash 复用。
+模型配置冻结 provider endpoint、model ID、服务配置代次、输入模板、维度、客户端归一化及已知 tokenizer/服务版本。上游不公开权重 revision 时明确未知，不能声称可复现同一权重；服务变更需隔离配置代次并重新验证。配置 ID 进入缓存和索引 metadata，不包含密钥；不同配置的向量不混用。查询 embedding 批量执行、缓存；文档 embedding 按内容 hash 复用。超时/限流/缺失返回不生成假向量，词法与原文仍可用。
 
 检索向量可作为章节聚类的低成本候选；聚类专用模板重新嵌入作为对照，额外成本单列。均值向量、代表块向量集合均需测试，不能假定整文均值就是文档语义。
 
@@ -466,20 +471,20 @@ regex 可使用 ripgrep 默认 Rust regex 语义，配置模式长度、扫描�
 | MCP/协议 | 官方 Python SDK、Pydantic | scope、分页、阅读与错误契约 |
 | 调度 | Python asyncio + 有界 worker进程 | 单写入者、取消、批量任务、资源预算 |
 | 文本结构 | markdown-it-py | IR映射、字节/行号与树构造 |
-| PDF/Office | Docling | provenance适配、解析质量分级 |
+| PDF/Office | LiteParse / AnyDoc | 结构与来源适配、解析质量分级 |
 | 数值 | NumPy/SciPy/scikit-learn | 分裂记录、主题生命周期、代表策略 |
-| 推理 | Sentence Transformers/Transformers | 模型配置、缓存、预算与输入模板 |
+| 在线 embedding | HTTP 客户端与已配置 provider | 模型配置、批量、缓存、限流、超时、响应校验 |
 | 搜索 | LanceDB OSS | 查询计划、exact/ANN选择、去重 |
 | 结构状态 | SQLite | 节点模型、发布manifest、任务与句柄 |
 | 精确扫描 | ripgrep | 文本映射与范围限制 |
 
 官方 SDK：[MCP Python](https://github.com/modelcontextprotocol/python-sdk)。产品自建的是数据语义、阅读契约和生命周期，不重写向量数据库、Markdown语法或矩阵分解。
 
-计算重活不在 Python for 循环内执行；交给引擎、向量化库和模型 runtime。CPU-bound 解析/推理从接口事件循环隔离，进程通信传批量 IDs、文件或 Arrow 数据，避免逐候选 JSON 往返。BLAS、PyTorch、OCR 与检索线程池共享整机预算，不能各自开满核心。
+计算重活交给解析引擎和向量化库，解析从接口事件循环隔离；进程通信传批量 IDs、文件或 Arrow 数据。BLAS、OCR 与检索线程池共享整机预算；在线 embedding 单独控制批量、并发和请求配额。
 
-S档起步一个接口进程、一个有界后台 worker；质量模型按配置载入，不要求多份进程各加载一套大权重。GPU型和CPU型需要不同的batch/并发配置。优化基于profile，不先指定必须把主运行时改写成某语言。
+S档起步一个接口进程、一个有界后台 worker；没有本地 embedding 权重或 GPU 前提。网络中断时本地浏览、原文和词法检索继续可用；新文档向量化及未缓存查询的语义检索需等待在线服务。优化基于实测，不先指定必须改写主运行时。
 
-依赖与模型权重分别锁定。上游许可证、模型许可、native wheels/动态库和词典分发在发布时核对；不将“开源项目”当作所有内含模型均可任意分发的结论。
+本地依赖锁定版本并核对 native wheels/动态库和词典分发许可；在线服务记录配置代次及使用条件。客户端不分发 embedding 权重。
 
 ## 12. 性能与容量验收
 
@@ -497,8 +502,8 @@ S档起步一个接口进程、一个有界后台 worker；质量模型按配置
 |---|---|---|
 | 热 browse/read 已解析缓存 | P95 ≤300 ms | 指定范围；严格源hash I/O另列并报告总耗时 |
 | 词法/过滤/向量/融合 | P95 ≤1 s | 不含 query embedding；精确扫描独立统计 |
-| CPU hybrid 工具端到端 | P95 ≤2 s | 本地模型已热，最长128 query tokens，无精排；未验证 |
-| 精排质量模式 | 新增耗时/收益单列 | 20/40候选、不同长度，不套用上述2秒 |
+| 在线 hybrid 工具端到端 | W3 测量后冻结目标 | query embedding 网络/服务耗时与本地检索分别计量；不沿用本地模型热启动的 2 秒假设 |
+| 精排质量模式 | 新增耗时/收益单列 | 20/40候选、不同长度，记录在线服务与本地处理分别耗时 |
 | 小文本变更到词法可见 | 95% ≤5 s | ≤100 KB、空任务队列 |
 | 正确性 | 版本误指、范围泄漏、静默截断=0 | 确定性测试与故障注入样本 |
 
