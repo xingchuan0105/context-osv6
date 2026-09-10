@@ -7,3 +7,11 @@
 验证：生成 40,000 个自定义 section 的汇编压力文件。默认参数返回 1，报告 40,004 sections / file too big；`-mbig-obj` 返回 0。证据位于 C:\dev\gpui-coff-default.log 和 C:\dev\gpui-coff-big.log。该验证只证明汇编器格式支持，不代表完整 API 构建通过。
 
 用户已批准 45–75 分钟重编。第二轮使用 jobs=2、C:\dev\gpui-backend-target 缓存，日志 C:\dev\gpui-backend-build-retry.log；不修改旧数据库或已安装客户端。窗口验收由用户操作，禁止使用 Computer Use。第二轮完成及真实链路结果另记。
+
+## 第二轮结果与独立环境更新
+
+第二轮构建成功，日志 `Finished dev profile ... in 71m 22s`。Windows API 于 2026-09-10 01:34 生成。
+
+08:45 后执行 upgrade-isolated-backend.ps1：在隔离 PG 15433 内创建 avrag_gpui_current，保留上一测试库及原安装数据库；当前迁移通过后，只替换已核对 PID/路径的测试 API。新 API 路径为 C:\dev\gpui-acceptance-20260909\backend-current\avrag-api.exe，18082 的 /health 返回 status=ok、postgres:ok。对应 prompts/modes/migrations 已同步至独立目录。
+
+新 GPUI 窗口使用 session-current 目录打开，等待用户手工点击连接和发送。尚未据此判定真实聊天、停止或历史恢复通过。
