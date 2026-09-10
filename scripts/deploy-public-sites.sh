@@ -6,11 +6,13 @@
 #   bash scripts/deploy-public-sites.sh              # all: landing why canju
 #   bash scripts/deploy-public-sites.sh landing why  # subset
 #   SITES=landing,canju bash scripts/deploy-public-sites.sh
+#   CHINA_ECONOMY_DIR=/path/to/prototype bash scripts/deploy-public-sites.sh china-economy
 #
 # Env (optional, avrag-rs/.env or shell):
 #   LANDING_DIR  default $HOME/context-os-landing
 #   WHY_DIR      default $HOME/whyiamright
 #   CCHESS_DIR   default $HOME/cchess
+#   CHINA_ECONOMY_DIR default $HOME/china-economic-futures (static dist; blog subpath)
 #   SKIP_BUILD=1 use existing build outputs
 #   WHY_API=0    skip why-api binary (frontend only)
 #   CANJU_SERVER=1 also rebuild/upload cchess server binary (default off)
@@ -38,6 +40,7 @@ fi
 LANDING_DIR="${LANDING_DIR:-$HOME/context-os-landing}"
 WHY_DIR="${WHY_DIR:-$HOME/whyiamright}"
 CCHESS_DIR="${CCHESS_DIR:-$HOME/cchess}"
+CHINA_ECONOMY_DIR="${CHINA_ECONOMY_DIR:-$HOME/china-economic-futures}"
 SKIP_BUILD="${SKIP_BUILD:-0}"
 WHY_API="${WHY_API:-1}"
 CANJU_SERVER="${CANJU_SERVER:-0}"
@@ -309,6 +312,111 @@ REMOTE
   log "canju pub_home:$code"
 }
 
+# ---------- China economic scenarios (static subpath on the Ghost domain) ----------
+deploy_china_economy() {
+  log "=== china-economy: https://blog.contextlm.top/china-economy/ ==="
+  local dir="$CHINA_ECONOMY_DIR" dist srev deploy_id bundle remote_stage
+  dist="$dir/dist"
+  [[ -f "$dist/index.html" && -f "$dist/model.js" ]] || die "missing China prototype dist: $dist"
+  [[ -z "$(find "$dist" -mindepth 1 \( -type l -o -name '.*' \) -print -quit)" ]] ||
+    die "static output must not contain symlinks or hidden files"
+  srev="$(site_rev "$dir")"
+  deploy_id="$(date -u +%Y%m%dT%H%M%S)-$srev"
+  [[ "$deploy_id" =~ ^[A-Za-z0-9._-]+$ ]] || die "invalid release identifier"
+  bundle="$(mktemp /tmp/china-economy.XXXXXX.tgz)"
+  remote_stage="/tmp/china-economy-$deploy_id"
+  tar czf "$bundle" -C "$dist" .
+
+  "${SSH[@]}" "umask 077; mkdir '$remote_stage'"
+  "${SCP[@]}" "$bundle" "${VPS_MAIN_USER}@${VPS_MAIN_HOST}:$remote_stage/site.tgz"
+  "${SCP[@]}" "$ROOT/deploy/nginx/ghost.conf" "${VPS_MAIN_USER}@${VPS_MAIN_HOST}:$remote_stage/ghost.conf"
+  rm -f "$bundle"
+
+  "${SSH[@]}" bash -s -- "$deploy_id" <<'REMOTE'
+set -euo pipefail
+id="$1"
+[[ "$id" =~ ^[A-Za-z0-9._-]+$ ]]
+stage="/tmp/china-economy-$id"
+release="/var/www/blog-static/releases/china-economy/$id"
+live="/var/www/blog-static/china-economy"
+next="/var/www/blog-static/.china-economy-$id"
+conf="/etc/nginx/conf.d/ghost.conf"
+
+systemctl is-active --quiet nginx
+nginx -t
+if [[ -e "$live" && ! -L "$live" ]]; then
+  echo "Refusing to replace an existing non-symlink static directory" >&2
+  exit 1
+fi
+# Only this marked route may differ; preserve any independently changed blog config.
+python3 - "$conf" "$stage/ghost.conf" <<'PY'
+import pathlib, re, sys
+def without_route(path):
+    text = pathlib.Path(path).read_text()
+    return re.sub(r"    # BEGIN china-economy\n.*?    # END china-economy\n\n", "", text, flags=re.S)
+if without_route(sys.argv[1]) != without_route(sys.argv[2]):
+    raise SystemExit("Blog nginx config drift: reconcile the live config before deploying")
+PY
+curl -fsS --max-time 10 --resolve blog.contextlm.top:443:127.0.0.1 https://blog.contextlm.top/ -o /dev/null
+mkdir -p /var/www/blog-static/releases/china-economy
+mkdir "$release"
+tar xzf "$stage/site.tgz" -C "$release" --no-same-owner --no-same-permissions
+test -f "$release/index.html"
+test -f "$release/model.js"
+chmod -R a+rX "$release"
+cp -p "$conf" "$stage/ghost.before.conf"
+old_target="$(readlink "$live" || true)"
+
+rollback() {
+  local status="$?"
+  trap - EXIT
+  if [[ "$status" != 0 ]]; then
+    echo "China deployment failed; restoring blog config and previous static release" >&2
+    cp -p "$stage/ghost.before.conf" "$conf"
+    if [[ -n "$old_target" ]]; then
+      ln -s "$old_target" "$next-rollback"
+      mv -Tf "$next-rollback" "$live"
+    elif [[ -L "$live" ]]; then
+      rm -f "$live"
+    fi
+    nginx -t && systemctl reload nginx
+  fi
+  exit "$status"
+}
+trap rollback EXIT
+ln -s "$release" "$next"
+mv -Tf "$next" "$live"
+install -m 644 "$stage/ghost.conf" "$conf"
+nginx -t
+systemctl reload nginx
+
+origin() {
+  curl -fsS --retry 3 --retry-delay 1 --retry-all-errors --max-time 10 \
+    --resolve blog.contextlm.top:443:127.0.0.1 "https://blog.contextlm.top$1"
+}
+origin /china-economy/ > "$stage/served-index.html"
+grep -q '中国经济的' "$stage/served-index.html"
+for asset in app.js config.js model.js graphics.js story.js styles.css narrative.css methodology.html favicon.svg; do
+  origin "/china-economy/$asset" > "$stage/served-asset"
+  cmp "$stage/served-asset" "$release/$asset"
+done
+for route in / /rss/; do
+  origin "$route" > /dev/null
+done
+[[ "$(curl -sS --max-time 10 --resolve blog.contextlm.top:443:127.0.0.1 -o /dev/null -w '%{http_code}' https://blog.contextlm.top/china-economy)" == 301 ]]
+[[ "$(curl -sS --max-time 10 --resolve blog.contextlm.top:443:127.0.0.1 -o /dev/null -w '%{http_code}' https://blog.contextlm.top/china-economy/not-a-real-asset.js)" == 404 ]]
+systemctl is-active --quiet nginx
+trap - EXIT
+printf 'china_release=%s\nblog_home=200\nblog_rss=200\nchina_origin=200\nchina_assets=byte-identical\n' "$release"
+REMOTE
+
+  append_deployed "  echo \"china_economy_site_rev=$srev\"
+  echo \"china_economy_mono_rev=$MONO_REV\"
+  echo \"china_economy_release=$deploy_id\"
+  echo \"china_economy_deployed_at=\$(date -u +%Y-%m-%dT%H:%M:%SZ)\""
+  log "china-economy published; prior release and nginx backup retained"
+}
+
 apply_nginx_if_requested() {
   [[ "$APPLY_NGINX" == "1" ]] || return 0
   log "=== apply nginx confs from deploy/nginx ==="
@@ -338,12 +446,13 @@ for site in "${SITES[@]}"; do
     landing) deploy_landing ;;
     why)     deploy_why ;;
     canju)   deploy_canju ;;
+    china-economy) deploy_china_economy ;;
     all)
       deploy_landing
       deploy_why
       deploy_canju
       ;;
-    *) die "unknown site: $site (landing|why|canju)" ;;
+    *) die "unknown site: $site (landing|why|canju|china-economy)" ;;
   esac
 done
 

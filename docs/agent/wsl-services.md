@@ -52,3 +52,14 @@ All connection endpoints are pre-configured in `avrag-rs/.env` (`MILVUS_URL`, `D
 - Alignment plan: [`docs/engineering/LOCAL_VPS_ALIGNMENT_PLAN_2026-07-14.md`](../engineering/LOCAL_VPS_ALIGNMENT_PLAN_2026-07-14.md).
 - When deploying, always verify service health on the VPS before reporting success.
 - **Fleet: main only.** One cloud host runs backend + frontend (+ public sites / desktop static as published). The former **qdrant** VPS is **cancelled** (no `VPS_QDRANT_*`). Retrieval is not a second VPS — use local/SaaS `RETRIEVAL_BACKEND` (`pgvector` or `milvus`). IPs are intentionally not repeated here — read `VPS_MAIN_HOST` from `.env` when a script or runbook needs it.
+
+### China economic scenarios under the blog domain
+
+`https://blog.contextlm.top/china-economy/` serves the standalone prototype's `dist/` directory. The remaining blog routes continue to use Ghost. No Node/Python service, new domain, or additional TLS certificate is required.
+
+```bash
+CHINA_ECONOMY_DIR=/path/to/china-economic-futures \
+  bash scripts/deploy-public-sites.sh china-economy
+```
+
+The explicit `china-economy` target uploads a versioned static release, applies only the marked route in `deploy/nginx/ghost.conf`, tests Nginx, and reloads it. It rejects unrelated live-blog configuration drift, preserves the previous release and Nginx backup, and restores them if activation or origin checks fail. It verifies the prototype's assets byte-for-byte plus blog home/RSS before success; also verify the public HTTPS URL from the client after deploying. Existing default/all site targets are unchanged.
