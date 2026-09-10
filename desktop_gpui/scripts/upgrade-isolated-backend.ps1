@@ -2,7 +2,8 @@ param(
     [string]$StateDir = 'C:\dev\gpui-acceptance-20260909',
     [string]$BuildDir = 'C:\dev\gpui-backend-target\x86_64-pc-windows-gnu\debug',
     [string]$InstallDir = (Join-Path $env:LOCALAPPDATA 'Context-OS Client'),
-    [string]$Workspace = 'C:\dev\context-osv6'
+    [string]$Workspace = 'C:\dev\context-osv6',
+    [switch]$Refresh
 )
 $ErrorActionPreference = 'Stop'
 $stateRoot = [IO.Path]::GetFullPath($StateDir)
@@ -19,20 +20,24 @@ foreach ($name in @('postgres','redis')) {
 foreach ($file in @('avrag-api.exe','avrag-migrate.exe')) {
     if (-not (Test-Path -LiteralPath (Join-Path $BuildDir $file))) { throw "Missing current artifact: $file" }
 }
+if (-not $Refresh) {
 if (Test-Path -LiteralPath $backend) { throw 'Current backend directory already exists; refusing to overwrite a running artifact.' }
 New-Item -ItemType Directory -Path $backend | Out-Null
 foreach ($file in @('avrag-api.exe','avrag-migrate.exe')) { Copy-Item -LiteralPath (Join-Path $BuildDir $file) -Destination $backend }
 foreach ($file in @('libgcc_s_seh-1.dll','libstdc++-6.dll','libwinpthread-1.dll')) { Copy-Item -LiteralPath (Join-Path $InstallDir $file) -Destination $backend }
 foreach ($part in @('prompts','modes','migrations')) { Copy-Item -LiteralPath (Join-Path $sourceRoot "avrag-rs\$part") -Destination $backend -Recurse }
+}
 function Sql([string]$Database,[string]$Statement) {
     & "$pgBin\psql.exe" -h 127.0.0.1 -p 15433 -U avrag_cluster_admin -d $Database -v ON_ERROR_STOP=1 -c $Statement *> "$logs\current-sql.log"
     if ($LASTEXITCODE -ne 0) { throw 'Isolated SQL failed; see current-sql.log' }
 }
 # The previous test database is retained. This database receives current migrations.
-Sql 'postgres' 'CREATE DATABASE avrag_gpui_current OWNER avrag;'
-Sql 'avrag_gpui_current' 'CREATE EXTENSION vector;'
+if (-not $Refresh) {
+    Sql 'postgres' 'CREATE DATABASE avrag_gpui_current OWNER avrag;'
+    Sql 'avrag_gpui_current' 'CREATE EXTENSION vector;'
+}
 foreach ($line in Get-Content (Join-Path $sourceRoot 'avrag-rs\.env')) {
-    if ($line -match '^(AGENT_LLM_[A-Z_]+)=(.*)$') { [Environment]::SetEnvironmentVariable($Matches[1], $Matches[2].Trim().Trim('"').Trim("'"), 'Process') }
+    if ($line -match '^(AGENT_LLM_[A-Z_]+|PLATFORM_OFFICIAL_RATES_JSON)=(.*)$') { [Environment]::SetEnvironmentVariable($Matches[1], $Matches[2].Trim().Trim('"').Trim("'"), 'Process') }
 }
 $env:DATABASE_URL='postgres://avrag_runtime:avrag@127.0.0.1:15433/avrag_gpui_current'
 $env:MIGRATION_DATABASE_URL='postgres://avrag:avrag@127.0.0.1:15433/avrag_gpui_current'
@@ -48,6 +53,20 @@ $env:AVRAG_MIGRATIONS_DIR="$backend\migrations"
 $env:JWT_SECRET=[Guid]::NewGuid().ToString('N')+[Guid]::NewGuid().ToString('N')
 $env:AVRAG_UPLOAD_SIGNING_SECRET=[Guid]::NewGuid().ToString('N')+[Guid]::NewGuid().ToString('N')
 $env:BYOK_MASTER_KEY=[Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
+# Keep test identity stable across later configuration refreshes.
+$secretPath=Join-Path $stateRoot 'current-secrets.json'
+if (Test-Path -LiteralPath $secretPath) {
+    $secrets=Get-Content -LiteralPath $secretPath -Raw | ConvertFrom-Json
+    $env:JWT_SECRET=$secrets.jwt
+    $env:AVRAG_UPLOAD_SIGNING_SECRET=$secrets.upload
+    $env:BYOK_MASTER_KEY=$secrets.byok
+} else {
+    @{jwt=$env:JWT_SECRET;upload=$env:AVRAG_UPLOAD_SIGNING_SECRET;byok=$env:BYOK_MASTER_KEY} | ConvertTo-Json | Set-Content -LiteralPath $secretPath
+    $acl=Get-Acl -LiteralPath $secretPath
+    $acl.SetAccessRuleProtection($true,$false)
+    $acl.SetAccessRule([Security.AccessControl.FileSystemAccessRule]::new([Security.Principal.WindowsIdentity]::GetCurrent().User,'FullControl','Allow'))
+    Set-Acl -LiteralPath $secretPath -AclObject $acl
+}
 $env:AVRAG_PLATFORM_KEYS_RELAY='false'
 $env:RUST_LOG='warn'
 function Start-Current([string]$Name,[string]$File) {
@@ -55,6 +74,7 @@ function Start-Current([string]$Name,[string]$File) {
     Add-Content -LiteralPath "$stateRoot\processes.jsonl" -Value (@{name=$Name;id=$child.Id;path=$File} | ConvertTo-Json -Compress)
     return $child
 }
+if (-not $Refresh) {
 $migration=Start-Current 'migrate' "$backend\avrag-migrate.exe"
 if (-not $migration.WaitForExit(60000)) { throw 'Migration still running; inspect tracked process.' }
 if ($migration.ExitCode -ne 0) { throw 'Current migration failed; API has not been replaced.' }
@@ -67,6 +87,7 @@ END LOOP; END $$;
 GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA public TO avrag_runtime;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO avrag_runtime;
 '@
+}
 # Stop only the earlier API owned by this acceptance run, after migrations pass.
 $oldApi=$tracked | Where-Object name -eq 'api' | Select-Object -Last 1
 $listener=Get-NetTCPConnection -State Listen -LocalPort 18082 -ErrorAction Stop

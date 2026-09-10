@@ -59,7 +59,7 @@ Wait-Port 16380
 }
 # Only model settings are reused. Identity, secrets and storage belong to this run.
 foreach ($line in Get-Content (Join-Path $sourceRoot 'avrag-rs\.env')) {
-    if ($line -match '^(AGENT_LLM_[A-Z_]+)=(.*)$') { [Environment]::SetEnvironmentVariable($Matches[1], $Matches[2].Trim().Trim('"').Trim("'"), 'Process') }
+    if ($line -match '^(AGENT_LLM_[A-Z_]+|PLATFORM_OFFICIAL_RATES_JSON)=(.*)$') { [Environment]::SetEnvironmentVariable($Matches[1], $Matches[2].Trim().Trim('"').Trim("'"), 'Process') }
 }
 $env:DATABASE_URL='postgres://avrag_runtime:avrag@127.0.0.1:15433/avrag_client'
 $env:MIGRATION_DATABASE_URL='postgres://avrag:avrag@127.0.0.1:15433/avrag_client'

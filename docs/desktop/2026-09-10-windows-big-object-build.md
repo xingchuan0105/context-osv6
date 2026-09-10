@@ -15,3 +15,9 @@
 08:45 后执行 upgrade-isolated-backend.ps1：在隔离 PG 15433 内创建 avrag_gpui_current，保留上一测试库及原安装数据库；当前迁移通过后，只替换已核对 PID/路径的测试 API。新 API 路径为 C:\dev\gpui-acceptance-20260909\backend-current\avrag-api.exe，18082 的 /health 返回 status=ok、postgres:ok。对应 prompts/modes/migrations 已同步至独立目录。
 
 新 GPUI 窗口使用 session-current 目录打开，等待用户手工点击连接和发送。尚未据此判定真实聊天、停止或历史恢复通过。
+
+## 用户首轮反馈与价格配置修正
+
+用户窗口连接成功、会话已创建，但发送返回 `No official price row for dashscope/qwen3.8-flash`。项目 .env 已有该模型的价格表，验收脚本只传 AGENT_LLM 配置而漏传 PLATFORM_OFFICIAL_RATES_JSON。
+
+两条隔离环境脚本补传原价格表；upgrade 脚本新增 Refresh 模式，不重复创建数据库/迁移/覆盖程序，仅按已记录 PID 和路径核对后刷新独立 API。09-10 08:52 刷新后 /health 为 ok。测试签名/加密密钥开始持久化到受限权限的 current-secrets.json；首次切换前核对 user_provider_secrets 为 0，未破坏已存 BYOK 数据。首次切换需要重新连接，后续刷新复用密钥。旧库与安装版服务未动，价格门通过和真实模型输出仍待用户重试确认。
