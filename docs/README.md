@@ -66,6 +66,7 @@
 - [仓库树产品 PRD v0.3](plans/2026-09-10-repository-tree-prd-v0.3.md) — 规则归档、原文树和 chunk 续读；Windows 原生、在线 embedding；先行原型已运行，正式能力待验收。
 - [仓库树开发计划](plans/2026-09-10-repository-tree-development-plan.md) — W0–W8 首发、W9/P1 与 W10/P2；按用户要求先交付独立原型，正式 W0/V0 尚未关闭。
 - [仓库树原型交付记录](plans/2026-09-10-repository-tree-prototype.md) — Windows 独立工程、启动入口、真实实现和验证证据、后续范围。
+- [仓库树 128 题纯 RAG 评测](plans/2026-09-10-repository-tree-rag128.md) — 独立 Qwen3.8 Flash Agent＋Skill、Eval v2 核心评分适配；不限制 token 预算，在线批次已启动。
 - [仓库树独立版 PRD v0.2（前序方案）](plans/2026-09-10-repository-tree-prd-v0.2.md) — 独立技术选型、发布快照、chunk 顺序与续读契约；v0.3 将自动归档从非目标提升为核心功能，本稿保留供对照。
 - [仓库树 PRD 独立技术评审](reviews/2026-09-10-repository-tree-prd-independent-review.md) — 11 项发现、SVD 评分退化推导、开源组件对比与 v0.2 修订依据。
 - [Subtex 仓库树 PRD v0.1（前序集成方案）](plans/2026-09-10-subtex-repository-tree-prd.md) — 原稿保留供评审对照；其项目复用选型不构成 v0.2 独立技术决策。
