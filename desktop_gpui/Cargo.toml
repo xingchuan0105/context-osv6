@@ -21,6 +21,7 @@ gpui-kit = { git = "https://github.com/longbridge/gpui-kit", rev = "d2304b9063b9
 [features]
 default = []
 ui = ["dep:gpui-kit"]
+headless-tests = ["ui", "gpui-kit/test-support"]
 
 [dev-dependencies]
 markdown = "1.0.0"

@@ -204,7 +204,8 @@ impl ChatApp {
                     .min_h_0()
                     .overflow_y_scroll()
                     .p_6()
-                    .child(body),
+                    .child(body)
+                    .test_support(),
             )
     }
 }

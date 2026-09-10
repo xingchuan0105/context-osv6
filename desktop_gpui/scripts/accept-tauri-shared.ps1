@@ -1,6 +1,7 @@
 param(
     [string]$Workspace = 'C:\dev\context-osv6',
-    [switch]$WithHttpFixture
+    [switch]$WithHttpFixture,
+    [switch]$WithHeadlessUi
 )
 $ErrorActionPreference = 'Stop'
 $project = Join-Path $Workspace 'desktop_gpui'
@@ -24,7 +25,10 @@ try {
         $env:GPUI_ACCEPTANCE_HTTP = '1'
         Run-Cargo 'local-session-history' @('test', '--locked', '--lib', 'runtime::acceptance::local_session_and_history_over_http', '--', '--ignored', '--exact')
     }
-    Write-Output "Host tests passed. Native UI and real provider acceptance remain separate. Logs: $logs"
+    if ($WithHeadlessUi) {
+        & (Join-Path $PSScriptRoot 'accept-headless.ps1') -Workspace $Workspace
+    }
+    Write-Output "Requested host/UI suites passed. GPU pixels, system IME and real provider acceptance remain separate. Logs: $logs"
 } finally {
     Pop-Location
 }

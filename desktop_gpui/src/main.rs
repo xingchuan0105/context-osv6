@@ -7,6 +7,7 @@ use desktop_gpui::{
 };
 use futures::StreamExt;
 use gpui_kit::prelude::FluentBuilder;
+use gpui_kit::base::TestSupportExt;
 use gpui_kit::{
     component::{
         button::*,
@@ -21,6 +22,8 @@ use web_sdk::TurnStatus;
 
 mod markdown_view;
 mod service_view;
+#[cfg(all(test, feature = "headless-tests"))]
+mod ui_tests;
 
 struct ChatApp {
     host: Host,
@@ -531,7 +534,7 @@ impl Render for ChatApp {
                                     }),
                             ),
                     )
-                    .child(messages)
+                    .child(messages.test_support())
                     .child(
                         div()
                             .flex()
@@ -553,7 +556,13 @@ impl Render for ChatApp {
                                             .text_color(cx.theme().muted_foreground)
                                             .child(status),
                                     )
-                                    .child(Textarea::new(&self.input).h(px(112.)))
+                                    .child(
+                                        div()
+                                            .id("composer-input")
+                                            .test_support()
+                                            .track_focus(&self.input.focus_handle(cx))
+                                            .child(Textarea::new(&self.input).h(px(112.))),
+                                    )
                                     .child(controls),
                             ),
                     )
