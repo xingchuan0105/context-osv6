@@ -158,7 +158,8 @@ fn local_session_and_history_over_http() {
     let listener =
         TcpListener::bind("127.0.0.1:18180").expect("isolated fixture port must be free");
     let server = std::thread::spawn(move || {
-        for _ in 0..5 {
+        let mut title: Option<String> = None;
+        for _ in 0..8 {
             let (mut socket, _) = listener.accept().unwrap();
             socket
                 .set_read_timeout(Some(Duration::from_secs(5)))
@@ -180,14 +181,36 @@ fn local_session_and_history_over_http() {
                         .map(|s| s.trim().parse::<usize>().unwrap())
                 })
                 .unwrap_or(0);
-            socket.read_exact(&mut vec![0; size]).unwrap();
+            let mut payload = vec![0; size];
+            socket.read_exact(&mut payload).unwrap();
+            if path.starts_with("/api/v1/chat/") {
+                assert!(
+                    headers
+                        .to_lowercase()
+                        .contains("authorization: bearer synthetic-local-session")
+                );
+            }
             let body = match path {
                 "/health" | "/api/auth/me" => serde_json::json!({"success":true}),
                 "/api/auth/login" => serde_json::json!({"success":true,"data":{"token":"synthetic-local-session","user":{"id":"fixture-user","email":"local@context-os.client","full_name":"Fixture"}}}),
                 "/api/v1/chat/sessions" => serde_json::json!({"sessions":[
-                    {"id":"sess-900","owner_user_id":"fixture-user","scope_kind":"personal","model_role":"quick_chat","agent_type":"chat","created_at":"2026-09-09","updated_at":"2026-09-09"},
+                    {"id":"sess-900","title":title,"owner_user_id":"fixture-user","scope_kind":"personal","model_role":"quick_chat","agent_type":"chat","created_at":"2026-09-09","updated_at":"2026-09-09"},
+                    {"id":"sess-named","title":"自定标题","owner_user_id":"fixture-user","scope_kind":"personal","model_role":"quick_chat","agent_type":"chat","created_at":"2026-09-09","updated_at":"2026-09-09"},
                     {"id":"sess-workspace","owner_user_id":"fixture-user","workspace_id":"workspace-fixture","scope_kind":"workspace","model_role":"agent","agent_type":"rag","created_at":"2026-09-09","updated_at":"2026-09-09"}
                 ]}),
+                "/api/v1/chat/sessions/sess-900/messages" => serde_json::json!({"messages":[
+                    {"id":1,"session_id":"sess-900","role":"user","content":"首条中文问题","created_at":"2026-09-09"},
+                    {"id":2,"session_id":"sess-900","role":"assistant","content":"回答正文","created_at":"2026-09-09"},
+                    {"id":3,"session_id":"sess-900","role":"user","content":"后续问题不能覆盖标题","created_at":"2026-09-09"}
+                ]}),
+                "/api/v1/chat/sessions/sess-900" => {
+                    assert!(headers.starts_with("PATCH "));
+                    assert_eq!(serde_json::from_slice::<serde_json::Value>(&payload).unwrap(),
+                        serde_json::json!({"title":"首条中文问题"}));
+                    assert!(title.is_none(), "a persisted title must not be written again");
+                    title = Some("首条中文问题".into());
+                    serde_json::json!({"id":"sess-900","title":title,"owner_user_id":"fixture-user","scope_kind":"personal","model_role":"quick_chat","agent_type":"chat","created_at":"2026-09-09","updated_at":"2026-09-09"})
+                },
                 "/api/v1/chat/sessions/sess-history/messages" => serde_json::json!({"messages":[
                     {"id":1,"session_id":"sess-history","role":"user","content":"历史问题","created_at":"2026-09-09"},
                     {"id":2,"session_id":"sess-history","role":"assistant","content":"这是历史助手的完整回答内容。","created_at":"2026-09-09"}
@@ -212,12 +235,28 @@ fn local_session_and_history_over_http() {
         Update::Sessions(Ok(sessions)) => {
             assert_eq!(
                 sessions.len(),
-                1,
+                2,
                 "workspace sessions leaked into personal chat"
             );
             assert_eq!(sessions[0].id, "sess-900");
+            assert_eq!(sessions[1].title.as_deref(), Some("自定标题"));
         }
         _ => panic!("session listing failed"),
+    }
+    match next(&host, &mut updates) {
+        Update::SessionTitle(Ok(session)) => {
+            assert_eq!(session.id, "sess-900");
+            assert_eq!(session.title.as_deref(), Some("首条中文问题"));
+        }
+        _ => panic!("missing title was not persisted"),
+    }
+    host.sessions(token.clone());
+    match next(&host, &mut updates) {
+        Update::Sessions(Ok(sessions)) => {
+            assert_eq!(sessions[0].title.as_deref(), Some("首条中文问题"));
+            assert_eq!(sessions[1].title.as_deref(), Some("自定标题"));
+        }
+        _ => panic!("persisted titles were not restored"),
     }
     host.history(token, "sess-history".into(), 42);
     match next(&host, &mut updates) {

@@ -2,9 +2,14 @@ use contracts::{
     chat::{ChatEvent, ChatMessage},
     workspaces::ChatSession,
 };
-use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender, unbounded};
+use futures::{
+    StreamExt,
+    channel::mpsc::{UnboundedReceiver, UnboundedSender, unbounded},
+};
 use std::path::PathBuf;
 use tokio_util::sync::CancellationToken;
+
+use crate::session_titles::{has_title, title_from_messages};
 
 #[cfg(test)]
 mod acceptance;
@@ -12,6 +17,7 @@ mod acceptance;
 pub enum Update {
     Login(Result<desktop_core::LocalSessionStatus, String>),
     Sessions(Result<Vec<ChatSession>, String>),
+    SessionTitle(Result<ChatSession, String>),
     History(u64, Result<Vec<ChatMessage>, String>),
     Event(u64, ChatEvent),
     End(u64, Result<(), String>),
@@ -50,21 +56,44 @@ impl Host {
                     "GET".into(),
                     web_sdk::conversation_api::sessions_url(""),
                     None,
-                    Some(token),
+                    Some(token.clone()),
                 )
                 .await
                 .map_err(|e| e.to_string())?;
                 let body = serde_json::to_vec(&value).map_err(|e| e.to_string())?;
                 let list = web_sdk::conversation_api::parse_session_list(&body)
                     .map_err(|e| e.to_string())?;
-                Ok(list
-                    .sessions
-                    .into_iter()
-                    .filter(|s| s.workspace_id.is_none())
-                    .collect())
+                Ok::<Vec<ChatSession>, String>(
+                    list.sessions
+                        .into_iter()
+                        .filter(|s| s.workspace_id.is_none())
+                        .collect(),
+                )
             }
             .await;
-            let _ = sender.unbounded_send(Update::Sessions(result));
+            let sessions = match result {
+                Ok(sessions) => sessions,
+                Err(error) => {
+                    let _ = sender.unbounded_send(Update::Sessions(Err(error)));
+                    return;
+                }
+            };
+            let _ = sender.unbounded_send(Update::Sessions(Ok(sessions.clone())));
+            // Show the list immediately; resolve only missing titles, at most four at once.
+            let mut titles = futures::stream::iter(sessions.into_iter().filter(|s| !has_title(s)))
+                .map(|session| name_session(token.clone(), session))
+                .buffer_unordered(4);
+            while let Some(result) = titles.next().await {
+                match result {
+                    Ok(Some(session)) => {
+                        let _ = sender.unbounded_send(Update::SessionTitle(Ok(session)));
+                    }
+                    Ok(None) => {}
+                    Err(error) => {
+                        let _ = sender.unbounded_send(Update::SessionTitle(Err(error)));
+                    }
+                }
+            }
         });
     }
 
@@ -131,6 +160,37 @@ impl Host {
         });
         cancel
     }
+}
+
+async fn name_session(token: String, session: ChatSession) -> Result<Option<ChatSession>, String> {
+    let value = desktop_core::api_call(
+        "GET".into(),
+        web_sdk::conversation_api::session_messages_url("", &session.id),
+        None,
+        Some(token.clone()),
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+    let body = serde_json::to_vec(&value).map_err(|e| e.to_string())?;
+    let messages =
+        web_sdk::conversation_api::parse_message_list(&body).map_err(|e| e.to_string())?;
+    let Some(title) = title_from_messages(&messages.messages) else {
+        return Ok(None);
+    };
+    let body = web_sdk::workspace_api::update_session_json(Some(&title), None)
+        .map_err(|e| e.to_string())?;
+    let value = desktop_core::api_call(
+        "PATCH".into(),
+        web_sdk::conversation_api::session_url("", &session.id),
+        Some(serde_json::from_slice(&body).map_err(|e| e.to_string())?),
+        Some(token),
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+    let body = serde_json::to_vec(&value).map_err(|e| e.to_string())?;
+    web_sdk::conversation_api::parse_session(&body)
+        .map(Some)
+        .map_err(|e| e.to_string())
 }
 
 #[cfg(test)]

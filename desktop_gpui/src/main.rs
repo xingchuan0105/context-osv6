@@ -2,6 +2,7 @@ use contracts::workspaces::ChatSession;
 use desktop_gpui::{
     runtime::{Host, Update},
     session::Conversation,
+    session_titles::session_label,
 };
 use futures::StreamExt;
 use gpui_kit::prelude::FluentBuilder;
@@ -9,6 +10,7 @@ use gpui_kit::{
     component::{
         button::*,
         input::{Textarea, TextareaState},
+        text::{TextView, TextViewStyle},
         *,
     },
     *,
@@ -26,6 +28,7 @@ struct ChatApp {
     connection_attempted: bool,
     loading: bool,
     notice: String,
+    title_error: Option<String>,
     cancel: Option<CancellationToken>,
     scroll: ScrollHandle,
 }
@@ -62,6 +65,7 @@ impl ChatApp {
             connection_attempted: false,
             loading: false,
             notice: "连接本机服务后开始聊天".into(),
+            title_error: None,
             cancel: None,
             scroll: ScrollHandle::new(),
         }
@@ -85,8 +89,19 @@ impl ChatApp {
                 }
             }
             Update::Sessions(result) => match result {
-                Ok(sessions) => self.sessions = sessions,
+                Ok(sessions) => {
+                    self.sessions = sessions;
+                    self.title_error = None;
+                }
                 Err(error) => self.notice = format!("会话列表加载失败：{error}"),
+            },
+            Update::SessionTitle(result) => match result {
+                Ok(session) => {
+                    if let Some(row) = self.sessions.iter_mut().find(|row| row.id == session.id) {
+                        *row = session;
+                    }
+                }
+                Err(error) => self.title_error = Some(error),
             },
             Update::History(generation, result) if generation == self.conversation.generation => {
                 self.loading = false;
@@ -206,6 +221,21 @@ impl Render for ChatApp {
                     .text_color(cx.theme().muted_foreground)
                     .child("个人聊天 · 历史会话"),
             );
+        if let Some(error) = &self.title_error {
+            sidebar = sidebar.child(
+                div().text_sm().child("部分会话名称未保存").child(
+                    Button::new("retry-titles")
+                        .ghost()
+                        .label("重试")
+                        .tooltip(error.clone())
+                        .on_click(cx.listener(|this, _, _, _| {
+                            if let Some(token) = &this.token {
+                                this.host.sessions(token.clone());
+                            }
+                        })),
+                ),
+            );
+        }
         if self.sessions.is_empty() {
             sidebar = sidebar.child(
                 div()
@@ -220,9 +250,15 @@ impl Render for ChatApp {
         }
         for session in &self.sessions {
             let id = session.id.clone();
+            let label = session_label(session);
             sidebar = sidebar.child(
                 Button::new(SharedString::from(id.clone()))
-                    .label(session.title.clone().unwrap_or_else(|| "未命名对话".into()))
+                    .ghost()
+                    .w_full()
+                    .selected(self.conversation.session_id.as_deref() == Some(id.as_str()))
+                    .accessibility_label(label.clone())
+                    .tooltip(label.clone())
+                    .child(div().w_full().min_w_0().text_ellipsis().child(label))
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.stop();
                         let generation = this.conversation.reset(Some(id.clone()));
@@ -245,25 +281,24 @@ impl Render for ChatApp {
             .items_center()
             .gap_4()
             .p_4();
-        for (role, text) in &self.conversation.messages {
-            messages = messages.child(
-                div()
-                    .w_full()
-                    .max_w(px(760.))
-                    .flex()
-                    .flex_col()
-                    .gap_2()
-                    .child(if role == "user" { "你" } else { "Context-OS" })
-                    .child(div().child(text.clone())),
-            );
+        let session_key = self
+            .conversation
+            .session_id
+            .clone()
+            .unwrap_or_else(|| format!("draft-{}", self.conversation.generation));
+        for (index, (role, text)) in self.conversation.messages.iter().enumerate() {
+            messages = messages.child(render_message(
+                format!("message-{session_key}-{index}"),
+                role,
+                text,
+            ));
         }
         if !self.conversation.turn.answer_text.is_empty() {
-            messages = messages.child(
-                div()
-                    .w_full()
-                    .max_w(px(760.))
-                    .child(self.conversation.turn.answer_text.clone()),
-            );
+            messages = messages.child(render_message(
+                format!("message-{session_key}-{}", self.conversation.messages.len()),
+                "assistant",
+                &self.conversation.turn.answer_text,
+            ));
         }
         if self.loading {
             messages = messages.child(
@@ -396,6 +431,30 @@ impl Render for ChatApp {
                     .when(empty, |content| content.child(div().flex_1())),
             )
     }
+}
+
+fn render_message(id: String, role: &str, text: &str) -> Div {
+    let mut row = div()
+        .w_full()
+        .min_w_0()
+        .max_w(px(760.))
+        .flex()
+        .flex_col()
+        .gap_2()
+        .child(if role == "user" { "你" } else { "Context-OS" });
+    if role == "assistant" {
+        let mut table = StyleRefinement::default();
+        table.overflow.x = Some(Overflow::Scroll);
+        row = row.child(
+            TextView::markdown(SharedString::from(id), text.to_owned())
+                .w_full()
+                .min_w_0()
+                .style(TextViewStyle::default().table(table)),
+        );
+    } else {
+        row = row.child(div().child(text.to_owned()));
+    }
+    row
 }
 
 fn main() {

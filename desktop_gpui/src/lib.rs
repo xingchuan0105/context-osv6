@@ -2,6 +2,7 @@ use web_sdk::{ChatTurnState, FixtureTransport, reduce_chat_event};
 
 pub mod runtime;
 pub mod session;
+pub mod session_titles;
 
 /// 把 JSONL / `data:` 夹具收成一轮状态。GPUI 与测试共用，不解析第二套事件类型。
 pub fn reduce_fixture_json_lines(json: &str) -> Result<ChatTurnState, serde_json::Error> {
