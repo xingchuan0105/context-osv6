@@ -1,6 +1,6 @@
 # 普通 Agent 与仓库树：典型 20 题对照实验方案
 
-日期：2026-09-10。状态：**接口实现和本地 60 项测试通过，在线技术小批运行中**。用户已授权开始，批次 `typical20-v1`。从现有 128 道纯 RAG 中选典型 20 题，四路各并发 2、总并发上限 8；沿用三次重复，共 240 个答案。本方案承接[原型评测](2026-09-10-repository-tree-rag128.md)，使用 Windows 原生、Qwen3.8 Flash、在线 embedding，不设 token 预算上限。独立工程为 `C:\Users\xingc\Documents\Codex\repository-tree`。
+日期：2026-09-10。状态：**`typical20-v2` 的240个答案、统一评分和72例 coding assistant 独立复核已完成，本地72项测试通过；人工验收另列**。从现有 128 道纯 RAG 中选典型 20 题，四路各并发 2、总并发上限 8；沿用三次重复，共 240 个答案。本方案承接[原型评测](2026-09-10-repository-tree-rag128.md)，使用 Windows 原生、Qwen3.8 Flash、在线 embedding，不设 token 预算上限。独立工程为 `C:\Users\xingc\Documents\Codex\repository-tree`。
 
 ## 1. 普通 Agent 怎样检索
 
@@ -250,3 +250,25 @@ q134 的 `prior_turns` 和原生 `expect_no_retrieval` 标记保留，它仍参�
 - 原始实验评分协议 v1 存在引文复写验证、重复引用解析及遗漏随正文返回标题的问题。所有原始答案与分数保留，完成后对全部 240 个答案统一用 ID 选取协议 v2 重评；不因答案低分而重新生成。原生 Eval v2 分数单列，不与实验协议版本号混淆。
 - 启动入口：独立工程 `scripts/run-controlled20.ps1 -RunId typical20-v2`；后台按 pilot → full 执行，保留进程与请求账本。原始生成结束后另运行 `scripts/run-controlled20-rescore.ps1 -RunId typical20-v2`，重评分也保持四路各 2、总上限 8，不与生成叠加并发。
 - 实时状态位于 `.eval/controlled/typical20-v2/progress.json`；重评分状态在同目录的 `rescoring-v2/progress.json`。独立复核由 coding assistant 读取预定 72 个答案及本次证据，不冒充人工验收；真实人工验收状态另列。
+- 2026-09-10 14:18，原批完成 159 个答案时旧逐点评分连续三次格式失败触发熔断，原生评分及已生成答案未丢失。14:21 启动 `scripts/run-controlled20-continuation.ps1`，只补缺少的 81 个答案；配置/源码/语料/向量指纹相同，旧评分移出生成流程，所有 240 个答案仍统一重评。原始 159 例的答案与评分哈希纳入续跑清单并在结束时核对。
+
+- 完成核验：原有159例及评分哈希未变，新增81例，全部240例统一评分有效；没有未解决的评分协议错误。重评分与原始生成请求峰值均8，各路均2。报告生成校验了原始源码快照及答案、Prompt和判据指纹。
+- 后续正常启动流程已移除旧逐点评分器，采用生成及原生评分→统一逐点评分v2→离线汇总。该清理发生在全部答案冻结后，不用于改写本批答案。清理后本地72/72测试通过（8.05秒），代码结构图更新。
+
+## 13. 实验结果
+
+本批尚未证明显式树导航能稳定提高准确率。除q079表格计数题外，其余16道事实题四组必要点有据覆盖均为100%；全部覆盖分差来自同一争议题。B−A为−2.0个百分点、D−C为+1.0个百分点，两项预定比较的97.5%配对区间均包含零。不能把满分饱和解读成架构等效。
+
+| 指标 | A 混合平铺 | B 混合树 | C grep平铺 | D grep树 |
+|---|---:|---:|---:|---:|
+| 原生PASS | 56/60 | 60/60 | 58/60 | 57/60 |
+| 必要点有据覆盖 | 98.0% | 96.1% | 95.1% | 96.1% |
+| 严格任务成功 | 53/60 | 50/60 | 53/60 | 54/60 |
+| Agent tokens，百万 | 6.65 | 5.94 | 5.76 | 4.98 |
+| 单题中位耗时，秒 | 16.5 | 20.0 | 17.4 | 19.2 |
+
+树组 tokens 点估计分别降低10.6%和13.5%，但问题配对区间跨零，延迟没有同步改善。树导航仅在B的16/60、D的19/60个答案中实际调用；没有测试强制树遍历、跨文档聚类或SVD。普通多轮grep和连续读取在该10文档小语料上已经接近事实题评分上限。
+
+72例独立复核与自动裁判有11例分歧，其中9例涉及表格计数证据充分性；另有错误解释grep及虚构限流等自动裁判漏判案例。保留全部自动评分，并做四组统一排除q079的事后敏感性分析。该复核由coding assistant完成，不是人工验收；原计划中的人工评分审批/人工审计不能标为已完成。
+
+交付：[结论、典型案例与局限](C:/Users/xingc/Documents/Codex/repository-tree/evidence/controlled20-typical20-v2-analysis.md)；[全指标与配对区间](C:/Users/xingc/Documents/Codex/repository-tree/evidence/controlled20-typical20-v2-rescored-v2.md)；[逐题机器结果](C:/Users/xingc/Documents/Codex/repository-tree/evidence/controlled20-typical20-v2-rescored-v2.json)。本批不外推完整128题或生产SaC优劣。
