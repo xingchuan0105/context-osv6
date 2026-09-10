@@ -235,18 +235,35 @@ impl ChatApp {
                             ),
                         )
                         .child(if upload.running {
-                            "正在上传…".to_string()
+                            if upload.document_id.is_some() {
+                                "正在提交…"
+                            } else {
+                                "正在上传…"
+                            }
+                            .to_string()
                         } else {
                             upload.error.clone().unwrap_or_default()
                         });
                     if !upload.running {
                         let id = *id;
+                        let retry = upload
+                            .document_id
+                            .as_ref()
+                            .map(|id| Action::CompleteUpload(id.clone()))
+                            .unwrap_or_else(|| Action::Upload(path.clone()));
+                        let completing = upload.document_id.is_some();
                         row = row.child(
                             Button::new(SharedString::from(format!("retry-upload-{id}")))
-                                .label("重试上传")
+                                .label(if completing {
+                                    "重试提交"
+                                } else {
+                                    "重试上传"
+                                })
                                 .on_click(cx.listener(move |this, _, _, cx| {
-                                    this.knowledge.uploads.remove(&id);
-                                    this.knowledge_action(Action::Upload(path.clone()), cx);
+                                    if !completing {
+                                        this.knowledge.uploads.remove(&id);
+                                    }
+                                    this.knowledge_action(retry.clone(), cx);
                                 })),
                         );
                     }
@@ -326,6 +343,19 @@ impl ChatApp {
                                     this.knowledge_action(Action::Reindex(retry_id.clone()), cx)
                                 })),
                         );
+                    }
+                    if document.status == "pending"
+                        && !self
+                            .knowledge
+                            .uploads
+                            .values()
+                            .any(|upload| upload.document_id.as_deref() == Some(&document.id))
+                    {
+                        let id = document.id.clone();
+                        row = row.child(Button::new(SharedString::from(format!("complete-doc-{id}")))
+                            .label("继续提交")
+                            .disabled(self.knowledge.busy(|a| matches!(a, Action::CompleteUpload(pending) if pending == &id)))
+                            .on_click(cx.listener(move |this, _, _, cx| this.knowledge_action(Action::CompleteUpload(id.clone()), cx))));
                     }
                     body = body.child(row);
                 }

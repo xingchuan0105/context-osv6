@@ -19,6 +19,42 @@ fn edit(h: &Harness, cx: &mut TestAppContext, id: &'static str, value: &str) {
 }
 
 #[gpui_kit::test]
+fn saved_note_update_uses_the_real_put_contract(cx: &mut TestAppContext) {
+    let h = Harness::new(cx, 1280., 800.);
+    enter(&h, cx);
+    h.click(cx, "workspace-notes");
+    edit(&h, cx, "note-title", "保存后修改");
+    edit(&h, cx, "note-content", "第一版");
+    h.click(cx, "save-note");
+    h.wait(cx, |v| v.knowledge.note_id.is_some());
+    edit(&h, cx, "note-content", "补充内容");
+    let updated = h.view.read_with(cx, |v, cx| {
+        v.knowledge.note_content.read(cx).value().to_string()
+    });
+    assert!(updated.contains("补充内容"));
+    h.click(cx, "save-note");
+    h.wait(cx, |v| {
+        v.knowledge.notes.iter().any(|n| n.content == updated)
+    });
+    assert_eq!(
+        h.fixture
+            .count("POST /api/v1/workspaces/workspace-ui/notes"),
+        1
+    );
+    assert_eq!(
+        h.fixture
+            .count("PUT /api/v1/workspaces/workspace-ui/notes/created-note"),
+        1
+    );
+    assert_eq!(
+        h.fixture
+            .count("PATCH /api/v1/workspaces/workspace-ui/notes/created-note"),
+        0
+    );
+    h.close(cx);
+}
+
+#[gpui_kit::test]
 fn workspace_create_and_navigation_keep_personal_draft(cx: &mut TestAppContext) {
     let h = Harness::new(cx, 1280., 720.);
     h.connect(cx);
@@ -186,6 +222,177 @@ fn file_picker_cancel_and_real_upload_bytes_poll_to_ready(cx: &mut TestAppContex
             .any(|d| d.id == "uploaded-document" && d.status == "completed")
     });
     assert!(h.view.read_with(cx, |v, _| v.knowledge.panel.is_none()));
+    h.close(cx);
+}
+
+fn pick_upload(h: &Harness, cx: &mut TestAppContext) {
+    let file = std::path::PathBuf::from(std::env::var_os("CONTEXT_OS_DESKTOP_DATA_DIR").unwrap())
+        .join("submit-recovery.txt");
+    std::fs::write(&file, "synthetic submission recovery").unwrap();
+    h.click(cx, "add-workspace-document");
+    cx.simulate_path_prompt_response(move |_| Some(vec![file]));
+}
+
+#[gpui_kit::test]
+fn failed_submit_reuses_uploaded_document_after_workspace_switch(cx: &mut TestAppContext) {
+    let h = Harness::new(cx, 1280., 800.);
+    enter(&h, cx);
+    h.fixture
+        .knowledge
+        .lock()
+        .unwrap()
+        .fail_complete
+        .store(true, Ordering::SeqCst);
+    pick_upload(&h, cx);
+    h.wait(cx, |v| {
+        v.knowledge
+            .uploads
+            .values()
+            .any(|u| u.error.is_some() && u.document_id.is_some())
+    });
+    h.click(cx, "personal-nav");
+    h.click(cx, "workspaces-nav");
+    h.wait(cx, |v| v.knowledge.workspaces.len() == 2);
+    h.click(cx, "workspace-workspace-ui");
+    h.click(cx, "workspace-documents");
+    let id = h
+        .view
+        .read_with(cx, |v, _| *v.knowledge.uploads.keys().next().unwrap());
+    h.fixture
+        .knowledge
+        .lock()
+        .unwrap()
+        .fail_complete
+        .store(false, Ordering::SeqCst);
+    h.frame(cx, |window, cx| {
+        window.click(
+            gpui_kit::SharedString::from(format!("retry-upload-{id}")),
+            cx,
+        )
+    });
+    h.wait(cx, |v| {
+        v.knowledge
+            .documents
+            .iter()
+            .any(|d| d.id == "uploaded-document" && d.status != "pending")
+            && !v
+                .knowledge
+                .busy(|a| matches!(a, desktop_gpui::workspace::Action::CompleteUpload(_)))
+    });
+    h.view.read_with(cx, |v, _| {
+        assert!(
+            v.knowledge
+                .uploads
+                .values()
+                .all(|u| !u.running && u.error.is_none())
+        )
+    });
+    assert_eq!(
+        h.fixture
+            .count("POST /api/v1/workspaces/workspace-ui/documents"),
+        1
+    );
+    assert_eq!(h.fixture.count("PUT /uploads/uploaded-document"), 1);
+    assert_eq!(
+        h.fixture
+            .count("POST /api/v1/documents/uploaded-document/complete-upload"),
+        2
+    );
+    assert_eq!(
+        h.fixture
+            .count("DELETE /api/v1/documents/uploaded-document"),
+        0
+    );
+    h.close(cx);
+}
+
+#[gpui_kit::test]
+fn lost_submit_response_reconciles_without_duplicate_upload(cx: &mut TestAppContext) {
+    let h = Harness::new(cx, 1280., 800.);
+    enter(&h, cx);
+    h.fixture
+        .knowledge
+        .lock()
+        .unwrap()
+        .lose_complete_response
+        .store(true, Ordering::SeqCst);
+    pick_upload(&h, cx);
+    h.wait(cx, |v| {
+        v.knowledge
+            .documents
+            .iter()
+            .any(|d| d.id == "uploaded-document" && d.status == "completed")
+    });
+    h.view.read_with(cx, |v, _| {
+        assert!(v.knowledge.error.is_none());
+        assert!(
+            v.knowledge
+                .uploads
+                .values()
+                .all(|u| !u.running && u.error.is_none())
+        );
+    });
+    assert_eq!(
+        h.fixture
+            .count("POST /api/v1/workspaces/workspace-ui/documents"),
+        1
+    );
+    assert_eq!(h.fixture.count("PUT /uploads/uploaded-document"), 1);
+    assert_eq!(
+        h.fixture
+            .count("POST /api/v1/documents/uploaded-document/complete-upload"),
+        1
+    );
+    assert_eq!(
+        h.fixture
+            .count("DELETE /api/v1/documents/uploaded-document"),
+        0
+    );
+    h.close(cx);
+}
+
+#[gpui_kit::test]
+fn pending_document_can_submit_without_in_memory_upload_task(cx: &mut TestAppContext) {
+    let h = Harness::new(cx, 1280., 800.);
+    enter(&h, cx);
+    h.fixture
+        .knowledge
+        .lock()
+        .unwrap()
+        .fail_complete
+        .store(true, Ordering::SeqCst);
+    pick_upload(&h, cx);
+    h.wait(cx, |v| {
+        v.knowledge
+            .documents
+            .iter()
+            .any(|d| d.id == "uploaded-document")
+            && !v.knowledge.busy(|_| true)
+    });
+    // The server record is the recovery source when the prior host task is unavailable.
+    h.view.update(cx, |v, cx| {
+        v.knowledge.uploads.clear();
+        cx.notify();
+    });
+    h.fixture
+        .knowledge
+        .lock()
+        .unwrap()
+        .fail_complete
+        .store(false, Ordering::SeqCst);
+    h.click(cx, "complete-doc-uploaded-document");
+    h.wait(cx, |v| {
+        v.knowledge
+            .documents
+            .iter()
+            .any(|d| d.id == "uploaded-document" && d.status != "pending")
+    });
+    assert_eq!(
+        h.fixture
+            .count("POST /api/v1/workspaces/workspace-ui/documents"),
+        1
+    );
+    assert_eq!(h.fixture.count("PUT /uploads/uploaded-document"), 1);
     h.close(cx);
 }
 

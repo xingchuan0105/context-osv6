@@ -32,11 +32,13 @@ pub(super) struct Pending {
     revision: u64,
     action: Action,
 }
+#[derive(Clone)]
 pub(super) struct Upload {
     pub workspace: String,
     pub path: std::path::PathBuf,
     pub running: bool,
     pub error: Option<String>,
+    pub document_id: Option<String>,
 }
 
 pub(super) struct Knowledge {
@@ -122,7 +124,7 @@ impl ChatApp {
             return;
         };
         if self.knowledge.busy(|pending| {
-            matches!(
+            matches!((pending, &action), (Action::CompleteUpload(a), Action::CompleteUpload(b)) if a == b) || matches!(
                 (pending, &action),
                 (Action::Load, Action::Load)
                     | (Action::Create(_), Action::Create(_))
@@ -142,8 +144,21 @@ impl ChatApp {
                     path: path.clone(),
                     running: true,
                     error: None,
+                    document_id: None,
                 },
             );
+        }
+        if let Action::CompleteUpload(document_id) = &action {
+            let previous = self.knowledge.uploads.iter().find_map(|(id, upload)| {
+                (Some(&upload.workspace) == scope.as_ref()
+                    && upload.document_id.as_ref() == Some(document_id))
+                .then_some(*id)
+            });
+            if let Some(mut upload) = previous.and_then(|id| self.knowledge.uploads.remove(&id)) {
+                upload.running = true;
+                upload.error = None;
+                self.knowledge.uploads.insert(request, upload);
+            }
         }
         if !matches!(action, Action::Load) {
             self.knowledge.error = None;
@@ -172,12 +187,20 @@ impl ChatApp {
         if let Some(upload) = self.knowledge.uploads.get_mut(&reply.request) {
             upload.running = false;
             upload.error = reply.result.as_ref().err().cloned();
+            if let Ok(ResultData::Uploaded {
+                document_id,
+                completion,
+            }) = &reply.result
+            {
+                upload.document_id = Some(document_id.clone());
+                upload.error = completion.as_ref().err().cloned();
+            }
         }
         let current =
             pending.epoch == self.knowledge.epoch && reply.workspace == self.knowledge.scope();
         // A late upload still belongs to its original workspace; only refresh that visible scope.
         if !current && !matches!(reply.action, Action::List | Action::Create(_)) {
-            if matches!(reply.action, Action::Upload(_))
+            if matches!(reply.action, Action::Upload(_) | Action::CompleteUpload(_))
                 && reply.workspace == self.knowledge.scope()
             {
                 self.knowledge_action(Action::Load, cx);
@@ -229,9 +252,19 @@ impl ChatApp {
             }
             Ok(ResultData::Changed) => {
                 self.knowledge.revision += 1;
+                if let Action::DeleteDocument(id) = &reply.action {
+                    self.knowledge
+                        .uploads
+                        .retain(|_, upload| upload.document_id.as_ref() != Some(id));
+                }
                 if matches!(reply.action, Action::DeleteNote(_)) {
                     self.set_note(None, window, cx);
                 }
+                self.knowledge_action(Action::Load, cx);
+            }
+            Ok(ResultData::Uploaded { completion, .. }) => {
+                self.knowledge.revision += 1;
+                self.knowledge.error = completion.err();
                 self.knowledge_action(Action::Load, cx);
             }
             Ok(ResultData::Preview {

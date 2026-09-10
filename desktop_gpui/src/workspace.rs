@@ -22,6 +22,7 @@ pub enum Action {
     Reindex(String),
     Preview(String),
     Upload(PathBuf),
+    CompleteUpload(String),
 }
 
 pub enum ResultData {
@@ -33,6 +34,10 @@ pub enum ResultData {
     },
     NoteSaved(WorkspaceNote),
     Changed,
+    Uploaded {
+        document_id: String,
+        completion: Result<(), String>,
+    },
     Preview {
         document_id: String,
         content: String,
@@ -120,7 +125,7 @@ pub async fn execute(
             }
             let (method, url, payload) = if let Some(id) = id {
                 (
-                    "PATCH",
+                    "PUT",
                     api::workspace_note_url("", wid, id),
                     api::update_note_json(title, content),
                 )
@@ -167,6 +172,10 @@ pub async fn execute(
             }
         }
         Action::Upload(path) => upload(token, wid, path.clone()).await,
+        Action::CompleteUpload(id) => {
+            complete_upload(token, wid, id).await?;
+            Ok(ResultData::Changed)
+        }
         _ => unreachable!(),
     }
 }
@@ -214,14 +223,39 @@ async fn upload(token: &str, wid: &str, path: PathBuf) -> Result<ResultData, Str
             }
         ));
     }
-    call(
-        token,
-        "POST",
-        web_sdk::complete_upload_url("", &upload.document_id),
-        None,
-    )
-    .await?;
-    Ok(ResultData::Changed)
+    let completion = complete_upload(token, wid, &upload.document_id).await;
+    Ok(ResultData::Uploaded {
+        document_id: upload.document_id,
+        completion,
+    })
+}
+
+async fn complete_upload(token: &str, wid: &str, id: &str) -> Result<(), String> {
+    match call(token, "POST", web_sdk::complete_upload_url("", id), None).await {
+        Ok(_) => Ok(()),
+        Err(error) => {
+            // A lost response or post-commit error does not mean the enqueue failed.
+            // Reconcile with the authorized workspace list before offering another submit.
+            if let Ok(value) = call(token, "GET", api::workspace_documents_url("", wid), None).await
+            {
+                if let Ok(list) =
+                    api::parse_workspace_documents(&serde_json::to_vec(&value).unwrap())
+                {
+                    if list.documents.iter().any(|d| {
+                        d.id == id
+                            && d.workspace_id.as_deref() == Some(wid)
+                            && matches!(
+                                d.status.as_str(),
+                                "enqueueing" | "queued" | "processing" | "completed" | "failed"
+                            )
+                    }) {
+                        return Ok(());
+                    }
+                }
+            }
+            Err(format!("资料已上传，提交状态尚未确认，可重试提交：{error}"))
+        }
+    }
 }
 
 fn mime_type(path: &std::path::Path) -> &'static str {

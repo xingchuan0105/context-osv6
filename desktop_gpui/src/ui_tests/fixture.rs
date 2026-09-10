@@ -216,6 +216,7 @@ fn serve(mut socket: TcpStream, flags: Flags, requests: Arc<Mutex<Vec<(String, V
     }
     let response = knowledge.lock().unwrap().respond(parts[0], parts[1], &payload);
     if let Some((status, value)) = response {
+        if status == 0 { return; } // Deliberate post-commit disconnect.
         if route == "GET /api/v1/workspaces/workspace-ui/notes" && flags.4.load(Ordering::SeqCst) {
             flags.5.fetch_add(1, Ordering::SeqCst);
             while flags.4.load(Ordering::SeqCst) && !flags.3.load(Ordering::SeqCst) { thread::sleep(Duration::from_millis(2)); }

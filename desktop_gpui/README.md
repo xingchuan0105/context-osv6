@@ -36,6 +36,8 @@ Windows D2 自动门已通过：共享/无头 60 项、真实数据栈 4 步、�
 
 Windows D3 首批自动门通过：52 项共享核心/聊天/HTTP 检查与 17 项无头 UI（其中 8 项工作区旅程），生产 `ui` 特性构建通过。详见 [工作区验收记录](../docs/desktop/2026-09-10-gpui-workspace-acceptance.md)；隔离 HTTP 结果不代表真实文档解析/嵌入或模型回答通过。
 
+D3.1 上传提交恢复及笔记 PUT 接口修正后，最新自动门为 73 项共享/无头与 1 条真实 API 旅程（8 步）通过，见 [修复与真实验收记录](../docs/desktop/2026-09-10-gpui-upload-recovery-acceptance.md)。源仓库的 `desktop_gpui/scripts/accept-workspace-live.ps1` 复用已运行的 18082 独立验收 API 和 `session-current`，创建/清理自身测试对象，不启动服务、不上传有效文件、不调用模型；运行前仍需本批耗时授权。
+
 当前程序运行时，可从源仓库执行 `pwsh -NoProfile -ExecutionPolicy Bypass -File desktop_gpui/scripts/build-acceptance.ps1`。它用实际源码和锁文件生成独立名称的 Windows 验收 exe，复用编译缓存，核对原程序哈希不变，并写入构建结果与源码哈希；不要求关闭窗口，也不会自动启动新程序。脚本运行仍遵守本批耗时授权。
 
 受管进程验收从源仓库执行 `pwsh -NoProfile -ExecutionPolicy Bypass -File desktop_gpui/scripts/accept-managed.ps1`，使用已构建的 Windows API/worker/migrate 和便携 PG/Redis；`-BuildDir`、`-PortableRuntime` 可指定构建产物。默认选择 18190/15439/16389，端口已被占用则立即失败。每次生成独立目录，写入 `steps.json`、`tests.log` 和 `result.json`，核对既有进程身份和测试进程残留，不操作桌面或调用模型。`-DataPlaneOnly` 单独验证真实 PG/Redis、角色、扩展、写入及重启持久化，不需要产品 sidecar；这层通过不代表产品迁移/API/worker 已通过。

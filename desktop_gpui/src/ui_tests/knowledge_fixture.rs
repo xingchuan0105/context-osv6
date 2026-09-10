@@ -10,6 +10,8 @@ pub struct KnowledgeFixture {
     notes: Vec<Value>,
     pub fail_notes: Arc<AtomicBool>,
     pub fail_upload: Arc<AtomicBool>,
+    pub fail_complete: Arc<AtomicBool>,
+    pub lose_complete_response: Arc<AtomicBool>,
 }
 
 fn workspace(id: &str, name: &str) -> Value {
@@ -38,6 +40,8 @@ impl KnowledgeFixture {
             notes: vec![],
             fail_notes: Arc::new(AtomicBool::new(false)),
             fail_upload: Arc::new(AtomicBool::new(false)),
+            fail_complete: Arc::new(AtomicBool::new(false)),
+            lose_complete_response: Arc::new(AtomicBool::new(false)),
         }
     }
     pub fn respond(&mut self, method: &str, path: &str, body: &Value) -> Option<(u16, Value)> {
@@ -98,6 +102,21 @@ impl KnowledgeFixture {
             }
             if parts[5] == "notes" {
                 let id = parts.get(6).copied().unwrap_or("created-note");
+                let item = parts.len() == 7;
+                if !matches!(
+                    (item, method),
+                    (false, "GET" | "POST") | (true, "GET" | "PUT" | "DELETE")
+                ) {
+                    return Some((405, json!({"error":"method not allowed"})));
+                }
+                if item
+                    && !self
+                        .notes
+                        .iter()
+                        .any(|n| n["workspace_id"] == wid && n["id"] == id)
+                {
+                    return Some((404, json!({"error":"note not found"})));
+                }
                 if method == "GET" {
                     return Some((
                         200,
@@ -127,6 +146,22 @@ impl KnowledgeFixture {
         }
         if parts.get(3) == Some(&"documents") && parts.len() >= 5 {
             let id = parts[4];
+            if parts.get(5) == Some(&"complete-upload") {
+                if self.fail_complete.load(Ordering::SeqCst) {
+                    return Some((503, json!({"error":"synthetic submit failed"})));
+                }
+                let Some(document) = self.documents.iter_mut().find(|d| d["id"] == id) else {
+                    return Some((404, json!({"error":"document missing"})));
+                };
+                if document["status"] != "pending" {
+                    return Some((409, json!({"error":"upload is no longer mutable"})));
+                }
+                document["status"] = "queued".into();
+                if self.lose_complete_response.swap(false, Ordering::SeqCst) {
+                    return Some((0, Value::Null)); // Commit succeeded; close without HTTP headers.
+                }
+                return Some((200, json!({"status":"queued"})));
+            }
             if parts.get(5) == Some(&"content") {
                 return Some((
                     200,
