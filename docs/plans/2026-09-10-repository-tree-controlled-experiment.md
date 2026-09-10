@@ -1,6 +1,6 @@
 # 普通 Agent 与仓库树：典型 20 题对照实验方案
 
-日期：2026-09-10。状态：**设计完成，实验接口待实现，尚未启动在线对照**。按用户最新要求，从现有 128 道纯 RAG 中选典型 20 题，四路各并发 2、总并发上限 8；沿用三次重复，共 240 个答案。本方案承接[原型评测](2026-09-10-repository-tree-rag128.md)，使用 Windows 原生、Qwen3.8 Flash、在线 embedding，不设 token 预算上限。独立工程为 `C:\Users\xingc\Documents\Codex\repository-tree`。
+日期：2026-09-10。状态：**接口实现和本地 60 项测试通过，在线技术小批运行中**。用户已授权开始，批次 `typical20-v1`。从现有 128 道纯 RAG 中选典型 20 题，四路各并发 2、总并发上限 8；沿用三次重复，共 240 个答案。本方案承接[原型评测](2026-09-10-repository-tree-rag128.md)，使用 Windows 原生、Qwen3.8 Flash、在线 embedding，不设 token 预算上限。独立工程为 `C:\Users\xingc\Documents\Codex\repository-tree`。
 
 ## 1. 普通 Agent 怎样检索
 
@@ -49,7 +49,7 @@
 
 ## 4. 工具和数据契约
 
-以下是拟实现的实验接口，不表示现有运行器已支持这些工具；实现时不新建第二套 Agent 框架。
+以下实验接口已进入独立运行器，共用现有 RagAgent 工具循环；并未新建第二套 Agent 框架。运行器位于 `src/repository_tree/evaluation/controlled/`，公开页面/MCP 原型未切换到实验接口。
 
 | 工具 | 可用组 | 契约 |
 |---|---|---|
@@ -212,7 +212,7 @@ S1−S0 是整个自主搜索策略的增量，包含查询改写、搜索次数
 
 选题原则：先覆盖全部 14 个纯 RAG 子集，再用六个补充名额覆盖章节定位与完整列举、案例因果、表格精确定位与统计、全仓综合、范围隔离和不同来源。按题干任务和元数据挑选，不按既有 PASS、tokens 或耗时排序，也不依据新实验结果替换题目。此前成绩已被分析过，因此本集不称为未见测试集。
 
-题号为完整 149 题原顺序的一基序号，先编号再筛纯 RAG，不能对 128 题重新编号。机器可读清单见独立工程 [controlled-20.json](C:/Users/xingc/Documents/Codex/repository-tree/eval/controlled-20.json)；它是设计/选题清单，尚非运行器配置入口。
+题号为完整 149 题原顺序的一基序号，先编号再筛纯 RAG，不能对 128 题重新编号。机器可读清单见独立工程 [controlled-20.json](C:/Users/xingc/Documents/Codex/repository-tree/eval/controlled-20.json)；运行器已消费该清单，文件最初的设计状态字段保留供溯源，实际运行状态以批次记录为准。
 
 | qid | 题意简述 | 主要入选理由 | 主要相关来源 |
 |---|---|---|---|
@@ -241,4 +241,12 @@ S1−S0 是整个自主搜索策略的增量，包含查询改写、搜索次数
 
 q134 的 `prior_turns` 和原生 `expect_no_retrieval` 标记保留，它仍参与答案/行为评测，按原规则排除相应检索召回指标；不把标记注入 Agent 或禁止其自主工具调用。q108 的原生标签与独立行为 rubric 分开报告，不能为了精选集好看而改写原题。
 
-本轮只完成选题和方案调整；没有安装 ripgrep、改写运行器或启动在线实验。
+## 12. 当前执行记录
+
+- 独立工程实现提交：`3d949ba`；共享参数 schema 修正提交 `59f0555`。截至第二轮运行开始，本地测试 69/69 通过，7.85 秒；包含真实 ripgrep 跨块中文匹配、范围隔离、四组工具权限、短引用、全局并发 8 和逐点评分协议回归。
+- Windows 使用现成 ripgrep 15.0.0，未下载本地模型；实验生成与裁判均 Qwen3.8 Flash。裁判请求超时统一为 180 秒，Agent 单题仍为 600 秒，不限制 tokens。
+- 批次 `typical20-v1` 小批完成 8 个答案，但两个调用把数组传成字符串，协议门未通过；原始产物保留，不计入新实验。修正各路共用参数 schema 后启动 `typical20-v2`，小批 8/8 通过，已进入完整三轮。
+- 两批均冻结 20 题、10 份来源、872 块与文档向量。语料指纹 `2ac6bb56ffc501c2d6047ed9ad9bd31ba74211313faa92bfecb808add08feb3c`，评分判据指纹 `e005775eb6b236644c3764e82ba5fb4b6aabcc49acb3425a3405334382c6c688`；判据仅存评测私有目录，未进入产品 Prompt。
+- 原始实验评分协议 v1 存在引文复写验证、重复引用解析及遗漏随正文返回标题的问题。所有原始答案与分数保留，完成后对全部 240 个答案统一用 ID 选取协议 v2 重评；不因答案低分而重新生成。原生 Eval v2 分数单列，不与实验协议版本号混淆。
+- 启动入口：独立工程 `scripts/run-controlled20.ps1 -RunId typical20-v2`；后台按 pilot → full 执行，保留进程与请求账本。原始生成结束后另运行 `scripts/run-controlled20-rescore.ps1 -RunId typical20-v2`，重评分也保持四路各 2、总上限 8，不与生成叠加并发。
+- 实时状态位于 `.eval/controlled/typical20-v2/progress.json`；重评分状态在同目录的 `rescoring-v2/progress.json`。独立复核由 coding assistant 读取预定 72 个答案及本次证据，不冒充人工验收；真实人工验收状态另列。
