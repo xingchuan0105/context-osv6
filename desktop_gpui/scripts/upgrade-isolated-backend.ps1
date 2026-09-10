@@ -24,7 +24,7 @@ if (-not $Refresh) {
 if (Test-Path -LiteralPath $backend) { throw 'Current backend directory already exists; refusing to overwrite a running artifact.' }
 New-Item -ItemType Directory -Path $backend | Out-Null
 foreach ($file in @('avrag-api.exe','avrag-migrate.exe')) { Copy-Item -LiteralPath (Join-Path $BuildDir $file) -Destination $backend }
-foreach ($file in @('libgcc_s_seh-1.dll','libstdc++-6.dll','libwinpthread-1.dll')) { Copy-Item -LiteralPath (Join-Path $InstallDir $file) -Destination $backend }
+foreach ($file in @('libgcc_s_seh-1.dll','libstdc++-6.dll','libwinpthread-1.dll')) { Copy-Item -LiteralPath (Join-Path $BuildDir $file) -Destination $backend }
 foreach ($part in @('prompts','modes','migrations')) { Copy-Item -LiteralPath (Join-Path $sourceRoot "avrag-rs\$part") -Destination $backend -Recurse }
 }
 function Sql([string]$Database,[string]$Statement) {

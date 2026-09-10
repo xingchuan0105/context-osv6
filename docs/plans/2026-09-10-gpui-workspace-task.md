@@ -30,3 +30,11 @@ D3 的原生视图/Host 自动门通过；真实文档入库与 RAG 模型链路
 只读检查发现已安装 `anydoc-lite` 只支持 DOCX/CSV，Excel/PPT 路由仍指向它；当前独立 API 没有 worker/嵌入配置。先替换不完整的解析器，使用后端已有 `anydoc-extract` 和固定版本的 `firecrawl-anydoc` Windows wheel，校验 SHA256，保留嵌入式 Python 隔离。
 
 用户在 15–25 分钟说明后授权自动验证。9 项解析与 73 项共享/无头回归通过，资源映射及缺件拦截通过，独立 Windows 程序构建通过；[本门证据](../desktop/2026-09-10-gpui-office-parser-acceptance.md)。该门不调用模型，不以解析通过等同于真实入库和 RAG；后续独立栈和模型验证另行说明耗时及费用后执行。
+
+## D3.2 真实入库与 RAG：Excel 结构化表格故障待修复
+
+`desktop_gpui/tests/live_rag.rs` 通过真实 GPUI Host 启动独立本机栈，创建工作区，上传已有合成 DOCX/XLSX/PPTX，等待 worker 完成并回读 chunks/正文；三份资料全部入库后分别限定单份资料问答，核对答案事实和引用归属，读取嵌入计量、钱包扣费及 RAG 审计。问句资产位于 `avrag-rs/prompts/eval/gpui-office/`，预期事实只在测试中断言。测试对象清理后回读验证，Host 退出仅释放本次启动的服务。
+
+执行器复用 `accept-managed.ps1 -OfficeRag -ApiPort 18192 -PgPort 15440 -RedisPort 16390`；复制现有 Windows API/worker/migrate 和已验收的 Office 打包流程，保留原 18082 API 与 GPUI 窗口。仅从 `.env` 导入模型/价格白名单，数据、账号、签名与存储使用全新配置；不注入余额或绕过计费。
+
+用户已批准本批 25–40 分钟及少量模型费用的自动验证。新用例编译和脚本语法检查通过；两轮真实 DOCX 入库/预览通过，XLSX 在解析后的结构化表格阶段发生 Windows 原生崩溃。已修正打包混用 C++ 线程模型运行库的问题；C++/Rust 基础 DuckDB 操作通过，但真实 worker 复验仍失败。进一步复现创建 JSON 列加载扩展即崩溃，已准备内置 JSON feature 修正及 JSON/FTS 探针，尚待下批原生重编授权。PPTX、RAG 和计费审计验收未过门；本批独立服务与对象均已清理，既有服务不变。[完整失败与修正证据](../desktop/2026-09-10-gpui-office-rag-acceptance.md)。

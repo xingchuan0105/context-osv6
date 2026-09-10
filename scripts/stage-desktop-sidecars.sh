@@ -163,41 +163,9 @@ fi
 
 # MinGW runtime DLLs (gnu target): avrag-api/worker need these next to the exe on Windows.
 # Without them Windows shows "找不到 libstdc++-6.dll" and API never binds :18080.
-if [[ "$IS_WINDOWS_TRIPLE" == "1" ]]; then
+if [[ "$TRIPLE" == "x86_64-pc-windows-gnu" ]]; then
   MINGW_DEST="$ROOT/desktop/runtime/mingw"
-  mkdir -p "$MINGW_DEST" "$RUNTIME_BIN" "$TAURI_BIN"
-  copy_mingw_dll() {
-    local name="$1"
-    local src=""
-    local c
-    for c in \
-      "/usr/lib/gcc/x86_64-w64-mingw32/13-posix/${name}" \
-      "/usr/lib/gcc/x86_64-w64-mingw32/13-win32/${name}" \
-      "/usr/lib/gcc/x86_64-w64-mingw32/12-posix/${name}" \
-      "/usr/lib/gcc/x86_64-w64-mingw32/12-win32/${name}" \
-      "/usr/x86_64-w64-mingw32/lib/${name}" \
-      "/usr/x86_64-w64-mingw32/bin/${name}"; do
-      if [[ -f "$c" ]]; then
-        src="$c"
-        break
-      fi
-    done
-    if [[ -z "$src" ]]; then
-      # last resort: locate
-      src="$(find /usr/lib/gcc/x86_64-w64-mingw32 /usr/x86_64-w64-mingw32 -name "$name" 2>/dev/null | head -1 || true)"
-    fi
-    if [[ -n "$src" && -f "$src" ]]; then
-      cp -f "$src" "$MINGW_DEST/$name"
-      cp -f "$src" "$RUNTIME_BIN/$name"
-      cp -f "$src" "$TAURI_BIN/$name"
-      log "mingw dll: $name <- $src"
-    else
-      log "warning: missing MinGW DLL $name (Windows sidecars may fail to start)"
-    fi
-  }
-  copy_mingw_dll "libstdc++-6.dll"
-  copy_mingw_dll "libgcc_s_seh-1.dll"
-  copy_mingw_dll "libwinpthread-1.dll"
+  bash "$ROOT/scripts/stage-mingw-runtime.sh" "$MINGW_DEST" "$RUNTIME_BIN" "$TAURI_BIN"
 
   # Python embeddable bundle → runtime/bin/python/ (next to avrag-api.exe;
   # NSIS installs it via the bundle.resources map in tauri.conf.json).
