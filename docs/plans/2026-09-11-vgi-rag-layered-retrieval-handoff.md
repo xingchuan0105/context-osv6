@@ -4,6 +4,10 @@
 
 术语：**路线 A** = 入库时全量 LLM 抽取（摘要 + 三元组）；**路线 B** = 检索调用时顺带抽取（只抽种子文档）。
 
+**当前默认路线（2026-09-11 用户确认）：向量＋BM25 混合发现 → 分层收窄 → 多路融合 → ripgrep 原文取证。** BM25 从种子发现阶段就参与，不能等纯向量先筛掉文档后才生效。这里的 ripgrep 指真实 `rg` 进程，Agent 工具名继续为 `grep`。
+
+本轮已将独立原型 `HardAgent.seed_pool(query, vector, selected, limit)` 改为 BM25＋dense 的 RRF 混合发现，A/B/C/E 共用；已有 ripgrep 回读路径已核验。39 项针对性本地测试通过（4.76 秒），未调用在线模型或重跑题集。以下历史数字仍对应当时配置，不是这次混合发现变更后的成绩。语义树、TF-IDF 图融合、路线 B 和统一 `RetrievalConfig` 仍按后文分阶段实施；默认显示上限目前仍为 15，调整到 30 是另一个待办。
+
 ## 1. 先读结论
 
 1. **六组开发集已跑通**（A–E 本地 Agent，F 走产线 SAC；两侧模型统一 `qwen3.8-flash`）。**在 248 份语料 × 20 道开发题上，尚未测出图＋树相对强混合检索的比较优势**——原因不是"图做错了"，而是这个规模没有头寸：100 块种子的文档池在 248 份语料里已覆盖 40%，在 10 万份语料只覆盖 0.1%。
@@ -13,7 +17,7 @@
 5. **最大单步收益不是图：** 显示名额 15→30，20 题合计 +10 证据，超过本轮所有图结构实验。
 6. **全局理解交给语义树**（复用现有向量分层聚类 + TF-IDF 簇标签 + 代表块，零模型调用）：同文档/跨文档余弦可分 0.504 vs 0.328，标签可读，读全景约 320 tokens。**不需要逐篇 LLM 摘要，也不需要 LLM 抽三元组。**
 7. **多跳走"查询时抽取"（路线 B）：** 入库全量抽 149,709 文档 × 5,723 tokens ≈ 857M；查询时只抽种子 1,000 次 × 20 篇 ≈ 44M，打平点约 13,000 次查询。抽取风格不敏感（统计抽词 +3.4、抽专名 +3.4），真正起作用的是"用现有检索器全库跳跃"这个动作。
-8. **四层分工**：向量负责语义匹配、语义树负责全局理解、结构边（URL/目录/符号/日期）负责层级与连接、路线 B 负责多跳。四者互不替代，全部可开关（见第 5 节）。
+8. **四层分工**：向量＋BM25 共同负责发现，分别覆盖语义匹配与关键词锚点；语义树负责全局理解、结构边（URL/目录/符号/日期）负责层级与连接、路线 B 负责多跳。原文取证使用 ripgrep，各消融开关见第 5 节。
 
 ## 2. 本轮实测结论（数字口径）
 
@@ -50,7 +54,7 @@
 ```text
 查询
  ↓
-[1] 语义发现   在线 embedding，top-100 块                    ← 不可替代（+16 点）
+[1] 混合发现   在线 dense + BM25 → RRF → 共 top-100 种子块    ← 语义与精确词项共同召回
  ↓
 [2] 收窄（强制；各通道独立开关）
      ├ 语义树下钻（簇 → 文档）                               ← 全局理解，零模型
@@ -60,16 +64,23 @@
 [3] 融合       BM25 + dense + related(+jump) 多路 RRF         ← 扩张必须进评分
      显示名额 30
  ↓
-[4] 作答       Agent 循环；回读走 grep 全文
+[4] 原文取证   ripgrep（Agent 工具名 grep）匹配完整规范文本 → 命中块全文与出处
+ ↓
+[5] 作答       Agent 基于原文证据作答；read 用于相邻块连续读取
 ```
+
+发现层两路在相同授权 scope 内独立召回，默认每路最多 100 块，等权 RRF（k=60）融合、去重后只保留总计 100 个种子；不是两路拼接成 200 个种子。两路使用同一 query，在线查询向量复用于最终排序。已有合法 ranges 时直接在该范围检索，省略自动发现。最终融合在收窄后的候选池上重新计算排名，不重复叠加首轮 RRF 分数；related/jump 是后续独立通道。
+
+ripgrep 扫描由原文解析得到的规范文本，不搜索向量或摘要；匹配映射回 source_hash、出处、chunk_id 和块序号，返回命中块完整正文。它不直接解读 PDF/DOCX 二进制，原文解析仍由解析层负责。无匹配不等于相关观点不存在；发现和原文取证承担不同职责，跨块上下文可以按序续读。
 
 | 需求 | 机制 | 关键边界 |
 |---|---|---|
-| 语义匹配 | 在线向量 | 不可用词法替代 |
+| 初始发现 | 在线向量＋BM25，RRF 合并 | BM25 在首轮参与；保持相同种子总量与 scope |
 | 全局理解 | 语义树（聚类+TF-IDF 标签+代表块） | 替代逐篇 LLM 摘要 |
 | 层级定位 | 结构边（目录/标题/符号） | 依赖材料化修复 |
 | 跨文档连接 | TF-IDF 文档图 / 结构边 | **必须与检索器不同空间** |
 | 多跳 | 路线 B 抽取+跳跃 | 默认 1 跳，成本随跳数指数增长 |
+| 原文取证 | ripgrep 匹配规范原文，返回全文块与位置 | 保留源映射和相邻块读取；不以排名代替证据 |
 
 ## 5. 模块化与消融设计（本轮核心）
 
@@ -88,8 +99,8 @@
 @dataclass(frozen=True)
 class RetrievalConfig:
     # 发现层
-    discovery: str = "online_dense"       # online_dense | bm25 | tfidf | lsa
-    discovery_k: int = 100                # 种子块数
+    discovery: str = "hybrid"             # hybrid（dense+BM25）| online_dense | bm25 | tfidf | lsa
+    discovery_k: int = 100                # 两路 RRF 融合后的种子总数；发现阶段等权、k=60
     # 收窄层（核心强制；以下各通道独立开关）
     narrow: bool = True                   # 关闭 = 退回全库直接检索
     tree_depth: int = 2                   # 0 = 关
@@ -105,7 +116,7 @@ class RetrievalConfig:
     rrf_k: int = 60
     display_limit: int = 30
     # 作答层
-    readback: str = "grep"                # grep | preview
+    readback: str = "ripgrep"             # ripgrep | preview（历史消融）；工具名仍为 grep
     extractor_version: str = "v1"         # 抽取缓存键的一部分
 ```
 
@@ -140,19 +151,25 @@ class RankingChannel(Protocol):
 | +图融合 | `channels += ("related",)` | 本轮 +4 |
 | +结构边 | `structural=("url","dir","symbol","date")` | 待测 |
 | +路线B | `route_b=True`, `channels += ("jump",)` | 待测 |
+| 发现去 BM25 | `discovery="online_dense"` | 相同种子总数，单独测首轮词法召回贡献 |
+| 发现去向量 | `discovery="bm25"` | 相同种子总数，单独测首轮语义召回贡献 |
 
 旧 A/B/C/E 从"按臂分叉代码"改为"同一实现的两组开关"；F/D 不变（工具集不同，不走本配置面）。
+
+新实验 A/B/C/E 的默认发现均为 `hybrid`，原文取证均为 ripgrep。上表旧臂描述保留历史对照关系；新一轮树/图消融需统一 discovery、种子总数、显示名额与回读方式。统一配置面尚未实现，当前运行代码固定使用混合发现；不能把以上示意开关当成已经可用的 CLI 参数。
 
 ### 5.5 试验记录自描述
 
 每条 trial 记录内嵌生效的 `RetrievalConfig`、启用模块列表、每路候选/贡献计数、`integrity_error`/`infra_error` 标记。回执脱离代码即可复现臂定义与审计。
+
+当前先在 `hybrid_search` 观察中记录 `discovery_mode="hybrid"` 与 `seed_chunks`；显式 ranges 或空 scope 未执行自动发现时两者为 null。完整配置/分路贡献记录仍待统一配置面落地。既有 runner 冻结代码和提示哈希，改动后的运行应新建目录，不覆盖或混接历史结果。
 
 ## 6. 路线 B 细化设计（三元组导航）
 
 **数据流（默认 1 跳）：**
 
 ```text
-① 种子发现   在线 embedding top-100 块 → 聚合 ~20 份种子文档
+① 种子发现   在线 dense + BM25 → RRF 共 top-100 块 → 聚合至多 20 份种子文档
 ② 带查询抽取 对每份种子文档抽三元组，prompt 带上原查询 → 只抽与问题相关的桥
 ③ 跳转键     从三元组取【种子实体集合之外】的实体/标识符（桥的定义）
 ④ 跳跃       用现有检索器（BM25/dense）全库搜索跳转键，受 scope 限制 → 不建新索引
@@ -191,6 +208,7 @@ class RankingChannel(Protocol):
 
 | 阶段 | 动作 | 成本 | 门槛 |
 |---|---|---|---|
+| 0（已实现） | 首轮向量＋BM25 发现；ripgrep 原文取证 | 复用现有 BM25/RRF 与 rg，无新增模型请求 | 词法独有命中进入种子与工具结果、scope 不扩大；39 项本地检查通过，质量增益未测 |
 | 0 | 显示名额 15→30 | 一个常量 | 证据 71→81 |
 | 0 | 材料化恢复结构（BrowseComp frontmatter；FreshStack markdown 标题 + 代码定义） | 正则 | 章节覆盖远超 12/248 |
 | 1 | 语义树（分层聚类 + TF-IDF 标签 + 代表块；接 `overview`/`zoom` 工具） | numpy | 全景可读（~320 tokens）；Agent 会用 |
@@ -239,6 +257,8 @@ Set-Location -LiteralPath 'C:\Users\xingc\Documents\Codex\repository-tree'
 
 注意：这些脚本每题调用一次在线 embedding（仅查询侧），语料向量来自本地索引；会消耗少量在线额度。
 
+混合发现修改后，`HardAgent.seed_pool` 的第一个参数是原始 query。历史 `.eval/hard/inspect_graph_case.py`、`narrow_ablation.py`、`prove_graph_untraversed.py` 仍使用旧签名；复现旧结论应使用对应历史代码版本，分析新路线则需先补传 query 并输出新回执。它们未在本轮改写或执行。
+
 ### 9.2 主仓库（`/home/chuan/context-osv6`）
 
 - `avrag-rs/.env`：F 臂 `AGENT_LLM_*` / `RETRIEVE_LLM_*` 已切到 dashscope `qwen3.8-flash`（备份 `.env.bak.pre-qwen-20260911-102436`）。
@@ -260,4 +280,4 @@ Set-Location -LiteralPath 'C:\Users\xingc\Documents\Codex\repository-tree'
 
 ## 11. 接手第一步
 
-按第 7 节阶段 0 开始：显示名额 15→30（一行）、材料化恢复结构（正则）；随后建语义树、接 TF-IDF 图融合。每个阶段的验收以门槛为准，不达标不进入下一阶段。
+首轮混合发现与 ripgrep 取证已按用户决定对齐，本地验证记录见独立工程 `evidence/hybrid-discovery-ripgrep-validation.json`。继续第 7 节余下阶段 0：显示名额 15→30、材料化恢复结构；随后建语义树、接 TF-IDF 图融合。后续质量比较需使用新配置及独立运行目录，不能沿用纯向量种子的历史成绩。每个阶段的验收以门槛为准，不达标不进入下一阶段。
