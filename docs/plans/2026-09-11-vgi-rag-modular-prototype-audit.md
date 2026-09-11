@@ -1,5 +1,7 @@
 # VGI-RAG 新原型：模块化设计与开发完成度检查
 
+后续实施已开展：本文件是修改前的审计快照。当前代码与各门槛的关闭状态见 [模块化实施记录](2026-09-11-vgi-rag-modular-implementation.md)；历史发现保留用于追溯。
+
 日期：2026-09-11。设计基准为 [阶段二交接](2026-09-11-vgi-rag-layered-retrieval-handoff.md)，实现基准为独立工程 `C:\Users\xingc\Documents\Codex\repository-tree` 的 `cae8d9c`。本次检查源码、入口、配置、测试回执和现存索引；不修改运行逻辑，不调用在线模型，不操作服务。
 
 ## 1. 结论与状态纠正
