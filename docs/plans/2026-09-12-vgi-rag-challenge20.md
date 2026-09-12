@@ -1,6 +1,6 @@
 # VGI-RAG Challenge-20 题集交接
 
-更新：2026-09-13。Challenge-20 主路径改为文档语义树。消融四组为 `tree`、`tree-nolabel`、`tree-random`、`flat`，不用 BM25、embedding、SAC。独立工程方案：`eval/TREE-ABLATION.md`。
+更新：2026-09-13。Challenge-20 主路径改为文档语义树。消融四组为 `tree`、`tree-nolabel`、`tree-random`、**`grep`（agent+grep 主对照）**，不用 BM25、embedding、SAC。独立工程方案：`eval/TREE-ABLATION.md`。
 
 ## 交付
 
