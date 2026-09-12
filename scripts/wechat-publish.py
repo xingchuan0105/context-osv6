@@ -121,20 +121,24 @@ def upload_content_image(token, image_path):
         raise RuntimeError(f"Failed to upload content image {resolved}: {res}")
 
 
+def article_payload(title, author, digest, content_html, thumb_media_id, source_url):
+    return {
+        "title": title,
+        "author": author,
+        "digest": digest,
+        "content": content_html,
+        "content_source_url": source_url,
+        "thumb_media_id": thumb_media_id,
+        "need_open_comment": 0,
+        "only_fans_can_comment": 0,
+    }
+
+
 def create_draft(token, title, author, digest, content_html, thumb_media_id, source_url):
     url = f"https://api.weixin.qq.com/cgi-bin/draft/add?access_token={token}"
     payload = {
         "articles": [
-            {
-                "title": title,
-                "author": author,
-                "digest": digest,
-                "content": content_html,
-                "content_source_url": source_url,
-                "thumb_media_id": thumb_media_id,
-                "need_open_comment": 0,
-                "only_fans_can_comment": 0,
-            }
+            article_payload(title, author, digest, content_html, thumb_media_id, source_url)
         ]
     }
 
@@ -152,6 +156,26 @@ def create_draft(token, title, author, digest, content_html, thumb_media_id, sou
         raise RuntimeError(f"Failed to create draft: {res}")
 
 
+def update_draft(token, media_id, title, author, digest, content_html, thumb_media_id, source_url):
+    url = f"https://api.weixin.qq.com/cgi-bin/draft/update?access_token={token}"
+    payload = {
+        "media_id": media_id,
+        "index": 0,
+        "articles": article_payload(title, author, digest, content_html, thumb_media_id, source_url),
+    }
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+        headers={"Content-Type": "application/json; charset=utf-8"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req) as resp:
+        res = json.loads(resp.read().decode("utf-8"))
+        if res.get("errcode", 0) == 0:
+            return media_id
+        raise RuntimeError(f"Failed to update draft: {res}")
+
+
 def main():
     parser = argparse.ArgumentParser(description="WeChat Markdown Formatter & Publisher")
     parser.add_argument("--input", required=True, help="Path to input Markdown file")
@@ -162,6 +186,8 @@ def main():
     parser.add_argument("--cover", help="Path to cover image")
     parser.add_argument("--source-url", default="")
     parser.add_argument("--push", action="store_true", help="Push to WeChat Official Account Draft Box")
+    parser.add_argument("--update-draft", help="Existing draft media_id to update in place")
+    parser.add_argument("--thumb-id", help="Reuse an existing thumb_media_id instead of re-uploading the cover")
     parser.add_argument("--result", help="Write a JSON result file after a successful push")
 
     args = parser.parse_args()
@@ -212,22 +238,40 @@ def main():
         html_result = md_to_wechat_html(md_text, base_dir=base_dir, url_map=url_map)
         print(f"[OK] 已上传 {len(collect_images(md_text, base_dir))} 张正文图")
 
-        print(f"[3/4] 正在上传封面素材: {args.cover}...")
-        thumb_id = upload_permanent_thumb(token, args.cover)
-        print("[OK] 封面上传成功")
+        if args.thumb_id:
+            thumb_id = args.thumb_id
+            print("[3/4] 复用已有封面 thumb_media_id")
+        else:
+            print(f"[3/4] 正在上传封面素材: {args.cover}...")
+            thumb_id = upload_permanent_thumb(token, args.cover)
+            print("[OK] 封面上传成功")
 
-        print("[4/4] 正在创建图文草稿至公众号草稿箱...")
-        draft_id = create_draft(
-            token=token,
-            title=args.title,
-            author=args.author,
-            digest=args.digest,
-            content_html=html_result,
-            thumb_media_id=thumb_id,
-            source_url=args.source_url,
-        )
-        print("\n" + "=" * 60)
-        print(f"成功推送到微信公众号草稿箱。Draft Media ID: {draft_id}")
+        print("[4/4] 正在写入公众号草稿箱...")
+        if args.update_draft:
+            draft_id = update_draft(
+                token=token,
+                media_id=args.update_draft,
+                title=args.title,
+                author=args.author,
+                digest=args.digest,
+                content_html=html_result,
+                thumb_media_id=thumb_id,
+                source_url=args.source_url,
+            )
+            print("\n" + "=" * 60)
+            print(f"已更新公众号草稿。Draft Media ID: {draft_id}")
+        else:
+            draft_id = create_draft(
+                token=token,
+                title=args.title,
+                author=args.author,
+                digest=args.digest,
+                content_html=html_result,
+                thumb_media_id=thumb_id,
+                source_url=args.source_url,
+            )
+            print("\n" + "=" * 60)
+            print(f"成功推送到微信公众号草稿箱。Draft Media ID: {draft_id}")
         print("请在微信公众平台后台 (mp.weixin.qq.com) ->【草稿箱】或手机【订阅号助手】中查看和群发。")
         print("=" * 60 + "\n")
 

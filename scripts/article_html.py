@@ -49,9 +49,13 @@ WECHAT_TH = (
     "font-weight: bold; color: #1e293b; text-align: left;"
 )
 WECHAT_TD = "border: 1px solid #cbd5e1; padding: 8px 10px; color: #334155;"
+WECHAT_LINK_NOTE = "font-size:12px;color:#64748b;word-break:break-all;"
+GHOST_A = "color:#0f766e;text-decoration:underline;"
 
 IMG_RE = re.compile(r"!\[(.*?)\]\((.*?)\)")
+LINKED_IMG_RE = re.compile(r"^\[!\[(.*?)\]\((.*?)\)\]\((.*?)\)$")
 LINK_RE = re.compile(r"\[(.*?)\]\((.*?)\)")
+BARE_URL_RE = re.compile(r"^https?://\S+$")
 
 
 def resolve_path(p: str) -> str:
@@ -110,7 +114,19 @@ def inline_format(text: str, wechat: bool) -> str:
     text = re.sub(r"`([^`]+)`", code_sub, text)
     text = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", text)
     text = re.sub(r"(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)", r"<em>\1</em>", text)
-    text = LINK_RE.sub(r'<a href="\2">\1</a>', text)
+
+    def link_sub(m: re.Match[str]) -> str:
+        label, href = m.group(1), m.group(2)
+        if wechat:
+            if href in label:
+                return f'<a href="{href}">{label}</a>'
+            return (
+                f'<a href="{href}">{label}</a>'
+                f'<span style="{WECHAT_LINK_NOTE}">（{href}）</span>'
+            )
+        return f'<a href="{href}" style="{GHOST_A}">{label}</a>'
+
+    text = LINK_RE.sub(link_sub, text)
     return text
 
 
@@ -174,9 +190,27 @@ def parse_blocks(md_text: str) -> list[dict]:
                 blocks.append({"type": "quote", "paras": paras})
             continue
 
+        linked_img = LINKED_IMG_RE.fullmatch(stripped)
+        if linked_img:
+            blocks.append(
+                {
+                    "type": "image",
+                    "alt": linked_img.group(1),
+                    "src": linked_img.group(2),
+                    "href": linked_img.group(3),
+                }
+            )
+            i += 1
+            continue
+
         img = IMG_RE.fullmatch(stripped)
         if img:
             blocks.append({"type": "image", "alt": img.group(1), "src": img.group(2)})
+            i += 1
+            continue
+
+        if BARE_URL_RE.fullmatch(stripped):
+            blocks.append({"type": "p", "text": f"[{stripped}]({stripped})"})
             i += 1
             continue
 
@@ -250,9 +284,14 @@ def render_wechat(blocks: list[dict], url_map: dict[str, str] | None, base_dir: 
         elif kind == "image":
             src = _image_src(block["src"], url_map, base_dir)
             alt = block["alt"]
-            html.append(f'<img src="{src}" alt="{alt}" style="{WECHAT_IMG}">')
-            if alt:
-                html.append(f'<p style="{WECHAT_CAPTION}">{alt}</p>')
+            href = block.get("href")
+            img_tag = f'<img src="{src}" alt="{alt}" style="{WECHAT_IMG}">'
+            html.append(f'<a href="{href}">{img_tag}</a>' if href else img_tag)
+            cap = alt
+            if href:
+                cap = f'{alt} · {href}' if alt else href
+            if cap:
+                html.append(f'<p style="{WECHAT_CAPTION}">{cap}</p>')
         elif kind == "code":
             html.append(
                 f'<pre style="{WECHAT_CODE}"><code>{_escape_code(block["text"])}</code></pre>'
@@ -297,11 +336,13 @@ def render_ghost(blocks: list[dict], url_map: dict[str, str] | None, base_dir: s
         elif kind == "image":
             src = _image_src(block["src"], url_map, base_dir)
             alt = block["alt"]
+            href = block.get("href")
+            img_tag = f'<img src="{src}" alt="{alt}" class="kg-image">'
+            if href:
+                img_tag = f'<a href="{href}" style="{GHOST_A}">{img_tag}</a>'
             cap = f"<figcaption>{alt}</figcaption>" if alt else ""
             cls = "kg-card kg-image-card kg-card-hascaption" if alt else "kg-card kg-image-card"
-            html.append(
-                f'<figure class="{cls}"><img src="{src}" alt="{alt}" class="kg-image">{cap}</figure>'
-            )
+            html.append(f'<figure class="{cls}">{img_tag}{cap}</figure>')
         elif kind == "code":
             html.append(
                 f'<pre><code class="language-{block["lang"]}">{_escape_code(block["text"])}</code></pre>'
