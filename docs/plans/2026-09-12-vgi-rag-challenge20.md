@@ -1,6 +1,6 @@
 # VGI-RAG Challenge-20 题集交接
 
-更新：2026-09-13。Challenge-20 主路径改为**文档语义树当索引和导航**：不使用 BM25/embedding 发现，也不在范围内用 BM25 精匹配。建树用本地 hashed TF-IDF（相对文档向量 API 零费用）。平铺 BM25 校准仍保留为对照（nDCG@10=0.025，答案 Hit@50=0/20）。
+更新：2026-09-13。Challenge-20 主路径改为文档语义树。消融四组为 `tree`、`tree-nolabel`、`tree-random`、`flat`，不用 BM25、embedding、SAC。独立工程方案：`eval/TREE-ABLATION.md`。
 
 ## 交付
 
