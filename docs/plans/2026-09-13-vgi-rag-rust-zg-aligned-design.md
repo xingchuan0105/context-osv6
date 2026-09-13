@@ -38,6 +38,7 @@ vgi-rs/                       ← 独立 Rust workspace（替代 Python 原型�
 │  ├─ vgi-read      原文窗口读取（chunk 级，保留引用语义）
 │  ├─ vgi-tools     工具实现（CLI 与 MCP 共用）
 │  ├─ vgi-mcp       MCP 服务（rmcp，Streamable HTTP，loopback+可选 Bearer）
+│  ├─ vgi-sandbox   代码模式沙箱：Python 子进程 + HostBridge（fd 管道 RPC，§7）
 │  ├─ vgi-cli       `vgi index|query|tree|read|rg|status|install`
 │  └─ vgi-eval      评测 harness：agent 循环/预算/裁判/指标/工件
 └─ data/            ← 索引与语料（默认 `<root>/.vgi/`）
@@ -116,15 +117,41 @@ vgi-rs/                       ← 独立 Rust workspace（替代 Python 原型�
 
 **预算（harness 配置，挑战赛默认）**：`max_rounds 12–16`、`max_tool_calls 32–48`、每题墙钟上限（如 15 分钟）、并发 2/组、总并发 8；closeout 保留"预算用完、基于已读原文作答"语义。目标调用经济性：~10–15 次/题（对照：官方 ~12.6 检索调用、zg 基准 14.36 工具调用、run-9 ~6.3 次且 0 次排序检索）。
 
-## 7. 评测设计
+**两种检索模态并存**：① 工具调用（zg 形态，本节）；② **代码模式（SAC 形态，见 §7）**——agent 写检索代码，一次多路、多步。profile 切换（`interaction: tools | code | both`），两模态共用同一检索层与同一预算核算口径。
+
+## 7. 检索的代码模式（SAC 风格，新增）
+
+**思路**：agent 不做逐次 tool call，而是**写一段检索代码**——可以同时发起多路检索（向量/BM25/rg/树），也可以把多步逻辑（先搜→筛→去重→回读）写进一次执行。代码在沙箱里跑，检索原语经"检索桥"回到宿主执行（宿主持有索引与 scope），结果压缩后只回传最终证据。
+
+**参照现成形态**（context-osv6 已落地，ADR-0009）：沙箱 codegen → 宿主 **fd 管道 RPC**（fd3/fd4，行分隔 JSON，不开网络端口）；宿主**单入口**强制 scope 后统一派发；Python shim 由 SDK 原语**注册表单源 codegen**；沙箱检索经 captured calls 回流宿主，供引用与降级组装。`code-interpreter` crate 已有 Python 子进程、内存/CPU 限制、Windows 捆绑 Python 的先例可抄。
+
+**为什么对 VGI 成立**：run-9 证明"5 轮 × 盲 grep"不可行——工具模式下多路检索与多步过滤会迅速吃光轮次；代码模式把"多路并发 + 多步逻辑"折叠进一次执行，模型上下文只承担最终证据。对 10 万文档级语料，这是比逐次调用更自然的交互面。
+
+**vgi-rs 设计**
+- crate：`vgi-sandbox`。宿主（Rust）持有语料/索引/scope；子进程执行代码（Python 优先；Windows 用捆绑或 PATH 发现，沿用 code-interpreter 的解析策略）。
+- 传输与协议：fd 管道行分隔 JSON RPC（对齐 ADR-0009）；沙箱无网络、只读语料。
+- 原语集合（v1，保持极简）：`search(query, route=hybrid|vector|bm25|tree, top_k)`、`tree(overview|node|route, ...)`、`rg(pattern, scope)`、`read(doc, offset, limit)`；每次调用可带 scope 与配额字段。
+- SDK：由注册表 codegen 出 Python shim（`vgi_sdk`），签名与返回形状单源生成，模型代码不手写协议。
+- 沙箱约束：内存/CPU/墙钟上限、输出上限、调用配额（单次执行 ≤32 次检索、回传 ≤N 条证据）；确定性（同代码 + 同索引 = 同结果）。
+- 预算模型：**以"代码步"为轮次单位**；步内调用计入资源核算（token/调用/耗时）与总配额，但不逐次消耗 `max_tool_calls` 轮次；closeout 语义不变。
+- 结果契约：代码返回结构化证据列表（doc/passage + 出处 + 可选中间说明）；宿主压缩后进模型上下文。
+- 失败处理：语法/运行时错误作为**可行动错误**回传（含行号与修复提示）；超时/越界记基础设施事件，不污染质量分。
+
+**与工具模式的关系**：两模态并存，profile 选择（`interaction: tools | code | both`）。简单定位题工具模式更省；多跳/全景题代码模式一次多步更省——M4 以同题、同模型、同预算做三臂 A/B（tools / code / both）量化。
+
+**评测新增维度**：步数、步内调用数、代码失败率（语法/超时/越界）、代码长度、每题 token/耗时；质量仍走盲评。
+
+**风险**：① 模型写代码的质量与调试成本；② Windows 下的 Python 依赖（捆绑 vs 系统）；③ 沙箱安全（无网络、只读挂载、资源限制）；④ 公平性——两模态必须固定原语集合与配额，否则不可比；⑤ 可复现性——代码与桥调用全量留痕。
+
+## 8. 评测设计
 
 1. **索引级（先做，无 agent）**：向量 recall@k、BM25 recall@k、hybrid RRF recall@k；口径对齐官方（@5/100/1000、nDCG@10）；目标：hybrid @1000 超过稠密单路（≥60%），@100 ≥30%。
 2. **结构级**：树形状与节点级定位指标（构建期验收，见 §5）。
-3. **Agent 级 A/B**：Challenge-20 20 题、单重复起步；盲评沿用原生 Eval v2 rubric（同族裁判的局限照记）；对照臂 = run-9 grep 臂（同预算复跑）与 zg 形态（排序检索+rg/read）。
+3. **Agent 级 A/B**：Challenge-20 20 题、单重复起步；盲评沿用原生 Eval v2 rubric（同族裁判的局限照记）；对照臂 = run-9 grep 臂（同预算复跑）与 zg 形态（排序检索+rg/read）；**模态三臂** = tools / code / both（同模型、同题、同预算）。
 4. **资源指标**：input token、工具调用、墙钟、每题检索延迟分布；与质量分列报告，不混算。
 5. **工件**：`runs/<id>/`（profile、trials、requests.jsonl、usage.json、analysis.json）+ 证据回执（沿用现约定）。
 
-## 8. 里程碑与验收门
+## 9. 里程碑与验收门
 
 | 里程碑 | 内容 | 验收门 |
 |---|---|---|
@@ -133,13 +160,51 @@ vgi-rs/                       ← 独立 Rust workspace（替代 Python 原型�
 | M2 | 段落级 BM25（字段 boost/参数）+ RRF 融合 + 紧凑输出 | hybrid ≥ 单路最优；检索 p95 < 300 ms |
 | M3 | 语义树 v2 + `vgi_tree`（含 route） | 形状/标签验收通过；节点级定位指标显著优于 run-9 |
 | M4 | MCP 服务 + 工具描述 + eval harness（预算） | Challenge-20 A/B 完成；质量与资源双指标出报告 |
+| M4b | 代码模式：`vgi-sandbox` + HostBridge + SDK + 预算模型 | tools/code/both 三臂 A/B 完成；失败类型、成本与质量入册 |
 | M5 | 加固：增量更新/freshness、Windows 打包、CLI 安装器（对齐 zg `install` 体验）、文档 | 冷启动/增量验收；回归全绿 |
 
-## 9. 风险与未决
+## 10. 风险与未决
 
 - **zvec-rust 成熟度**（绑定覆盖、FTS 打分可控性、Windows 预编译）→ M0 spike；不达标走 tantivy + hnsw_rs 备选，不影响上层接口。
 - **passage 重切分**与现有 chunk/证据对齐：evidence 是文档级 ID，风险低；回答引用仍走 chunk 级 read。
 - **超长文档**（最长 996 万字符）：文档级向量按 64 批上限截断，检索侧 passage 化即可覆盖尾部；必要时后续加"尾段摘要"。
 - **树摘要的 LLM 成本**：内部节点约 2–3 千次调用，一期可只用 c-TF-IDF 标签，摘要作为可选增强。
 - **裁判同族**局限与预算（token/费用）在 M4 前单独授权。
-- **未决问题（请 review 时定夺）**：① 引擎组合（zvec 单引擎 vs zvec+tantivy）；② 项目落点：独立 `vgi-rs`（推荐，保持独立工程）还是并入 context-osv6 workspace；③ passage 尺寸 512 vs 1024 token、聚合 max vs exp-sum；④ 是否保留 `install` 式 MCP 自动注入（便于评测，但侵入宿主配置）；⑤ bge-m3 vs qwen 128K 作为默认 embedding profile。
+- **代码模式沙箱**：Python 依赖（Windows 捆绑 vs 系统）、安全与两模态公平性 → 见 §7 风险清单；M4b 验收。
+- **未决点**：5 项展开见 §11；其中**引擎组合**与**项目落点**直接影响 M0，请优先定夺。
+
+## 11. 未决点展开（5 项）
+
+### 11.1 引擎组合（向量 + 全文）
+
+| 选项 | 内容 | 优点 | 代价/风险 |
+|---|---|---|---|
+| A | **zvec 单引擎**（向量＋FTS＋混合，对齐 zg 的栈） | 一套索引/快照与更新路径；官方同款；Windows 预编译；HNSW/IVF-RaBitQ、fp16、DiskANN 齐全 | FTS 打分与字段 boost 的可控性未知；Rust 绑定的 API 面待验证 |
+| B | **zvec（向量）+ tantivy（BM25）** | BM25 完全可控：字段 boost、k1/b、变体、增量；成熟纯 Rust | 两套索引与两套快照/更新/一致性成本；结果融合要自己做（本来也要做 RRF） |
+| C | 全自研（hnsw_rs + 自写倒排） | 最可控 | 工作量最大，无必要，不推荐 |
+
+**推荐**：M0 用一张 spike 清单同时验证 A 的 FTS 能力（字段 boost、k1/b、过滤、增量、批量吞吐、内存峰值、Windows 构建、崩溃恢复）；**默认按 B 落地**（BM25 是我们明确要优化的面），A 全部达标后再收敛为单引擎。
+
+### 11.2 项目落点
+
+- **A 独立 `vgi-rs`**（与 Python 原型同数据分区）：保持独立工程；实验依赖不进产品仓库；与原型/旧成绩对照方便。代价：不能直接复用 `llm`/`retrieval-data-plane` 等 crate。
+- **B 并入 context-osv6 workspace**：可复用既有 crate（llm、search、code-interpreter…）。代价：VGI 是评测原型，会把实验依赖与 CI 面拖进产品仓库；产品边界上 VGI 是评测工具而非产品线。
+- **推荐 A**；通过 OpenAI 兼容 HTTP 与 JSONL 工件对接主仓库；若日后产品化，再把 `vgi-search`/`vgi-tree` 抽 crate 回灌。
+
+### 11.3 passage 尺寸与文档聚合
+
+- 尺寸：**512 token**（定位更准，postings ≈1.6M）vs **1024 token**（索引更小 ≈0.8M，打分辨率更低）。
+- 聚合：**max**（命中一处即可，锐利）vs **exp-sum**（奖励多处覆盖）vs 首段优先（弱先验，不推荐默认）。
+- **推荐**：起点 512 token / 64 token 重叠 + 文档级 max；M2 在 dev 上跑 2×2 A/B（512/1024 × max/exp-sum），以 @100/@1000 与跨段证据覆盖定夺。
+
+### 11.4 `install` 式 MCP 自动注入
+
+- **A 提供 `vgi install --target codex|claude`**（对齐 zg：只写自己 marker 块、可卸载、权限规则最小化）。优点：评测环境一致、贴近真实用户路径；风险：宿主配置格式漂移（先锁两个目标）。
+- **B 只提供配置片段与文档**：零侵入，但评测手工配置易漂移、不可复现。
+- **推荐 A**（先 Codex + Claude Code），安装器必须幂等、有 `uninstall`、不触碰非自己管理的配置。
+
+### 11.5 默认 embedding profile
+
+- **A bge-m3**（8,192 / 1,024 维）：现网已就绪、便宜；文档级切批 176,438 条 ≈ **0.36 GB**（fp16）。
+- **B qwen3.7-text-embedding**（128K / 1,024 维，百炼）：101,467 条 ≈ **0.21 GB**；98% 文档一段装下；需要凭证、网络与费用。
+- **推荐**：manifest **锁定 profile**、双 profile 并存、默认 A；M4 用 B 跑一组对照（只换 embedding）量化"窗口大小 → 质量/成本"。
