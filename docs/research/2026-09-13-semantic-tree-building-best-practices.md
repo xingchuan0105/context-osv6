@@ -105,7 +105,30 @@
 - 结论：裸问题直接喂 BM25 的弱是基准的固有性质（官方论文同款数字），不是索引坏了；BM25 在这个规模上只能当**召回型候选生成**，且明显弱于稠密检索的长尾。
 - 待改进：查询侧（官方 agent 会用短查询改写，而不是整段问题）、文档粒度（巨型文档稀释打分；段落级 BM25 通常显著抬升 top-k）、以及对齐官方协议报 @100/@1000。代码级评审与优先级见 [BM25 评审](../reviews/2026-09-13-challenge20-bm25-review.md)。
 
-## 8. 参考
+## 8. 案例：zvec-grep（zg）——把排序检索挂进宿主循环的参考实现
+
+[zvec-grep](https://github.com/zvec-ai/zvec-grep)（Apache 2.0，Node ≥22，由 zvec 向量库驱动）是"本地优先统一检索层"：ripgrep + BM25/FTS + 向量检索收在一个入口里。
+
+**怎么做**
+- 工作区索引存 `<root>/.zvec-grep/`（`manifest.json`/`files.zvec`/`index.zvec`），默认本地 embedding（如 potion-retrieval-32m；BrowseComp 基准里用 **qwen3.7-text-embedding**），支持增量更新与 freshness 报告；文件发现沿用 ripgrep 的 glob/type/ignore 语义，结构感知抽取（代码符号、Markdown 章节）。
+- 查询是一个统一 search：默认 hybrid（语义发现 + 排序词法），可拆 `--fts`（排序词法）/`--vector`（纯语义）/`--rg`（穷举字面），多查询组可用 `--fuse` 合成一个排序；结果紧凑、按文件分组、带行号区间。
+- **自身没有 agent 循环**：循环属于宿主 agent（Codex/Claude Code/OpenCode/Cursor…）。MCP 默认只暴露**一个工具** `zvec_grep_search`（query/queries/fts/vector/fuse/limit/globs…），精确查找留给宿主原生 grep/rg；工具描述写明两段路由（先判断是否本地取证，再选精确/语义）、"一次探针，不相关即停"、索引状态与 freshness 随结果返回。
+
+**与 VGI 循环对照**
+
+| 维度 | VGI run-9 | zg |
+|---|---|---|
+| 循环 | 宿主循环（5 轮工具 + 强制收尾） | 宿主循环（Codex；其基准每题 ~14.4 次工具调用） |
+| 循环里的检索面 | **无排序检索**：字面 grep 全库扫（26–45 秒、26–52% 超时零返回）+ 树卡/平铺列表 | **排序 hybrid**（向量+BM25+FTS 融合），紧凑证据带出处 |
+| 验证面 | grep/read | 原生 grep/rg（同构，这部分已对齐） |
+| 工具描述 | 树能力有描述无策略；grep 描述引用不存在的工具 | 两段路由 + 一次探针即停 + freshness 随结果返回 |
+| 预算经济性 | ~6.3 次调用即撞 5 轮上限 | 排序结果减少探索（其基准工具调用 −43.5%、tokens −37.6%） |
+
+**其 BrowseComp-Plus 配对基准**（100 case × 3 trial，Codex `gpt-5.6-sol` high，zj 用 qwen3.7-text-embedding；baseline 为 Codex 原生工具）：准确率 98.67% → 99.00%（+0.33pp），input token **−37.56%**，工具调用 25.42 → **14.36**，耗时 **−38.58%**。注意：绝对值不可与官方榜单直接比较（模型代际、盲评 Codex 裁判、子集与剔除规则不同）；**可迁移的结论是资源侧**——同一宿主、同一题集，加上排序检索面后质量持平而探索成本大降。顺带说明：其 baseline 在 10 万文件语料上用的就是"原生 rg/read"这一档工具——与 run-9 的 grep 臂同类。
+
+**对 VGI 的对齐动作**：① 在 agent 循环里挂一个 hybrid 排序检索工具（向量+BM25+FTS，fuse，limit≤50，返回带位置的紧凑证据）——即重新启用 modular A–F 已有的 hybrid-search 合同；② 保留 grep/read 做核验；③ 工具描述照 zg 写（两段路由 + 一次探针即停 + 状态随结果）；④ 预算按可迭代设计（官方 ~12.6 次检索/题，zg 基准 14.4 次工具调用；5 轮不够）。
+
+## 9. 参考
 
 - [Steinbach et al., A Comparison of Document Clustering Techniques (2000)](https://cs.fit.edu/~pkc/classes/ml-internet/papers/steinbach00tr.pdf)
 - [Weinberger et al., Feature Hashing for Large Scale Multitask Learning (2009)](https://arxiv.org/abs/0902.2206)
