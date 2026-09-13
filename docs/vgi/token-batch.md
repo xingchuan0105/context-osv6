@@ -18,6 +18,10 @@ depends_on: [corpus]
 
 Tokenizer identity（填 `token_count` 时锁定）：HuggingFace `BAAI/bge-m3`（XLM-RoBERTa）。`manifest.tokenizer = "BAAI/bge-m3"`. 本页的窗口公式吃的是整数 `n_tokens`，不依赖某次 encode 的偶然分词。
 
+`n_tokens` 由 HuggingFace `tokenizers` crate 给出：加载官方 `tokenizer.json`（`https://huggingface.co/BAAI/bge-m3/resolve/main/tokenizer.json`，sha256 `21106b6d7dab2952c1d496fb21d5dc9db75c28ed361a05f5020bbba27810dd08`），关掉 truncation，`encode(body, add_special_tokens=false)` 的 id 长度。空正文是 0，不是 NULL。
+
+`fill_token_counts` 只编码 `token_count IS NULL` 的行；报告始终扫全表：`sum(token_count)`、对每行 `windows(token_count)` 的窗数、`truncated_docs`。每行必须非空（含 0）。
+
 ## Semantics
 
 `n_tokens = 0`：一个空窗 `[0, 0)`，`truncated=false`。
