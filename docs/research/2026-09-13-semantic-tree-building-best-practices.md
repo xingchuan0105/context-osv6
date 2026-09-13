@@ -48,7 +48,27 @@
 - 若坚持块级向量，压缩手段成熟：fp16 37.8 GB → int8 18.9 GB → PQ（64B/块）1.2 GB → 二值（32B/块）0.6 GB；或用"压缩粗排 + 原文精排"两段式；纯 BM25 倒排索引则完全不需要向量。
 - 对 VGI 的含义：**把检索粒度与阅读粒度解耦**——阅读继续用小切块（保留引用/续读能力），向量索引按文档（或章节）建，成本降到几百 MB；RAPTOR 式语义树也可以直接建在文档向量上。
 
-## 7. 参考
+## 7. 我们的语料做"文档级向量"的实测口径与模型能力
+
+本地索引实测（`challenge20-index-v1/index.sqlite`）：
+
+- 块/篇：p50=48、p90=260、p99=2,115、max=**235,923**；块长中位约 100–200 字符。
+- 文档规模：中位约 5–20k 字符（≈1.5–5k token）→ 单向量直接可行；p90 约 10k token → 超出 bge-m3 的 8k 窗口，需要 32k 上下文模型或截断。
+- 长尾极端：**top-100 文档占全部块数的 18.3%、top-1000 占 41.6%**，最长一篇 23.6 万块（百万 token 级）→ 任何单向量都装不下，必须分段编码 + 池化/摘要（或截断并接受损失）。
+- 官方同类基线（同基准、文档级、4096 token 截断、Qwen3-Embedding-0.6B）：证据 recall@5 = 6.2%、@100 = 26.4%、@1000 = 59.7% → 文档级单向量的定位是**粗筛层**（把 10 万缩到几百–一千），不是精排。
+
+当前模型能力（2026）：
+
+| 模型 | 上下文 | 维度 | 备注 |
+|---|---|---|---|
+| bge-m3（现用） | 8,192 | 1,024 | 中位文档够用，长尾不够 |
+| Qwen3-Embedding（0.6B/4B/8B） | **32,768** | 4,096 | MRL 可截断到 32 维；可 int8 |
+| Cohere Embed v4 | **128k** | 256–1536 | Matryoshka；直接输出 int8/binary/ubinary |
+| jina-embeddings-v4 | 长文（多向量/晚交互） | 2,048 | 单向量 + 多向量两种模式，适合长文细粒度 |
+
+结论：**文档级向量可行，但要按"粗排入口"设计**——10 万条向量几百 MB，配 32k 模型覆盖 p90 文档，超长文档切段后按 max-pool 合成文档分数；精读继续交给 grep/read 或块级/晚交互。语义树（RAPTOR 式）可以直接建在文档向量上。
+
+## 8. 参考
 
 - [Steinbach et al., A Comparison of Document Clustering Techniques (2000)](https://cs.fit.edu/~pkc/classes/ml-internet/papers/steinbach00tr.pdf)
 - [Weinberger et al., Feature Hashing for Large Scale Multitask Learning (2009)](https://arxiv.org/abs/0902.2206)
@@ -62,3 +82,6 @@
 - [Ψ-RAG: Hierarchical Abstract Tree for Cross-Document RAG (ICML 2026)](https://arxiv.org/abs/2605.00529)；[T-Retriever (2026)](https://arxiv.org/abs/2601.04945)；[TreeRAG (ACL Findings 2025)](https://aclanthology.org/2025.findings-acl.20/)
 - [BrowseComp-Plus 仓库（预构建 BM25/Embedding 索引、文档级检索工具）](https://github.com/texttron/BrowseComp-Plus)
 - [Tevatron BrowseComp-Plus 检索示例（整篇文档编码、fp16）](https://github.com/texttron/tevatron/blob/main/examples/BrowseComp-Plus/README.md)
+- [Qwen3-Embedding（32,768 token、4,096 维、MRL）](https://github.com/QwenLM/Qwen3-Embedding)
+- [Cohere Embed v4（128k 上下文、Matryoshka、int8/binary 输出）](https://docs.cohere.com/changelog/embed-multimodal-v4)
+- [jina-embeddings-v4（单向量/多向量长文检索）](https://huggingface.co/jinaai/jina-embeddings-v4)
