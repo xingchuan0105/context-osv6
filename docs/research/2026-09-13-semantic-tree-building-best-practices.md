@@ -41,7 +41,14 @@
 3. **若目标仍是 BrowseComp-Plus 式问答**：最佳实践是两段式检索（BM25+dense 混合 + rerank）+ agent 查询迭代；树的价值在**多粒度/全局问题**（RAPTOR/GraphRAG）或**成本控制**（粗到细），不在"预算内盲浏览"。
 4. **先索引评测、后端到端**：建好树先用节点级 recall / 簇纯度 / 标签可用性验证结构本身，再决定是否值得跑 agent 对照。
 
-## 5. 参考
+## 6. 存储现实：向量的"70GB"来自切块粒度，不是基准规模
+
+- 官方 BrowseComp-Plus 检索是**文档级**。Tevatron 官方示例对整篇文档编码（`--passage_max_len 4096`、`--fp16`），向量数 ≈ 文档数（10 万级）：Qwen3-Embedding-0.6B（1024 维）fp16 ≈ **205 MB**，8B（4096 维）fp16 ≈ **820 MB**，即使 4096 维 fp32 也仅 1.6 GB。官方还**直接托管 BM25 与 Qwen3-Embedding 的预构建索引**（`scripts_build_index/download_indexes.sh`），用户下载即用，无需自建。
+- 本地 18,437,321 块（≈184 块/篇）来自我们自己的切块策略：1024 维 fp32 = **75.5 GB**——约 184 倍的放大，与基准无关。
+- 若坚持块级向量，压缩手段成熟：fp16 37.8 GB → int8 18.9 GB → PQ（64B/块）1.2 GB → 二值（32B/块）0.6 GB；或用"压缩粗排 + 原文精排"两段式；纯 BM25 倒排索引则完全不需要向量。
+- 对 VGI 的含义：**把检索粒度与阅读粒度解耦**——阅读继续用小切块（保留引用/续读能力），向量索引按文档（或章节）建，成本降到几百 MB；RAPTOR 式语义树也可以直接建在文档向量上。
+
+## 7. 参考
 
 - [Steinbach et al., A Comparison of Document Clustering Techniques (2000)](https://cs.fit.edu/~pkc/classes/ml-internet/papers/steinbach00tr.pdf)
 - [Weinberger et al., Feature Hashing for Large Scale Multitask Learning (2009)](https://arxiv.org/abs/0902.2206)
@@ -53,3 +60,5 @@
 - [FAISS — Inverted File (IVF) indexes: coarse quantization then fine scan](https://deepwiki.com/facebookresearch/faiss/5.2-inverted-file-(ivf)-indexes)
 - [Microsoft GraphRAG — community summaries & global search](https://microsoft.github.io/graphrag/query/global_search/)
 - [Ψ-RAG: Hierarchical Abstract Tree for Cross-Document RAG (ICML 2026)](https://arxiv.org/abs/2605.00529)；[T-Retriever (2026)](https://arxiv.org/abs/2601.04945)；[TreeRAG (ACL Findings 2025)](https://aclanthology.org/2025.findings-acl.20/)
+- [BrowseComp-Plus 仓库（预构建 BM25/Embedding 索引、文档级检索工具）](https://github.com/texttron/BrowseComp-Plus)
+- [Tevatron BrowseComp-Plus 检索示例（整篇文档编码、fp16）](https://github.com/texttron/tevatron/blob/main/examples/BrowseComp-Plus/README.md)
