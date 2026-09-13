@@ -2,6 +2,8 @@
 
 更新：2026-09-13。Challenge-20 主路径改为文档语义树。消融四组为 `tree`、`tree-nolabel`、`tree-random`、**`grep`（agent+grep 主对照）**，不用 BM25、embedding、SAC。独立工程方案：`eval/TREE-ABLATION.md`。
 
+**run-9（2026-09-13）：四臂已完成并通过正式盲评——80/80 正常收束、判分 80/80 零错误；无树增益证据。正式分析见 [run-9 分析](2026-09-13-vgi-rag-challenge20-tree-run9-analysis.md)。**
+
 ## 交付
 
 - [完整方案与 20 题摘要](C:/Users/xingc/Documents/Codex/repository-tree/eval/CHALLENGE20.md)
@@ -26,7 +28,7 @@ BRIGHT 诊断需要各域完整候选集，遵守 `excluded_ids`。原始 ID 中
 ## 下一次评测前的修正
 
 1. B 按用户原意只移除 `semantic_graph`，保留普通向量、其他图源、树与路线 B。上一轮 B 实际去掉三个图源，旧成绩不能解释为纯语义图贡献。
-2. 裁判须接收 Agent 实际可见的合法标题、日期与出处；目前正文拼接会遗漏 `source_titles`。没有规范引用时，检索上下文支持度不能当作引用准确率。
+2. 裁判须接收 Agent 实际可见的合法标题、日期与出处；目前正文拼接会遗漏 `source_titles`。（run-9 判分已落实：裁判上下文渲染观察到的标题/日期、locator 出处与 `reference_id`。）没有规范引用时，检索上下文支持度不能当作引用准确率。
 3. 核验完整语料、文档/片段映射、在线向量与图、大库性能、文件分页；F 必须完成相同大库的 SAC 入库与范围绑定后才可比较。
 4. 后续保留 qwen3.8-flash、在线 embedding、每组 2 / 总并发 8、不设总 token 预算偏好。题数仍为主 20 题；BRIGHT 是可选单独诊断。新规模的费用与运行范围需具体化后再执行。
 
