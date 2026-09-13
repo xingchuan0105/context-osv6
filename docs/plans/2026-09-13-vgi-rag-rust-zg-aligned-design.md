@@ -1,5 +1,7 @@
 # VGI-RAG Rust 重写设计（zg 对齐版）
 
+> **SUPERSEDED 2026-09-14.** 现行规格是设计文档 DAG：[docs/vgi/](../vgi/README.md)。本稿是评审对象，保留对照。评审：[zg 对齐设计评审](../reviews/2026-09-13-vgi-rag-rust-zg-aligned-design-review.md)。
+
 日期：2026-09-13。承接：[Challenge-20 树消融 run-9 分析](2026-09-13-vgi-rag-challenge20-tree-run9-analysis.md)、[语义树构建评审](../reviews/2026-09-13-challenge20-semantic-tree-build-review.md)、[BM25 评审](../reviews/2026-09-13-challenge20-bm25-review.md)、[检索最佳实践调研](../research/2026-09-13-semantic-tree-building-best-practices.md)（含 zvec-grep 案例与文档级向量估算）。
 
 **一句话**：把 VGI-RAG 从 Python 原型重写为 Rust 本地工具——架构对齐 zvec-grep（zg）：**统一检索层（向量＋BM25＋ripgrep）＋宿主 agent 循环＋单一检索工具＋紧凑带出处的结果**；同时保留三条既定改造：**文档级向量（大块均分）**、**段落级 BM25＋字段 boost＋打分优化**、**语义树 v2（可导航、可路由、指标可验）**。语义树负责"看懂整个库"，检索负责"找到证据"，rg/read 负责"核对原文"。

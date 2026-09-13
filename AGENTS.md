@@ -56,6 +56,7 @@ Read only the rows relevant to the task, before editing or executing in that are
 | Subtex features | [PRD](docs/plans/2026-09-06-directory-plugin-prd.md); progress and gates: [development plan](docs/plans/2026-09-06-subtex-m1-dev-plan.md) |
 | Rust builds, targets, or cache changes | [resource policy](docs/agent/rust-resources.md) |
 | E2E / real-LLM evaluation | [E2E gates and long-run conventions](avrag-rs/docs/e2e-gates.md) |
+| VGI-RAG (`docs/vgi/`, `vgi-rs`) | [VGI design-doc DAG](docs/vgi/AGENTS.md) — docs are the source of truth; regenerate from docs |
 | Service diagnosis, environment changes, or deployment | [operations](docs/agent/wsl-services.md) |
 
 ## Repository map
