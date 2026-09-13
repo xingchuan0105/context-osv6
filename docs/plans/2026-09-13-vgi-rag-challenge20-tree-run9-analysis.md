@@ -56,6 +56,7 @@
 
 ## 回执入口
 
+- 树构建评审：[语义树构建评审](../reviews/2026-09-13-challenge20-semantic-tree-build-review.md)（形状/标签/对照缺陷与复算脚本）
 - 独立工程回执：[challenge20-tree-run-9.md](C:/Users/xingc/Documents/Codex/repository-tree/evidence/challenge20-tree-run-9.md)、[challenge20-tree-run-9.json](C:/Users/xingc/Documents/Codex/repository-tree/evidence/challenge20-tree-run-9.json)
 - 运行目录：`C:/Users/xingc/Documents/Codex/repository-tree/.eval/hard/challenge20-tree-run-9/`（`summary.json`、`analysis.json`、`native-judge/`）
 - 判分与汇总脚本：`scripts/analysis/judge_challenge20_tree.py`、`scripts/analysis/summarize_challenge20_tree.py`
