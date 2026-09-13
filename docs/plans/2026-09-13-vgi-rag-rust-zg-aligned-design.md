@@ -132,8 +132,8 @@ vgi-rs/                       ← 独立 Rust workspace（替代 Python 原型�
 - 传输与协议：fd 管道行分隔 JSON RPC（对齐 ADR-0009）；沙箱无网络、只读语料。
 - 原语集合（v1，保持极简）：`search(query, route=hybrid|vector|bm25|tree, top_k)`、`tree(overview|node|route, ...)`、`rg(pattern, scope)`、`read(doc, offset, limit)`；每次调用可带 scope 与配额字段。
 - SDK：由注册表 codegen 出 Python shim（`vgi_sdk`），签名与返回形状单源生成，模型代码不手写协议。
-- 沙箱约束：内存/CPU/墙钟上限、输出上限、调用配额（单次执行 ≤32 次检索、回传 ≤N 条证据）；确定性（同代码 + 同索引 = 同结果）。
-- 预算模型：**以"代码步"为轮次单位**；步内调用计入资源核算（token/调用/耗时）与总配额，但不逐次消耗 `max_tool_calls` 轮次；closeout 语义不变。
+- 沙箱约束：内存/CPU/墙钟/输出上限与单次执行调用上限（**防失控保护，不作为循环预算**）；确定性（同代码 + 同索引 = 同结果）。
+- 预算模型：**代码执行不消耗 agent loop 预算**——循环预算（`max_rounds` / `max_tool_calls`）只计 LLM 轮次与工具动作；沙箱执行及其内部检索调用**不计入**循环预算，只做独立的资源核算（token/调用/耗时，用于报告）与保护性上限。closeout 语义不变。
 - 结果契约：代码返回结构化证据列表（doc/passage + 出处 + 可选中间说明）；宿主压缩后进模型上下文。
 - 失败处理：语法/运行时错误作为**可行动错误**回传（含行号与修复提示）；超时/越界记基础设施事件，不污染质量分。
 
@@ -171,40 +171,53 @@ vgi-rs/                       ← 独立 Rust workspace（替代 Python 原型�
 - **树摘要的 LLM 成本**：内部节点约 2–3 千次调用，一期可只用 c-TF-IDF 标签，摘要作为可选增强。
 - **裁判同族**局限与预算（token/费用）在 M4 前单独授权。
 - **代码模式沙箱**：Python 依赖（Windows 捆绑 vs 系统）、安全与两模态公平性 → 见 §7 风险清单；M4b 验收。
-- **未决点**：5 项展开见 §11；其中**引擎组合**与**项目落点**直接影响 M0，请优先定夺。
+- **关键决策**：5 项已定（见 §11）；引擎组合（zvec 本地 + vgi-store trait 预留云端后端）与项目落点（独立 `vgi-rs`）已确认，可开 M0。
 
-## 11. 未决点展开（5 项）
+## 11. 关键决策记录（5 项，均已定）
 
-### 11.1 引擎组合（向量 + 全文）
+### 11.1 引擎组合：zvec vs qdrant / milvus / pgvector（已定）
 
-| 选项 | 内容 | 优点 | 代价/风险 |
-|---|---|---|---|
-| A | **zvec 单引擎**（向量＋FTS＋混合，对齐 zg 的栈） | 一套索引/快照与更新路径；官方同款；Windows 预编译；HNSW/IVF-RaBitQ、fp16、DiskANN 齐全 | FTS 打分与字段 boost 的可控性未知；Rust 绑定的 API 面待验证 |
-| B | **zvec（向量）+ tantivy（BM25）** | BM25 完全可控：字段 boost、k1/b、变体、增量；成熟纯 Rust | 两套索引与两套快照/更新/一致性成本；结果融合要自己做（本来也要做 RRF） |
-| C | 全自研（hnsw_rs + 自写倒排） | 最可控 | 工作量最大，无必要，不推荐 |
+**量级参考**（公开对比测试：单机 16 vCPU / 32 GB，1M×1536 维 HNSW；Milvus 官方最小部署文档；zvec 官方 VectorDBBench Cohere 1M/10M、16c64g、int8。硬件/维度/参数不同数字会变，只作量级判断）：
 
-**推荐**：M0 用一张 spike 清单同时验证 A 的 FTS 能力（字段 boost、k1/b、过滤、增量、批量吞吐、内存峰值、Windows 构建、崩溃恢复）；**默认按 B 落地**（BM25 是我们明确要优化的面），A 全部达标后再收敛为单引擎。
+| 引擎 | 形态 | 部署依赖 | 索引/量化 | 并发模型 | 1M×1536 参考 | 运维 | Windows | 云扩展路径 |
+|---|---|---|---|---|---|---|---|---|
+| **zvec** | **嵌入式 C++ 库**（Rust/Node/Python/Go/Dart 绑定） | 无（进程内） | HNSW / IVF-RaBitQ / PQ-INT8 / DiskANN、fp16、WAL | 进程内多线程；多进程只读共享 | 数据量级内存（官方 16c64g 跑 Cohere 1M/10M int8） | 无 | ✓ 预编译 | 内嵌进自研服务 → 多副本；无分布式 |
+| qdrant | Rust 独立服务，单二进制 | 服务进程（可选 Docker） | HNSW + 标量/PQ 量化、mmap 磁盘模式 | 多线程服务，gRPC/REST | ~5.1 GB；P99 28 ms @100QPS；插入 85K/s；构建 4 min | 中 | ✓ | 水平扩展（Raft）；1M–50M 甜点 |
+| milvus | 分布式系统 | 独立版需 etcd + MinIO（+可选 Kafka/Pulsar） | 索引最丰富（含 DiskANN） | 各角色微服务 | ~7.2 GB + 依赖栈；P99 71 ms @100QPS；插入 120K/s | 高 | 仅 Linux 部署 | K8s Operator；100M+；context-osv6 云端即 Milvus |
+| pgvector | Postgres 扩展 | 需 Postgres 实例（context-osv6 桌面捆绑 PG+pgvector） | HNSW / IVFFlat | PG 进程模型；100QPS 下 P99 287 ms（连接/锁竞争退化） | ~6.5 GB；插入 18K/s；构建 18 min | 低（复用 PG 工具链） | ✓（需装 PG） | PG 只读副本；<5M 向量、中等 QPS |
+
+**VGI 的真实规模**：文档级向量 176k×1024 fp16 ≈ **0.36 GB**（qwen profile 0.21 GB）；段落 BM25 ~160 万 postings。任何引擎在容量上都过剩，**选型由部署形态决定，不是吞吐**。
+
+**两层策略（对齐"本机轻负载、云端高并发"）**
+1. **本机（默认）**：**zvec 嵌入式**（+ tantivy 做 BM25）——无服务、无外部依赖、数据量级内存、Windows 预编译、与 zg 同栈；Milvus Lite 排除（仅 Python、仅 FLAT、无 Windows）；pgvector 仅当宿主已有 PG 才考虑。
+2. **云端（高并发，后补）**：`vgi-store` 定义向量/BM25 的最小 trait 与指纹格式，把后端做成可替换实现——路线 A（先做）：同一 Rust 服务内嵌 zvec，无状态前端多副本，本规模足够；路线 B（需要托管/多租户/更大规模）：切 Qdrant（1M–50M 甜点、单二进制）或对齐 context-osv6 用 Milvus；pgvector 只在"已有 PG 基础设施"时选。
+
+**决策**：本地 zvec 优先（M0 spike：zvec 的 FTS/字段 boost 达标则单引擎，否则 zvec + tantivy 两件套）；云端后端作为第二实现后补，接口先行。
 
 ### 11.2 项目落点
 
 - **A 独立 `vgi-rs`**（与 Python 原型同数据分区）：保持独立工程；实验依赖不进产品仓库；与原型/旧成绩对照方便。代价：不能直接复用 `llm`/`retrieval-data-plane` 等 crate。
 - **B 并入 context-osv6 workspace**：可复用既有 crate（llm、search、code-interpreter…）。代价：VGI 是评测原型，会把实验依赖与 CI 面拖进产品仓库；产品边界上 VGI 是评测工具而非产品线。
 - **推荐 A**；通过 OpenAI 兼容 HTTP 与 JSONL 工件对接主仓库；若日后产品化，再把 `vgi-search`/`vgi-tree` 抽 crate 回灌。
+- **已定（2026-09-13）：独立项目 `vgi-rs`。**
 
 ### 11.3 passage 尺寸与文档聚合
 
 - 尺寸：**512 token**（定位更准，postings ≈1.6M）vs **1024 token**（索引更小 ≈0.8M，打分辨率更低）。
 - 聚合：**max**（命中一处即可，锐利）vs **exp-sum**（奖励多处覆盖）vs 首段优先（弱先验，不推荐默认）。
 - **推荐**：起点 512 token / 64 token 重叠 + 文档级 max；M2 在 dev 上跑 2×2 A/B（512/1024 × max/exp-sum），以 @100/@1000 与跨段证据覆盖定夺。
+- **已定：按推荐执行**（512/64 + max 起步；A/B 用于验证与微调，不作为前置门）。
 
 ### 11.4 `install` 式 MCP 自动注入
 
 - **A 提供 `vgi install --target codex|claude`**（对齐 zg：只写自己 marker 块、可卸载、权限规则最小化）。优点：评测环境一致、贴近真实用户路径；风险：宿主配置格式漂移（先锁两个目标）。
 - **B 只提供配置片段与文档**：零侵入，但评测手工配置易漂移、不可复现。
 - **推荐 A**（先 Codex + Claude Code），安装器必须幂等、有 `uninstall`、不触碰非自己管理的配置。
+- **已定：做**（先 Codex + Claude Code 两个目标）。
 
 ### 11.5 默认 embedding profile
 
 - **A bge-m3**（8,192 / 1,024 维）：现网已就绪、便宜；文档级切批 176,438 条 ≈ **0.36 GB**（fp16）。
 - **B qwen3.7-text-embedding**（128K / 1,024 维，百炼）：101,467 条 ≈ **0.21 GB**；98% 文档一段装下；需要凭证、网络与费用。
 - **推荐**：manifest **锁定 profile**、双 profile 并存、默认 A；M4 用 B 跑一组对照（只换 embedding）量化"窗口大小 → 质量/成本"。
+- **已定：双 profile 并存、默认 bge-m3；M4 用 qwen 跑对照。**
