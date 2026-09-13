@@ -145,3 +145,5 @@
 - [Qwen3-Embedding（32,768 token、4,096 维、MRL）](https://github.com/QwenLM/Qwen3-Embedding)
 - [Cohere Embed v4（128k 上下文、Matryoshka、int8/binary 输出）](https://docs.cohere.com/changelog/embed-multimodal-v4)
 - [jina-embeddings-v4（单向量/多向量长文检索）](https://huggingface.co/jinaai/jina-embeddings-v4)
+- [zvec-grep 仓库](https://github.com/zvec-ai/zvec-grep)；[检索管道](https://github.com/zvec-ai/zvec-grep/blob/main/docs/04-pipeline.md)；[MCP 工具](https://github.com/zvec-ai/zvec-grep/blob/main/docs/03-mcp.md)；[Agent 集成](https://github.com/zvec-ai/zvec-grep/blob/main/docs/01-agents.md)
+- [zvec-grep BrowseComp-Plus 配对基准](https://github.com/zvec-ai/zvec-grep/blob/main/benchmarks/browse-comp-plus/README_CN.md)
