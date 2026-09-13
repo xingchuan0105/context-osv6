@@ -53,7 +53,7 @@ vgi-rs/                       ← 独立 Rust workspace（替代 Python 原型�
 ├─ manifest.json          # 版本、指纹（corpus/questions/index/model）、时间戳、freshness
 ├─ corpus.sqlite          # documents / passages / 字段（heading、locators、token 数）
 ├─ vectors.f16            # 文档级向量（memmap；维度与批次由 manifest 锁定）
-├─ bm25/                  # 段落级倒排索引（tantivy 或 zvec）
+├─ bm25/                  # 段落级 BM25 自研倒排（vgi-lexical；无额外引擎）
 ├─ tree.bin               # 语义树（节点、标签、代表、路由质心）
 └─ jobs/                  # 后台任务（增量更新/摘要）
 ```
@@ -75,6 +75,7 @@ vgi-rs/                       ← 独立 Rust workspace（替代 Python 原型�
 - **打分与参数**：`lucene` 为默认，`bm25l` / `bm25+` 进 A/B（长 passage）；k1/b 在 dev 网格搜索；查询侧支持多查询组 + `fuse`（RRF，k=60）。
 - **查询处理**：agent 发短查询（工具描述明确引导）；预留 RM3/PRF 钩子；评测同时记录"原始问题"与"agent 查询"两条口径。
 - **指标**：recall@10/100/1000、nDCG@10（对齐官方协议口径）。
+- **实现**：**自研倒排索引（vgi-lexical）**——段落级 postings + 字段长度统计，压缩存储（delta+varint，可 mmap）；**不引入 tantivy 等额外引擎**；zvec 只承担向量。
 
 ### 4.3 精确检索与阅读
 
@@ -83,15 +84,17 @@ vgi-rs/                       ← 独立 Rust workspace（替代 Python 原型�
 
 ### 4.4 融合与结果压缩
 
-- 向量、BM25、FTS 三路各自返回有序列表 → RRF（k=60）融合 → 截断 → **紧凑输出**：按文档分组、passage 偏移、命中片段（截断长度可配），附 fingerprint/freshness。与 zg 一致：给 agent 的是"可定位的证据"，不是整篇正文。
+- 向量与 BM25（自研倒排）两路各自返回有序列表 → RRF（k=60）融合 → 截断 → **紧凑输出**：按文档分组、passage 偏移、命中片段（截断长度可配），附 fingerprint/freshness。与 zg 一致：给 agent 的是"可定位的证据"，不是整篇正文。
 
-### 4.5 引擎决策（M0 spike）
+### 4.5 引擎与索引实现（已定）
 
-| 组件 | 首选 | 备选 | 说明 |
+| 组件 | 本机（默认） | 云端 | 说明 |
 |---|---|---|---|
-| 向量 ANN | **zvec-rust**（对齐 zg 引擎；HNSW/IVF-RaBitQ、fp16、Windows 预编译） | `hnsw_rs` / `usearch` + 自写融合 | spike 验证 API、批量插入、过滤与内存 |
-| 全文/FTS | **tantivy**（字段 boost、BM25 参数可控、增量） | zvec 原生 FTS | 若 zvec FTS 暴露 BM25 参数与字段控制，可合并到 zvec 单一引擎 |
-| 融合 | 自写 RRF | —— | 保持与 Python 原型一致的 k 与权重口径 |
+| 向量 ANN | **zvec-rust**（对齐 zg 引擎；HNSW/IVF-RaBitQ、fp16、Windows 预编译） | **Milvus**（vgi-store 第二实现，沿用 context-osv6 云端栈） | M0 spike 验证 zvec API、批量插入、过滤、内存与 Windows 构建 |
+| BM25/全文 | **自研倒排（vgi-lexical）**：段落级、字段 boost、k1/b 与变体全部自控 | 同一自研实现（随服务）| **不引入 tantivy 等额外引擎**；zvec 原生 FTS 仅当其暴露所需打分参数时可作为可选加速，不构成依赖 |
+| 融合 | 自写 RRF | 同 | 保持与 Python 原型一致的 k 与权重口径 |
+
+选型背景（zvec / qdrant / milvus / pgvector 对比与"本机轻负载、云端高并发"两层策略）见 §11.1。
 
 ## 5. 语义树 v2（保留既定优化）
 
@@ -155,9 +158,9 @@ vgi-rs/                       ← 独立 Rust workspace（替代 Python 原型�
 
 | 里程碑 | 内容 | 验收门 |
 |---|---|---|
-| M0 | workspace 骨架；摄取（复用已下载语料）；doc token 计数；zvec-rust/tantivy spike | 同语料可重建、指纹一致；引擎决策落定 |
+| M0 | workspace 骨架；摄取（复用已下载语料）；doc token 计数；zvec-rust spike（API/吞吐/内存/Windows） | 同语料可重建、指纹一致；zvec 本机验证通过 |
 | M1 | 文档级向量流水线（切批/重叠/fp16/memmap）+ 向量检索 + rg/read | 向量 recall@100/1000 ≥ 官方稠密基线；断点续跑可用 |
-| M2 | 段落级 BM25（字段 boost/参数）+ RRF 融合 + 紧凑输出 | hybrid ≥ 单路最优；检索 p95 < 300 ms |
+| M2 | 段落级 BM25 自研倒排（字段 boost/参数/变体）+ RRF 融合 + 紧凑输出 | hybrid ≥ 单路最优；检索 p95 < 300 ms |
 | M3 | 语义树 v2 + `vgi_tree`（含 route） | 形状/标签验收通过；节点级定位指标显著优于 run-9 |
 | M4 | MCP 服务 + 工具描述 + eval harness（预算） | Challenge-20 A/B 完成；质量与资源双指标出报告 |
 | M4b | 代码模式：`vgi-sandbox` + HostBridge + SDK + 预算模型 | tools/code/both 三臂 A/B 完成；失败类型、成本与质量入册 |
@@ -165,17 +168,18 @@ vgi-rs/                       ← 独立 Rust workspace（替代 Python 原型�
 
 ## 10. 风险与未决
 
-- **zvec-rust 成熟度**（绑定覆盖、FTS 打分可控性、Windows 预编译）→ M0 spike；不达标走 tantivy + hnsw_rs 备选，不影响上层接口。
+- **zvec-rust 成熟度**（绑定覆盖、API 面、Windows 预编译）→ M0 spike；不达标走 `hnsw_rs` 备选（纯 Rust、无额外服务），不影响上层接口。
+- **自研 BM25 倒排的工程面**（postings 压缩、增量/mmap、约 160 万 passage 的构建时间与内存）→ M2 验收；zvec 只承担向量，不承担 BM25。
 - **passage 重切分**与现有 chunk/证据对齐：evidence 是文档级 ID，风险低；回答引用仍走 chunk 级 read。
 - **超长文档**（最长 996 万字符）：文档级向量按 64 批上限截断，检索侧 passage 化即可覆盖尾部；必要时后续加"尾段摘要"。
 - **树摘要的 LLM 成本**：内部节点约 2–3 千次调用，一期可只用 c-TF-IDF 标签，摘要作为可选增强。
 - **裁判同族**局限与预算（token/费用）在 M4 前单独授权。
 - **代码模式沙箱**：Python 依赖（Windows 捆绑 vs 系统）、安全与两模态公平性 → 见 §7 风险清单；M4b 验收。
-- **关键决策**：5 项已定（见 §11）；引擎组合（zvec 本地 + vgi-store trait 预留云端后端）与项目落点（独立 `vgi-rs`）已确认，可开 M0。
+- **关键决策**：5 项已定（见 §11）；引擎组合（本机 zvec＋自研 BM25；云端 Milvus 继续）与项目落点（独立 `vgi-rs`）已确认，可开 M0。
 
 ## 11. 关键决策记录（5 项，均已定）
 
-### 11.1 引擎组合：zvec vs qdrant / milvus / pgvector（已定）
+### 11.1 引擎组合（已定：本机 zvec、云端 Milvus；对比如下）
 
 **量级参考**（公开对比测试：单机 16 vCPU / 32 GB，1M×1536 维 HNSW；Milvus 官方最小部署文档；zvec 官方 VectorDBBench Cohere 1M/10M、16c64g、int8。硬件/维度/参数不同数字会变，只作量级判断）：
 
@@ -189,10 +193,10 @@ vgi-rs/                       ← 独立 Rust workspace（替代 Python 原型�
 **VGI 的真实规模**：文档级向量 176k×1024 fp16 ≈ **0.36 GB**（qwen profile 0.21 GB）；段落 BM25 ~160 万 postings。任何引擎在容量上都过剩，**选型由部署形态决定，不是吞吐**。
 
 **两层策略（对齐"本机轻负载、云端高并发"）**
-1. **本机（默认）**：**zvec 嵌入式**（+ tantivy 做 BM25）——无服务、无外部依赖、数据量级内存、Windows 预编译、与 zg 同栈；Milvus Lite 排除（仅 Python、仅 FLAT、无 Windows）；pgvector 仅当宿主已有 PG 才考虑。
-2. **云端（高并发，后补）**：`vgi-store` 定义向量/BM25 的最小 trait 与指纹格式，把后端做成可替换实现——路线 A（先做）：同一 Rust 服务内嵌 zvec，无状态前端多副本，本规模足够；路线 B（需要托管/多租户/更大规模）：切 Qdrant（1M–50M 甜点、单二进制）或对齐 context-osv6 用 Milvus；pgvector 只在"已有 PG 基础设施"时选。
+1. **本机（默认）**：**zvec 嵌入式（向量）＋ 自研 BM25 倒排（vgi-lexical，无额外引擎）**——无服务、无外部依赖、数据量级内存、Windows 预编译、与 zg 同栈；Milvus Lite 排除（仅 Python、仅 FLAT、无 Windows）；pgvector 不采用。
+2. **云端（高并发）**：**Milvus 继续**（沿用 context-osv6 云端栈）——`vgi-store` 定义向量/BM25 的最小 trait 与指纹格式，第二实现接 Milvus（向量 ANN + 持久化）；服务保持无状态多副本，BM25 仍跑自研实现，保证本机/云端同口径。Qdrant / pgvector 仅留档对比，不作为候选。
 
-**决策**：本地 zvec 优先（M0 spike：zvec 的 FTS/字段 boost 达标则单引擎，否则 zvec + tantivy 两件套）；云端后端作为第二实现后补，接口先行。
+**决策**：本机 **zvec（向量）+ 自研 BM25（vgi-lexical）**，不引入 tantivy 或任何额外引擎；云端 **Milvus 继续**（`vgi-store` 第二实现）。zvec 原生 FTS 若达标仅作可选加速，不构成依赖。
 
 ### 11.2 项目落点
 
