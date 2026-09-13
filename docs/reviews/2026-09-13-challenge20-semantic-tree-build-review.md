@@ -70,6 +70,8 @@
 5. **题集**：选证据在层级上可收窄的题集；对 BrowseComp-Plus 这类跨主题证据，明确声明"层次结构不可收窄"，不做端到端导航对照。
 6. **复现**：随机树构建进入版本控制脚本；meta 记录 `split`/`rng_seed`。
 
+现成方案与文献依据的系统调研（bisecting k-means 文献、Scatter/Gather、RAPTOR、BERTopic、GraphRAG、ANN 树等）见 [检索最佳实践调研](../research/2026-09-13-semantic-tree-building-best-practices.md)。
+
 ## 7. 复算入口
 
 ```powershell
