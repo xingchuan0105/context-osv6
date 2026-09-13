@@ -52,3 +52,5 @@ overview          （意图与门，不生成代码）
 ## 代码落点
 
 独立 workspace，默认路径：本仓库的 `../vgi-rs`。本目录只持有规格与 anchor 测试。
+
+过夜无人值守 M0：[overnight-goal.md](overnight-goal.md)；workflow：`.grok/workflows/vgi-m0-overnight.rhai`（`/workflow runs` 里的 display name 是 `vgi-m0-overnight`）。
