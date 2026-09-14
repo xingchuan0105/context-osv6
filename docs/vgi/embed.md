@@ -42,7 +42,7 @@ zvec 索引：`.vgi/zvec-docs/`，字段 `uid`（pk）、`doc_id`、`batch`、`e
 
 ## Profile `qwen-flash`（第二套索引，不覆盖 bge-m3）
 
-百炼 `qwen3.7-text-embedding-flash`：`LIMIT=128000`、`OVERLAP=256`、`dim=256` fp16、请求体**必须**带 `dimensions=256`。凭据：`DASHSCOPE_API_KEY` + `E2E_EMBEDDING_BASE_URL`（OpenAI 兼容）。单请求最多 20 行且合计 ≤128k token。
+百炼 `qwen3.7-text-embedding-flash`：`LIMIT=120000`（API 上下文 131072，HF tokenizer 会少计约 3%，128000 会 400）、`OVERLAP=256`、`dim=256` fp16、请求体**必须**带 `dimensions=256`。凭据：`DASHSCOPE_API_KEY` + `E2E_EMBEDDING_BASE_URL`。灌库走 **Batch File**（半价），不走同步 TPM。
 
 - tokenizer：`Qwen/Qwen3-8B` tokenizer.json（与 bge 的 XLM-R 分开，token 数写入 `doc_tokens`）
 - 表：`window_vectors_qwen_flash`
