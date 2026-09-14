@@ -1,0 +1,60 @@
+{
+  "do_not_rerun": true,
+  "note": "Frozen from prior Challenge-20 work. Do not re-run these configs.",
+  "index_level": [
+    {
+      "arm": "bm25-doc",
+      "label": "文档级 BM25（冻结）",
+      "recall": { "5": null, "10": 0.024, "50": 0.063, "100": 0.111, "1000": 0.275 },
+      "n": 20,
+      "gold": "evidence_ids",
+      "source": "docs/reviews/2026-09-13-challenge20-bm25-review.md",
+      "protocol": "bm25s lucene k1=1.2 b=0.75; whole document; whole question as bag; no agent. @10 headline 2.4% (per-question mean 2.7%). @100 11.1% (9/20 had a hit); @1000 27.5% (14/20)."
+    },
+    {
+      "arm": "official-dense-0.6B",
+      "label": "官方稠密 Qwen3-0.6B（冻结，全库 qrels）",
+      "recall": { "5": null, "100": 0.264, "1000": 0.597 },
+      "n": null,
+      "gold": "official BrowseComp-Plus qrels (not Challenge-20 subset)",
+      "source": "docs/reviews/2026-09-13-challenge20-bm25-review.md",
+      "protocol": "Tevatron --passage_max_len 4096 whole-doc truncate. Different question set; not a pass line."
+    }
+  ],
+  "agent_level": [
+    {
+      "arm": "grep",
+      "label": "run-9 agent+grep（冻结）",
+      "correctness": 0.14,
+      "evidence_recall": 0.1277,
+      "n": 20,
+      "source": "docs/plans/2026-09-13-vgi-rag-challenge20-tree-run9-analysis.md",
+      "protocol": "qwen3.8-flash, max_rounds=5, grep/read only, no ranked retrieval."
+    },
+    {
+      "arm": "tree",
+      "label": "run-9 agent+tree（冻结）",
+      "correctness": 0.125,
+      "evidence_recall": 0.1014,
+      "n": 20,
+      "source": "docs/plans/2026-09-13-vgi-rag-challenge20-tree-run9-analysis.md",
+      "protocol": "same budget as grep plus semantic-tree navigation."
+    },
+    {
+      "arm": "tree-nolabel",
+      "label": "run-9 tree-nolabel（冻结）",
+      "correctness": 0.05,
+      "evidence_recall": 0.1013,
+      "n": 20,
+      "source": "docs/plans/2026-09-13-vgi-rag-challenge20-tree-run9-analysis.md"
+    },
+    {
+      "arm": "tree-random",
+      "label": "run-9 tree-random（冻结）",
+      "correctness": 0.05,
+      "evidence_recall": 0.0828,
+      "n": 20,
+      "source": "docs/plans/2026-09-13-vgi-rag-challenge20-tree-run9-analysis.md"
+    }
+  ]
+}
