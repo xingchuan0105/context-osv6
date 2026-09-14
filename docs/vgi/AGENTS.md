@@ -8,6 +8,7 @@ Paper: Kushnir et al., *Design Docs Are All You Need*, arXiv:2609.05364. A user-
 
 | Branch | Doc |
 |---|---|
+| Returning after the PRD / zg design | [HANDOFF](HANDOFF.md) first |
 | Any VGI work | [README](README.md) (DAG + milestone) |
 | Product intent, non-goals, review resolutions | [overview](overview.md) |
 | Corpus path, `doc_id`, ingest, fingerprint | [corpus](corpus.md) |

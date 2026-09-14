@@ -2,6 +2,8 @@
 
 日期：2026-09-14。现行规格。取代 [zg 对齐设计稿](../plans/2026-09-13-vgi-rag-rust-zg-aligned-design.md)（评审：[needs revision](../reviews/2026-09-13-vgi-rag-rust-zg-aligned-design-review.md)）。
 
+**从 PRD 之后才回来的 agent：先读 [HANDOFF.md](HANDOFF.md)。**
+
 本目录是 VGI 的耐久产物：一组自包含设计文档，边由 `depends_on` / `provides` 组成 DAG。实现从文档再生，不在旧代码上打补丁。过程见 [AGENTS.md](AGENTS.md)。
 
 ## 范式缺口（本仓库）
