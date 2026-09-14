@@ -32,3 +32,5 @@ VGI is an evaluation tool for a fixed document corpus. Independent `vgi-rs`: do 
 M0 in-scope: `corpus`, `token-batch`, `zvec-spike`.
 
 M1 in-scope: `embed`, `retrieval` (vector path + read + rg), `eval`. Do not implement lexical/RRF fusion, tree, MCP, or sandbox. Do not treat official 26.4%/59.7% as a pass line.
+
+A second vector index `qwen-flash` (bailian `qwen3.7-text-embedding-flash`, 128k windows, 256-d fp16) is allowed beside bge-m3. Do not overwrite `window_vectors` or `zvec-docs`.

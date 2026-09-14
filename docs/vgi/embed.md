@@ -40,6 +40,18 @@ depends_on: [corpus, token-batch]
 
 zvec 索引：`.vgi/zvec-docs/`，字段 `uid`（pk）、`doc_id`、`batch`、`embedding` VectorFp16/1024/HNSW cosine。已有目录用 `open`，不要 `create_and_open`。`window_vectors` 是源；zvec 可由表重建。
 
+## Profile `qwen-flash`（第二套索引，不覆盖 bge-m3）
+
+百炼 `qwen3.7-text-embedding-flash`：`LIMIT=128000`、`OVERLAP=256`、`dim=256` fp16、请求体**必须**带 `dimensions=256`。凭据：`DASHSCOPE_API_KEY` + `E2E_EMBEDDING_BASE_URL`（OpenAI 兼容）。单请求最多 20 行且合计 ≤128k token。
+
+- tokenizer：`Qwen/Qwen3-8B` tokenizer.json（与 bge 的 XLM-R 分开，token 数写入 `doc_tokens`）
+- 表：`window_vectors_qwen_flash`
+- 索引：`.vgi/zvec-docs-qwen-flash/`
+- CLI：`vgi tokens --profile qwen-flash` 然后 `vgi embed --profile qwen-flash`
+- 限流（百炼实测配额）：RPM 24000、TPM 1e6。瓶颈是 TPM。默认 **8 路 HTTP 并发**（`tpm / 128000`），漏桶按秒补充；可用 `QWEN_EMBED_CONCURRENCY` 覆盖。单请求仍 ≤20 行且 ≤128k token。
+
+bge-m3 的 `window_vectors` / `zvec-docs` 不动。
+
 ## Worked example — uid
 
 1. `uid("a", 0)` = `a#0`
