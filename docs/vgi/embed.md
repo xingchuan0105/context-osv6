@@ -36,6 +36,8 @@ depends_on: [corpus, token-batch]
 
 开始全库 HTTP 前必须打印：`n_windows_pending`、`sum_window_tokens`（含重叠），等确认口径；M1 授权后可直接跑。断点续跑。
 
+内存：按篇流式。只持有当前 `body`、tokenizer 和最多 `EMBED_BATCH` 条窗文本。禁止 `SELECT body` 一次性装进 `Vec`。`window_vectors.uid` 集合可以全量放内存（17 万条字符串，MB 级）。文档级 fp16 向量全库约 0.36 GB，不是多 GB。
+
 zvec 索引：`.vgi/zvec-docs/`，字段 `uid`（pk）、`doc_id`、`batch`、`embedding` VectorFp16/1024/HNSW cosine。已有目录用 `open`，不要 `create_and_open`。`window_vectors` 是源；zvec 可由表重建。
 
 ## Worked example — uid

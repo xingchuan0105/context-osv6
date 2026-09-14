@@ -2,6 +2,7 @@
 
 Record misread prose and failed anchors here. Point at the module doc, not the generated file.
 
+- 2026-09-14 `embed.md`: first embed CLI `SELECT body` 全表进 `Vec`，RSS 3.6–4.9 GB。文档级 fp16 全库只有 ~0.36 GB。已改成按篇流式，禁止一次性装正文。
 - 2026-09-14 `retrieval.md` / zvec: `Doc::get_score` on cosine HNSW is a **distance** (hello/hello ≈ 0, hello/world ≈ 0.45). Spec max_pool 要相似度。实现取负后再 max_pool。已写进 retrieval.md。
 
 - 2026-09-14 `zvec-spike.md`: `Collection::create_and_open` rejects an already-created directory (`path exists, create expects a path that does not exist`). First spike run created the dir then failed; fallback `hnsw_rs` wrote a valid report. Regenerated spike after passing a non-existent path.
