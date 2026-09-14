@@ -24,6 +24,10 @@ depends_on: [retrieval]
 
 VGI 默认报告 **Challenge-20、20 题、本稿切批编码器** 的绝对 recall。可以并排印官方数字，但它们不是 M1 及格线。
 
+金标是 `evidence_ids`（约 207 个文档，已全部在 M0 sqlite），**不是** 更窄的 `gold_doc_ids`。题集副本：`docs/vgi/fixtures/challenge20-questions.json`（`id` / `question` / `evidence_ids`）。编码器标签：`bge-m3-7372-overlap256-max`。
+
+M1 命令：`vgi eval --questions <json>` 对每题 `search_vector`，写 `.vgi/jobs/eval-m1.json`：`recall` 在 k∈{5,100,1000} 的均值，加 `per_question`。均值 = `(1/n) Σ recall_at_k`。
+
 要对齐官方数字：先下载官方预构建 embedding/BM25 索引当 oracle（同一题集），再比 VGI。oracle 步骤在 M2 词法之前、M1 向量之后均可，不挡 M0。
 
 Agent 级 A/B 仍用原生 Eval v2；同族裁判的局限照记。对照臂需要排序检索面；run-9 的 5 轮 grep 不是同预算对照。

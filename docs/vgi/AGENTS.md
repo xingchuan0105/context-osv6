@@ -29,4 +29,6 @@ Paper: Kushnir et al., *Design Docs Are All You Need*, arXiv:2609.05364. A user-
 
 VGI is an evaluation tool for a fixed document corpus. Independent `vgi-rs`: do not add its crates, engines, or CI to the product workspace. Credentials still come from `avrag-rs/.env` when an embedding HTTP call is in scope.
 
-M0 in-scope: `corpus`, `token-batch`, `zvec-spike`. Retrieval/eval are specified so later milestones do not invent a second identity; they are not M0 implementation.
+M0 in-scope: `corpus`, `token-batch`, `zvec-spike`.
+
+M1 in-scope: `embed`, `retrieval` (vector path + read + rg), `eval`. Do not implement lexical/RRF fusion, tree, MCP, or sandbox. Do not treat official 26.4%/59.7% as a pass line.

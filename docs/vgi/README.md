@@ -29,11 +29,15 @@ overview          （意图与门，不生成代码）
    ├─ zvec-spike            │   M0 实现
    │     provides: spike report
    │
-   ├─ retrieval ────────────┤   M1 起实现；M0 只读接口
+   ├─ embed ────────────────┤   M1
    │     depends_on: corpus, token-batch
-   │     provides: rrf_merge, read, rg
+   │     provides: uid, window_vectors
    │
-   └─ eval                  │   口径；随 M1 指标跑
+   ├─ retrieval ────────────┤   M1 向量路 + read + rg；RRF 锁死待 M2
+   │     depends_on: corpus, token-batch, embed
+   │     provides: max_pool, search_vector, rrf_merge, read, rg
+   │
+   └─ eval                  │   M1 Challenge-20 绝对 recall
          depends_on: retrieval
 ```
 
@@ -44,7 +48,7 @@ overview          （意图与门，不生成代码）
 | 里程碑 | 实现哪些文档 | 门 |
 |---|---|---|
 | **M0** | corpus, token-batch, zvec-spike | 两次 ingest `corpus_fp` 相同；`n_docs = 100195`；全表 `token_count`；zvec spike 报告 |
-| **M1** | retrieval 的向量路 + read + rg；eval 索引级 | Challenge-20 上报告绝对 recall；不拿官方 26.4%/59.7% 当及格线 |
+| **M1** | embed + retrieval 向量路 + read + rg + eval | Challenge-20 绝对 recall@5/100/1000 有报告；官方 26.4%/59.7% 不是及格线 |
 | **M2** | retrieval 的词法路 + RRF | 先跑官方预构建 BM25 oracle；hybrid ≥ 本系统单路最优 |
 | **M3** | deferred 中的树，若仍值得做 | 形状/标签 + route recall@k；不以「根覆盖」为门 |
 | **M4** | MCP 工具面 + eval agent 级 | 默认 `vgi_search` + `vgi_read` |

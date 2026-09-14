@@ -82,6 +82,69 @@ def recall_at_k(evidence: set[str], hits: list[str], k: int) -> float:
     return len(set(hits[:k]) & evidence) / len(evidence)
 
 
+def uid(doc_id: str, batch: int) -> str:
+    if batch < 0:
+        raise ValueError("batch")
+    return f"{doc_id}#{batch}"
+
+
+def parse_uid(s: str) -> tuple[str, int]:
+    doc_id, sep, rest = s.rpartition("#")
+    if not sep or not doc_id or not rest or not rest.isdigit():
+        raise ValueError(s)
+    return doc_id, int(rest)
+
+
+def max_pool(hits: list[tuple[str, float]]) -> list[str]:
+    best: dict[str, float] = {}
+    for u, score in hits:
+        doc_id, _ = parse_uid(u)
+        prev = best.get(doc_id)
+        if prev is None or score > prev:
+            best[doc_id] = score
+    return sorted(best, key=lambda d: (-best[d], d))
+
+
+def read_char_window(body: str, offset: int, limit: int) -> str:
+    chars = list(body)
+    if offset < 0 or limit < 0:
+        raise ValueError("offset/limit")
+    return "".join(chars[offset : offset + limit])
+
+
+def rg_scan(
+    docs: list[tuple[str, str]], pattern: str, doc_ids: list[str], byte_budget: int
+) -> list[dict]:
+    if not doc_ids:
+        raise ValueError("doc_ids required")
+    import re
+
+    rx = re.compile(pattern)
+    allowed = set(doc_ids)
+    hits = []
+    used = 0
+    by_id = {i: b for i, b in docs}
+    for did in doc_ids:
+        if did not in allowed:
+            continue
+        body = by_id[did]
+        pos = 0
+        for line in body.split("\n"):
+            for m in rx.finditer(line):
+                hits.append(
+                    {
+                        "doc_id": did,
+                        "char_offset": pos + m.start(),
+                        "line": line,
+                    }
+                )
+                used += len(line.encode("utf-8"))
+                if used >= byte_budget:
+                    return hits
+            pos += len(line) + 1
+    return hits
+
+
 class CorpusFp(unittest.TestCase):
     def test_corpus_fp_two_doc(self):
         docs = [
@@ -139,6 +202,36 @@ class Recall(unittest.TestCase):
         evidence = {"D1", "D2", "D3"}
         hits = ["D9", "D1", "D4", "D2"]
         self.assertEqual(recall_at_k(evidence, hits, 100), 2 / 3)
+
+
+class Uid(unittest.TestCase):
+    def test_uid(self):
+        self.assertEqual(uid("a", 0), "a#0")
+        self.assertEqual(parse_uid("79680#12"), ("79680", 12))
+        for bad in ("a", "a#", "#0", "a#x"):
+            with self.assertRaises(ValueError):
+                parse_uid(bad)
+
+
+class MaxPool(unittest.TestCase):
+    def test_max_pool_three_docs(self):
+        order = max_pool([("A#0", 0.90), ("A#1", 0.40), ("B#0", 0.80), ("C#0", 0.80)])
+        self.assertEqual(order, ["A", "B", "C"])
+
+
+class ReadRg(unittest.TestCase):
+    def test_read_char_window(self):
+        self.assertEqual(read_char_window("hello", 0, 5), "hello")
+        self.assertEqual(read_char_window("hello", 1, 2), "el")
+        self.assertEqual(read_char_window("hello", 10, 5), "")
+
+    def test_rg_requires_doc_ids(self):
+        with self.assertRaises(ValueError):
+            rg_scan([("a", "hello")], "ell", [], 1000)
+
+    def test_rg_ell_in_hello(self):
+        hits = rg_scan([("a", "hello"), ("b", "world")], "ell", ["a", "b"], 1000)
+        self.assertEqual(hits, [{"doc_id": "a", "char_offset": 1, "line": "hello"}])
 
 
 if __name__ == "__main__":
