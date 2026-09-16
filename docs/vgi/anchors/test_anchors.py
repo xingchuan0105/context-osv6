@@ -250,5 +250,68 @@ class ReadRg(unittest.TestCase):
         self.assertEqual(hits, [{"doc_id": "a", "char_offset": 1, "line": "hello"}])
 
 
+class PassageWindows(unittest.TestCase):
+    """retrieval.md 段落窗：raw token 流 W=512、stride=448、重叠 64；
+    起点 0,448,… 持续至 start < max(n-64, 1)，窗尾截到 n。"""
+
+    @staticmethod
+    def passage_windows(n: int) -> list[tuple[int, int]]:
+        if n == 0:
+            return [(0, 0)]
+        out = []
+        s = 0
+        while s < max(n - 64, 1):
+            out.append((s, min(s + 512, n)))
+            s += 448
+        return out
+
+    def test_passage_windows(self):
+        self.assertEqual(
+            self.passage_windows(600), [(0, 512), (448, 600)]
+        )
+        self.assertEqual(self.passage_windows(512), [(0, 512)])
+        self.assertEqual(
+            self.passage_windows(513), [(0, 512), (448, 513)]
+        )
+
+
+class Bm25Lucene(unittest.TestCase):
+    """retrieval.md BM25 锚：Lucene 公式 k1=1.2 b=0.75。
+    A='machine learning is fun' B='deep learning uses neural networks'
+    C='vector databases store embeddings'，查询 learning。"""
+
+    @staticmethod
+    def bm25_scores(docs: list[list[str]], query: list[str], k1=1.2, b=0.75):
+        import math
+
+        n = len(docs)
+        avgdl = sum(len(d) for d in docs) / n
+        df = {t: sum(1 for d in docs if t in d) for t in set(query)}
+        idf = {t: math.log(1 + (n - df[t] + 0.5) / (df[t] + 0.5)) for t in df}
+        out = []
+        for d in docs:
+            dl = len(d)
+            s = 0.0
+            for t in query:
+                if t not in d:
+                    continue
+                tf = d.count(t)
+                s += idf[t] * tf * (k1 + 1) / (tf + k1 * (1 - b + b * dl / avgdl))
+            out.append(s)
+        return out
+
+    def test_bm25_lucene_three_docs(self):
+        docs = [
+            "machine learning is fun".split(),
+            "deep learning uses neural networks".split(),
+            "vector databases store embeddings".split(),
+        ]
+        sa, sb, sc = self.bm25_scores(docs, ["learning"])
+        self.assertAlmostEqual(sa, 0.48527451, places=6)
+        self.assertAlmostEqual(sb, 0.44217447, places=6)
+        self.assertEqual(sc, 0.0)
+        self.assertGreater(sa, sb)
+
+
 if __name__ == "__main__":
     unittest.main()

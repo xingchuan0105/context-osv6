@@ -32,6 +32,8 @@ VGI is an evaluation tool for a fixed document corpus. Independent `vgi-rs`: do 
 
 M0 in-scope: `corpus`, `token-batch`, `zvec-spike`.
 
-M1 in-scope: `embed`, `retrieval` (vector path + read + rg), `eval`. Do not implement lexical/RRF fusion, tree, MCP, or sandbox. Do not treat official 26.4%/59.7% as a pass line.
+M1 in-scope: `embed`, `retrieval` (vector path + read + rg), `eval`. Do not treat official 26.4%/59.7% as a pass line.
+
+M2 in-scope: `retrieval` lexical path (passage-level BM25, tantivy) + RRF hybrid surface (`search`/`eval --mode`). Gate: official-equivalent BM25 oracle (bm25s lucene stand-in, frozen calibration) then hybrid ≥ best single path on Challenge-20. Still out: tree, MCP, sandbox, field boost, self-built postings.
 
 A second vector index `qwen-flash` (bailian `qwen3.7-text-embedding-flash`, 128k windows, 256-d fp16) is allowed beside bge-m3. Do not overwrite `window_vectors` or `zvec-docs`.

@@ -1,12 +1,12 @@
 ---
 module: retrieval
-provides: rrf_merge, max_pool, search_vector, read, rg
+provides: rrf_merge, max_pool, search_vector, search_lexical, read, rg
 depends_on: [corpus, token-batch, embed]
 ---
 
 # Retrieval identity
 
-M1 实现向量路 + read + rg。RRF 函数锁死，M2 才接词法路。禁止 18M `chunk_id` 和全库目录树 rg。
+M1 实现向量路 + read + rg；M2 接词法路（段落级 BM25）+ hybrid。禁止 18M `chunk_id` 和全库目录树 rg。
 
 ## Interface
 
@@ -18,7 +18,13 @@ M1 实现向量路 + read + rg。RRF 函数锁死，M2 才接词法路。禁止 
     search_vector(query, window_k=10000) -> RankedList
     # 查询一条向量；ANN 取 window_k 个窗；max_pool；身份是 doc_id
 
+    search_lexical(query, passage_k=20000) -> RankedList
+    # 段落级 BM25；passage 分数 max_pool 到 doc_id（M2）
+
     rrf_merge(lists: [RankedList], k=60) -> [doc_id]   # 好到差；M1 不调用
+
+    search(query, mode="vector"|"lexical"|"hybrid") -> RankedList
+    # hybrid = rrf_merge([search_vector(q), search_lexical(q)], k=60)（M2）
 
     read(doc_id, char_offset, char_limit) -> {doc_id, offset, text, heading, url}
 
@@ -34,6 +40,10 @@ M1 实现向量路 + read + rg。RRF 函数锁死，M2 才接词法路。禁止 
 **search_vector (M1).** 只走向量。`window_k` 默认 10000，保证 max_pool 后仍能填满 recall@1000。zvec cosine 的 `get_score` 是距离（越小越近）；入库 `max_pool` 前取负，当作相似度。
 
 **RRF.** 对每个出现过的 `doc_id`：`score = Σ 1/(k + rank_L)`，只加它出现过的列表。排序：`score` 降序；同分则列表命中数降序；再则向量列表中的 rank 升序（不在向量列表则视为 +∞）；再则 `doc_id` UTF-8。
+
+**search_lexical (M2).** 检索单元是 passage，不是整篇：对 `body` 的 raw token 流（`(?u)\b\w\w+\b`，含停用词）做滑窗，W=512、stride=448（重叠 64）；起点为 0, 448, 896, …，持续至 `start < max(n_tokens − 64, 1)`；passage 覆盖 raw token `[start, start+512)` 截到 n，落回原文 char 区间（首 token 起点到末 token 终点）。引擎 **tantivy**（进程内）：`doc_id` STRING stored，passage 文本 TEXT indexed-not-stored（默认分词，lowercase）；BM25 打分 k1=1.2、b=0.75（Lucene/tantivy 默认）。取 BM25 前 `passage_k`（默认 20000）个 passage，按 doc 取 max(score) 后排序：score 降序，同分 `doc_id` UTF-8——与 `max_pool` 同规则。索引目录 `.vgi/tantivy-passage/`。官方预构建 BM25 oracle 以 bm25s lucene 同参数在 Python 层标定（`scripts/bm25s_passage_oracle.py`），冻结对照见 `fixtures/challenge20-prior-frozen.json`。
+
+**search hybrid (M2).** `rrf_merge([search_vector(q), search_lexical(q)], k=60)`。M2 门：Challenge-20 上 hybrid ≥ 本系统单路最优（bm25s 层预测：@100 0.237 > vector 0.211）。
 
 **read.** 切在 `documents.body` 的 Unicode 标量偏移上：`chars().skip(offset).take(limit)`。越界得到前缀或空串，不是错误。未知 `doc_id` 失败。没有 `chunk_id`。
 
@@ -64,10 +74,23 @@ A 与 B 同分、都命中 2 列表；A 的向量 rank 更小 → A 在 B 前。
 
 read(`A`, offset=0, limit=5) 在 body=`hello` 上返回 `hello`；offset=1, limit=2 返回 `el`。rg 不带 `doc_ids` 被拒绝。pattern `ell` 在 `hello` 上：`char_offset=1`，`line=hello`。
 
+## Worked example — 段落窗与 lexical pool
+
+body 的 raw token 数 n=600：起点 0、448（448 < 600−64=536；896 ≥ 536 停）→ passage `[0,512)`、`[448,600)`，共 2 个。n=512 只有 `[0,512)`；n=513 为 `[0,512)`、`[448,513)`。
+
+BM25 打分锚（Lucene 公式，k1=1.2、b=0.75，avgdl=13/3≈4.3333）：三篇文档 A=`machine learning is fun`（4 词）、B=`deep learning uses neural networks`（5 词）、C=`vector databases store embeddings`（4 词），查询 `learning`（df=2，N=3 → idf=ln(1+1.5/2.5)=0.4700036）：
+
+    A: tf·(k1+1)/(tf + k1·(1−b+b·dl/avgdl)) = 2.2/2.13077 = 1.03249 → score 0.48527451
+    B: 2.2/2.33846 = 0.94079                                    → score 0.44217447
+
+**顺序 A, B**（同 tf 下短文档赢）。passage→doc 聚合复用 max_pool 规则：A#p0 12.0、A#p1 9.5、B#p0 11.0 → A=12.0、B=11.0 → `A,B`。
+
 ## Anchor
 
 **Input:** max_pool 上例。 **Expected:** `A,B,C`。  
 **Input:** RRF 两路排名。 **Expected:** `["A","B","C","D"]`。  
 **Input:** read hello 1,2。 **Expected:** `el`。  
 **Input:** rg 空 `doc_ids`。 **Expected:** error。  
-**Enforced by:** `test_anchors.py::test_max_pool_three_docs`, `test_rrf_four_docs`, `test_read_char_window`, `test_rg_requires_doc_ids`
+**Input:** passage 窗 n=600 / n=513。 **Expected:** `[(0,512),(448,600)]` / `[(0,512),(448,513)]`。  
+**Input:** BM25 三文档查询 `learning`。 **Expected:** 顺序 `A,B`，score(A)≈0.48527451、score(B)≈0.44217447。  
+**Enforced by:** `test_anchors.py::test_max_pool_three_docs`, `test_rrf_four_docs`, `test_read_char_window`, `test_rg_requires_doc_ids`, `test_passage_windows`, `test_bm25_lucene_three_docs`
