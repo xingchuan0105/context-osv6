@@ -1,0 +1,142 @@
+[
+  {
+    "qid": "bcp:618",
+    "best_gold_rank": 55,
+    "gold_in_top10": 0,
+    "gold_in_top100": 1,
+    "n_gold": 13
+  },
+  {
+    "qid": "bcp:22",
+    "best_gold_rank": 42,
+    "gold_in_top10": 0,
+    "gold_in_top100": 1,
+    "n_gold": 12
+  },
+  {
+    "qid": "bcp:342",
+    "best_gold_rank": 21,
+    "gold_in_top10": 0,
+    "gold_in_top100": 7,
+    "n_gold": 11
+  },
+  {
+    "qid": "bcp:70",
+    "best_gold_rank": null,
+    "gold_in_top10": 0,
+    "gold_in_top100": 0,
+    "n_gold": 11
+  },
+  {
+    "qid": "bcp:7",
+    "best_gold_rank": 320,
+    "gold_in_top10": 0,
+    "gold_in_top100": 0,
+    "n_gold": 11
+  },
+  {
+    "qid": "bcp:486",
+    "best_gold_rank": 50,
+    "gold_in_top10": 0,
+    "gold_in_top100": 1,
+    "n_gold": 11
+  },
+  {
+    "qid": "bcp:732",
+    "best_gold_rank": 1521,
+    "gold_in_top10": 0,
+    "gold_in_top100": 0,
+    "n_gold": 10
+  },
+  {
+    "qid": "bcp:435",
+    "best_gold_rank": 5,
+    "gold_in_top10": 1,
+    "gold_in_top100": 2,
+    "n_gold": 10
+  },
+  {
+    "qid": "bcp:1164",
+    "best_gold_rank": 72,
+    "gold_in_top10": 0,
+    "gold_in_top100": 1,
+    "n_gold": 10
+  },
+  {
+    "qid": "bcp:411",
+    "best_gold_rank": 9,
+    "gold_in_top10": 1,
+    "gold_in_top100": 4,
+    "n_gold": 10
+  },
+  {
+    "qid": "bcp:180",
+    "best_gold_rank": 116,
+    "gold_in_top10": 0,
+    "gold_in_top100": 0,
+    "n_gold": 10
+  },
+  {
+    "qid": "bcp:85",
+    "best_gold_rank": 260,
+    "gold_in_top10": 0,
+    "gold_in_top100": 0,
+    "n_gold": 10
+  },
+  {
+    "qid": "bcp:503",
+    "best_gold_rank": 787,
+    "gold_in_top10": 0,
+    "gold_in_top100": 0,
+    "n_gold": 10
+  },
+  {
+    "qid": "bcp:449",
+    "best_gold_rank": 2,
+    "gold_in_top10": 2,
+    "gold_in_top100": 3,
+    "n_gold": 10
+  },
+  {
+    "qid": "bcp:89",
+    "best_gold_rank": 1,
+    "gold_in_top10": 2,
+    "gold_in_top100": 2,
+    "n_gold": 10
+  },
+  {
+    "qid": "bcp:962",
+    "best_gold_rank": 631,
+    "gold_in_top10": 0,
+    "gold_in_top100": 0,
+    "n_gold": 10
+  },
+  {
+    "qid": "bcp:684",
+    "best_gold_rank": 9,
+    "gold_in_top10": 1,
+    "gold_in_top100": 6,
+    "n_gold": 10
+  },
+  {
+    "qid": "bcp:422",
+    "best_gold_rank": 27,
+    "gold_in_top10": 0,
+    "gold_in_top100": 2,
+    "n_gold": 10
+  },
+  {
+    "qid": "bcp:380",
+    "best_gold_rank": 1,
+    "gold_in_top10": 3,
+    "gold_in_top100": 5,
+    "n_gold": 9
+  },
+  {
+    "qid": "bcp:20",
+    "best_gold_rank": 2,
+    "gold_in_top10": 3,
+    "gold_in_top100": 7,
+    "n_gold": 9
+  }
+]
