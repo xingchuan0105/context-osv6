@@ -1,0 +1,272 @@
+{
+  "arm": "bge-m3 vector (vgi search/read/rg)",
+  "model": "qwen3.8-flash",
+  "temperature": 0,
+  "thinking": false,
+  "budget": {
+    "max_rounds": 5,
+    "max_tool_calls": 32,
+    "deadline_s": 600
+  },
+  "n": 20,
+  "answer_correctness_mean": 0.175,
+  "labels": {
+    "INCORRECT": 13,
+    "REFUSAL_WRONG": 3,
+    "PASS": 3,
+    "PARTIAL": 1
+  },
+  "pass_rate": 0.15,
+  "mean_elapsed_s": 59.1336,
+  "median_elapsed_s": 48.831,
+  "total_elapsed_s": 1410.7,
+  "mean_tool_calls": 8.6,
+  "tokens": {
+    "prompt": 371735,
+    "completion": 62660,
+    "total": 434395
+  },
+  "judge_tokens": null,
+  "per_question": [
+    {
+      "qid": "bcp:618",
+      "label": "INCORRECT",
+      "elapsed_ms": 26350,
+      "tool_calls": 8,
+      "tokens": {
+        "prompt": 13335,
+        "completion": 831,
+        "total": 14166
+      },
+      "exit_reason": "closeout"
+    },
+    {
+      "qid": "bcp:22",
+      "label": "INCORRECT",
+      "elapsed_ms": 81447,
+      "tool_calls": 7,
+      "tokens": {
+        "prompt": 19975,
+        "completion": 4652,
+        "total": 24627
+      },
+      "exit_reason": "closeout"
+    },
+    {
+      "qid": "bcp:342",
+      "label": "INCORRECT",
+      "elapsed_ms": 55332,
+      "tool_calls": 10,
+      "tokens": {
+        "prompt": 23226,
+        "completion": 2316,
+        "total": 25542
+      },
+      "exit_reason": "closeout"
+    },
+    {
+      "qid": "bcp:70",
+      "label": "REFUSAL_WRONG",
+      "elapsed_ms": 48831,
+      "tool_calls": 10,
+      "tokens": {
+        "prompt": 22957,
+        "completion": 1864,
+        "total": 24821
+      },
+      "exit_reason": "closeout"
+    },
+    {
+      "qid": "bcp:7",
+      "label": "INCORRECT",
+      "elapsed_ms": 110442,
+      "tool_calls": 8,
+      "tokens": {
+        "prompt": 11835,
+        "completion": 8736,
+        "total": 20571
+      },
+      "exit_reason": "closeout"
+    },
+    {
+      "qid": "bcp:486",
+      "label": "INCORRECT",
+      "elapsed_ms": 41245,
+      "tool_calls": 10,
+      "tokens": {
+        "prompt": 25372,
+        "completion": 1510,
+        "total": 26882
+      },
+      "exit_reason": "closeout"
+    },
+    {
+      "qid": "bcp:732",
+      "label": "REFUSAL_WRONG",
+      "elapsed_ms": 34888,
+      "tool_calls": 9,
+      "tokens": {
+        "prompt": 18046,
+        "completion": 950,
+        "total": 18996
+      },
+      "exit_reason": "closeout"
+    },
+    {
+      "qid": "bcp:435",
+      "label": "PASS",
+      "elapsed_ms": 13981,
+      "tool_calls": 5,
+      "tokens": {
+        "prompt": 13197,
+        "completion": 456,
+        "total": 13653
+      },
+      "exit_reason": "answer"
+    },
+    {
+      "qid": "bcp:1164",
+      "label": "INCORRECT",
+      "elapsed_ms": 56493,
+      "tool_calls": 8,
+      "tokens": {
+        "prompt": 19083,
+        "completion": 2605,
+        "total": 21688
+      },
+      "exit_reason": "closeout"
+    },
+    {
+      "qid": "bcp:411",
+      "label": "INCORRECT",
+      "elapsed_ms": 40664,
+      "tool_calls": 8,
+      "tokens": {
+        "prompt": 13975,
+        "completion": 1546,
+        "total": 15521
+      },
+      "exit_reason": "closeout"
+    },
+    {
+      "qid": "bcp:180",
+      "label": "INCORRECT",
+      "elapsed_ms": 237554,
+      "tool_calls": 8,
+      "tokens": {
+        "prompt": 13840,
+        "completion": 17237,
+        "total": 31077
+      },
+      "exit_reason": "closeout"
+    },
+    {
+      "qid": "bcp:85",
+      "label": "REFUSAL_WRONG",
+      "elapsed_ms": 44235,
+      "tool_calls": 10,
+      "tokens": {
+        "prompt": 19678,
+        "completion": 1569,
+        "total": 21247
+      },
+      "exit_reason": "closeout"
+    },
+    {
+      "qid": "bcp:503",
+      "label": "PASS",
+      "elapsed_ms": 51541,
+      "tool_calls": 10,
+      "tokens": {
+        "prompt": 19281,
+        "completion": 2536,
+        "total": 21817
+      },
+      "exit_reason": "closeout"
+    },
+    {
+      "qid": "bcp:449",
+      "label": "INCORRECT",
+      "elapsed_ms": 53531,
+      "tool_calls": 8,
+      "tokens": {
+        "prompt": 20566,
+        "completion": 2758,
+        "total": 23324
+      },
+      "exit_reason": "closeout"
+    },
+    {
+      "qid": "bcp:89",
+      "label": "INCORRECT",
+      "elapsed_ms": 71270,
+      "tool_calls": 8,
+      "tokens": {
+        "prompt": 16825,
+        "completion": 2925,
+        "total": 19750
+      },
+      "exit_reason": "closeout"
+    },
+    {
+      "qid": "bcp:962",
+      "label": "INCORRECT",
+      "elapsed_ms": 100464,
+      "tool_calls": 9,
+      "tokens": {
+        "prompt": 16177,
+        "completion": 6935,
+        "total": 23112
+      },
+      "exit_reason": "closeout"
+    },
+    {
+      "qid": "bcp:684",
+      "label": "PASS",
+      "elapsed_ms": 24601,
+      "tool_calls": 9,
+      "tokens": {
+        "prompt": 23150,
+        "completion": 816,
+        "total": 23966
+      },
+      "exit_reason": "closeout"
+    },
+    {
+      "qid": "bcp:422",
+      "label": "INCORRECT",
+      "elapsed_ms": 18036,
+      "tool_calls": 7,
+      "tokens": {
+        "prompt": 12150,
+        "completion": 314,
+        "total": 12464
+      },
+      "exit_reason": "answer"
+    },
+    {
+      "qid": "bcp:380",
+      "label": "INCORRECT",
+      "elapsed_ms": 34343,
+      "tool_calls": 10,
+      "tokens": {
+        "prompt": 22975,
+        "completion": 1092,
+        "total": 24067
+      },
+      "exit_reason": "closeout"
+    },
+    {
+      "qid": "bcp:20",
+      "label": "PARTIAL",
+      "elapsed_ms": 37424,
+      "tool_calls": 10,
+      "tokens": {
+        "prompt": 26092,
+        "completion": 1012,
+        "total": 27104
+      },
+      "exit_reason": "closeout"
+    }
+  ]
+}

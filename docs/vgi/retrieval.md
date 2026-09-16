@@ -23,8 +23,9 @@ M1 实现向量路 + read + rg；M2 接词法路（段落级 BM25）+ hybrid。�
 
     rrf_merge(lists: [RankedList], k=60) -> [doc_id]   # 好到差；M1 不调用
 
-    search(query, mode="vector"|"lexical"|"hybrid") -> RankedList
+    search(query, mode="vector"|"lexical"|"hybrid", rerank=0) -> RankedList
     # hybrid = rrf_merge([search_vector(q), search_lexical(q)], k=60)（M2）
+    # rerank=N：对 RankedList 前 N 个 doc 做外部 rerank 重排（M2 后追加）
 
     read(doc_id, char_offset, char_limit) -> {doc_id, offset, text, heading, url}
 
@@ -44,6 +45,8 @@ M1 实现向量路 + read + rg；M2 接词法路（段落级 BM25）+ hybrid。�
 **search_lexical (M2).** 检索单元是 passage，不是整篇：对 `body` 的 raw token 流（`(?u)\b\w\w+\b`，含停用词）做滑窗，W=512、stride=448（重叠 64）；起点为 0, 448, 896, …，持续至 `start < max(n_tokens − 64, 1)`；passage 覆盖 raw token `[start, start+512)` 截到 n，落回原文 char 区间（首 token 起点到末 token 终点）。引擎 **tantivy**（进程内）：`doc_id` STRING stored，passage 文本 TEXT indexed-not-stored（默认分词，lowercase）；BM25 打分 k1=1.2、b=0.75（Lucene/tantivy 默认）。取 BM25 前 `passage_k`（默认 20000）个 passage，按 doc 取 max(score) 后排序：score 降序，同分 `doc_id` UTF-8——与 `max_pool` 同规则。索引目录 `.vgi/tantivy-passage/`。官方预构建 BM25 oracle 以 bm25s lucene 同参数在 Python 层标定（`scripts/bm25s_passage_oracle.py`），冻结对照见 `fixtures/challenge20-prior-frozen.json`。
 
 **search hybrid (M2).** `rrf_merge([search_vector(q), search_lexical(q)], k=60)`。M2 门：Challenge-20 上 hybrid ≥ 本系统单路最优（bm25s 层预测：@100 0.237 > vector 0.211）。
+
+**rerank（追加阶段）.** `rerank=N>0` 时：取 RankedList 前 N 个 `doc_id`，每 doc 送 `body` 前 1500 字符的摘要到 Bailian `gte-rerank-v2`（`POST …/services/rerank/text-rerank/text-rerank`，key 读 `DASHSCOPE_API_KEY`；按 ~90k 字符/请求分块），按 `relevance_score` 降序重排（同分保原序），N 之后的文档原序拼接。语义：只在 top-N 内重排——recall@k 仅当 k≤N 或 N>k 时可变（N=200 时 @100 可变、@1000 不变）。oracle 实测（`rerank-oracle-search-lists-challenge20.json`，N=200）：hybrid @100 0.236→0.268、vector @100 0.211→0.247；@5 基本持平——它修的是 100–200 区间的证据上浮，不救已错的头部。
 
 **read.** 切在 `documents.body` 的 Unicode 标量偏移上：`chars().skip(offset).take(limit)`。越界得到前缀或空串，不是错误。未知 `doc_id` 失败。没有 `chunk_id`。
 

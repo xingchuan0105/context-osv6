@@ -27,6 +27,21 @@ Oracle 用 bm25s lucene k1=1.2 b=0.75 作官方 Lucene 索引的轻量替身（�
 
 **M2 索引级门：过。** hybrid @100 / @1000 均高于任一单路（@100 +12% 相对 vs vector，@1000 0.5066 > 0.480）；@5 持平。tantivy 词法单路已逼近向量路（@1000 0.480 vs 0.471）。agent 级对照见 HANDOFF 更新。
 
+## rerank 阶段（2026-09-17 凌晨，Bailian gte-rerank-v2）
+
+`--rerank 200`：对 RankedList 前 200 个 doc 送 `body[:1500]` 摘要给 Bailian `gte-rerank-v2`，按 relevance_score 重排（只动 top-200 内位置；@1000 恒不变）。oracle 与 Rust 实现逐位一致（`rerank-oracle-search-lists-challenge20.json` = `eval-bge-m3-hybrid-rr200.json`）。
+
+| arm | @5 | @10 | @100 | @1000 |
+|---|---:|---:|---:|---:|
+| vector | 0.0528 | — | 0.2110 | 0.4712 |
+| vector + rr200 | 0.0461 | 0.0868 | 0.2468 | 0.4712 |
+| lexical | 0.0567 | — | 0.2169 | 0.4798 |
+| lexical + rr200 | 0.0494 | 0.0751 | 0.2382 | 0.4798 |
+| hybrid | 0.0523 | — | 0.2358 | 0.5066 |
+| **hybrid + rr200** | **0.0550** | **0.0901** | **0.2683** | **0.5066** |
+
+读法：rerank 把 100–200 区间的证据拉进 top-100（hybrid @100 +13.6% 相对，超过官方稠密 @100=0.264 的量级），但 **@5 基本不动**（0.052→0.055）——被 rerank 挤出的头名本来就是错的，进的也只是"可识别"不是"可答"。
+
 ## Agent 级 run-9（冻结，5 轮、循环里无排序检索）
 
 | arm | 正确性均分 | evidence_recall | n | 来源 |
@@ -37,7 +52,8 @@ Oracle 用 bm25s lucene k1=1.2 b=0.75 作官方 Lucene 索引的轻量替身（�
 | run-9 tree-random（冻结） | 0.050 | 0.0828 | 20 | 冻结不重跑 |
 | vgi bge-m3 向量（09-16） | 0.250 | — | 20 | `challenge20-answer-eval.py`；PASS 486/435/684/380/20；52.3s/题；410k tok |
 | vgi hybrid RRF(60)（09-17） | 0.200 | — | 20 | 同上但 `search --mode hybrid`；PASS 435/503/684/20；44.3s/题；420k tok |
+| vgi hybrid+rr200（09-17） | 0.175 | — | 20 | 同上但 `--mode hybrid --rerank 200`；PASS 435/503/684 + PARTIAL 20；59.1s/题；434k tok |
 
 Gold = `evidence_ids`. 本轮两臂无 BM25/RRF/tree/agent。
 
-**答题级对照**：hybrid 20% vs 向量 25%——n=20 噪声内（一题 5pp）。索引级 hybrid 明确更强（@1000 0.5066 vs 0.4712）但未转化为答题分；瓶颈在 5 轮预算内的综合/验证，不在检索召回。注：results.json 内 `arm` 字段为脚本写死标签 "bge-m3 vector"，hybrid 臂产物实际为 `--mode hybrid`（目录 `.eval/challenge20-answer-eval-hybrid/`）。
+**答题级对照**：三臂 25% → 20% → 17.5%（vector → hybrid → hybrid+rr200），n=20 噪声内但方向稳定——**索引级指标（@100: 0.211→0.236→0.268）与答题分解耦**：检索送进 top-100 的证据，agent 在 5 轮预算内读不到/验证不完。瓶颈已移到预算内的综合/验证，不在检索召回。注：results.json 内 `arm` 字段为脚本写死标签 "bge-m3 vector"，以产物目录区分为准（`.eval/challenge20-answer-eval{,-hybrid,-hybrid-rr200}/`）。

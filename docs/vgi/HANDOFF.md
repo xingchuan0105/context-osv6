@@ -26,7 +26,9 @@ VGI 是 **BrowseComp-Plus 十万篇上的评测工具**。循环属于宿主（C
 
 门判定：`hybrid ≥ 单路最优` 在 @100（0.236 > 0.217）与 @1000（0.507 > 0.480）成立，@5 持平。oracle 用 **bm25s lucene k1=1.2/b=0.75 替身**（官方 2.17GB Lucene+Java 被磁盘否掉；文档级复测 0.141/0.300 ≈ 冻结 0.111/0.275）。
 
-**M2 答题级对照**（同 20 题、同预算 5 轮/32 调用、同 Eval v2 裁判）：hybrid **20%** vs 向量 **25%**（噪声内；hybrid 丢 486/380 捞回 503）。索引级更强没有转化为答题分——瓶颈在 5 轮预算内的综合/验证，不在检索召回。
+**M2 答题级对照**（同 20 题、同预算 5 轮/32 调用、同 Eval v2 裁判）：vector **25%** → hybrid **20%** → hybrid+rerank200 **17.5%**（3 PASS + 1 PARTIAL；PASS：435/503/684）。索引级一路涨（@100：0.211→0.236→0.268），答题级一路降——**检索召回与答题分已解耦**，瓶颈在 5 轮预算内的综合/验证（REFUSAL_WRONG 与"读不到 top-100 深位"并存）。
+
+**rerank 阶段**（M2 后追加，非新里程碑）：`--rerank N` 对任意 mode 的 RankedList 前 N 位走 Bailian `gte-rerank-v2` 重排（`body[:1500]` 摘要、~90k 字符/请求分块、同分保原序）。索引级：hybrid+rr200 @100=**0.268**（+13.6% 相对 vs hybrid）是当前最强单指标；@5 持平。oracle（`scripts/rerank_oracle.py`）与 Rust 路径逐位一致。
 
 ## 二、检索面（现行）
 
@@ -35,6 +37,7 @@ VGI 是 **BrowseComp-Plus 十万篇上的评测工具**。循环属于宿主（C
 - **vector**：zvec（bge-m3 或 qwen-flash profile）→ `max_pool` → doc_id
 - **lexical**：tantivy 段落索引 `.vgi/tantivy-passage/`（**1,147,822** passages，W=512/重叠64 raw-token 窗；`doc_id` STRING stored、body indexed-not-stored `WithFreqs`；BM25 k1=1.2/b=0.75；默认 `passage_k=20000` → max_pool 到 doc_id）
 - **hybrid**：`rrf_merge([vector, lexical], k=60)`
+- **rerank**：`--rerank N`（默认 0 关）对任意 mode 重排前 N 位
 - `vgi read`（char 窗）、`vgi rg`（doc_id 必填）不变
 
 agent 级脚本 `scripts/challenge20-answer-eval.py`：环境变量 `ANSWER_EVAL_MODE=hybrid` 切臂（产物目录 `ANSWER_EVAL_OUT` 另指）。**坑**：results.json 里 `arm` 字段是写死的 `"bge-m3 vector"` 标签，hybrid 臂亦然——看目录/协议别看标签。
@@ -103,7 +106,7 @@ tokens --profile bge-m3|qwen-flash
 embed --profile bge-m3|qwen-flash        # 均已完成
 index --profile bge-m3|qwen-flash        # zvec 重建
 index --lexical                          # tantivy 段落索引重建
-search --query '…' [--mode vector|lexical|hybrid] [--passage-k 20000] --profile … --env avrag-rs/.env
+search --query '…' [--mode vector|lexical|hybrid] [--passage-k 20000] [--rerank 200] --profile … --env avrag-rs/.env
 read --doc-id 5412 --offset 0 --limit 80
 rg --pattern Arwa --doc-id 5412          # doc-id 必填
 eval --questions docs/vgi/fixtures/challenge20-questions.json [--mode …] --profile … --env …
