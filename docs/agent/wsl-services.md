@@ -31,6 +31,15 @@ Status: extracted from AGENTS/CLAUDE for progressive disclosure. AGENTS.md links
 3. **Test PostgreSQL containers** (`avrag-test-pg-*`): intentionally left running between E2E runs. **Do not** stop or prune unless asked.
 4. **If a service appears down, check in order**: `pg_isready -h 127.0.0.1` → `redis-cli ping` → (if milvus backend) `docker ps` / compose up. Dev stack: `bash scripts/product-dev-up.sh`.
 
+## Outbound proxy (WSL)
+
+The Windows VPN proxy is exposed to WSL at the gateway (`http://<wsl-gateway>:20000`). Shell config: `~/.bash_proxy` (sourced from `~/.bashrc`, toggled by `WSL_USE_WINDOWS_PROXY=auto|always`); Rust services read the same triple from `avrag-rs/.env`.
+
+China-reachable endpoints bypass the proxy via `NO_PROXY` (both files). Keep them in sync; note that `~/.bash_proxy` only applies to interactive shells — non-interactive callers inherit the parent environment.
+
+- `dashscope.aliyuncs.com`, `.maas.aliyuncs.com` — 百炼/Bailian (北京). **Must stay direct**: the proxy exits Singapore, so proxied calls cross regions and uploads are slow.
+- `api.deepseek.com`, `api.siliconflow.cn`, `mineru.net`, `paddleocr.aistudio-app.com`, `.kimi.com`, `.moonshot.cn`, `.moonshot.ai`, `.xiaomimimo.com`.
+
 ## Port bindings (reference — do not remap without user request)
 
 | Service | Port |
