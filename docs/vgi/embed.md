@@ -34,6 +34,8 @@ depends_on: [corpus, token-batch]
 
 批次：最多 10 条/请求（与产线 worker 一致）。不发送 `dimensions`（bge-m3 会 400）。超时、429/5xx 可重试。TPM/RPM 按 `.env` 令牌桶。
 
+超长请求不得终止跑批。API 返回 400 且正文含 `maximum context length is N tokens` / `your request has M input tokens` 时：多文本请求拆成单条重试；单条按 `keep = ⌊chars × 0.97·N/M⌋` 裁剪文本后重试，最多 4 次，仍失败才报错。裁剪后的窗以其裁剪文本入库（uid 不变）。
+
 开始全库 HTTP 前必须打印：`n_windows_pending`、`sum_window_tokens`（含重叠），等确认口径；M1 授权后可直接跑。断点续跑。
 
 内存：按篇流式。只持有当前 `body`、tokenizer 和最多 `EMBED_BATCH` 条窗文本。禁止 `SELECT body` 一次性装进 `Vec`。`window_vectors.uid` 集合可以全量放内存（17 万条字符串，MB 级）。文档级 fp16 向量全库约 0.36 GB，不是多 GB。
@@ -42,7 +44,7 @@ zvec 索引：`.vgi/zvec-docs/`，字段 `uid`（pk）、`doc_id`、`batch`、`e
 
 ## Profile `qwen-flash`（第二套索引，不覆盖 bge-m3）
 
-百炼 `qwen3.7-text-embedding-flash`：`LIMIT=120000`（API 上下文 131072，HF tokenizer 会少计约 3%，128000 会 400）、`OVERLAP=256`、`dim=256` fp16、请求体**必须**带 `dimensions=256`。凭据：`DASHSCOPE_API_KEY` + `E2E_EMBEDDING_BASE_URL`。灌库走 **Batch File**（半价），不走同步 TPM。
+百炼 `qwen3.7-text-embedding-flash`：`LIMIT=120000`（API 上下文 131072；本地 `Qwen/Qwen3-8B` 计数**不是** API 计数的上界，实测同窗可达 1.17×）、`OVERLAP=256`、`dim=256` fp16、请求体**必须**带 `dimensions=256`。凭据：`DASHSCOPE_API_KEY` + `E2E_EMBEDDING_BASE_URL`。灌库 2026-09-16 起走**同步**：Batch File 的转发层当时对非平凡请求大面积 `ForwardingTransportError`（详见 [log](log.md)）；Batch 恢复后可改回（半价）。
 
 - tokenizer：`Qwen/Qwen3-8B` tokenizer.json（与 bge 的 XLM-R 分开，token 数写入 `doc_tokens`）
 - 表：`window_vectors_qwen_flash`
@@ -66,5 +68,7 @@ bge-m3 的 `window_vectors` / `zvec-docs` 不动。
 | uid a,0 | `a#0` |
 | parse `79680#12` | `79680`, 12 |
 | parse `a` / `a#` / `#0` / `a#x` | error |
+| trim chars=300889, max=131072, got=140166 | 272926 |
+| trim chars=1, max=131072, got=140166 | 1 |
 
-**Enforced by:** `docs/vgi/anchors/test_anchors.py::test_uid`
+**Enforced by:** `docs/vgi/anchors/test_anchors.py::test_uid`, `::test_trim_keep_chars`

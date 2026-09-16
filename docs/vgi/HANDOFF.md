@@ -2,6 +2,8 @@
 
 日期：2026-09-14 深夜。给**从 zg 对齐设计稿写完后就没跟进**的 agent。先读本页，再动代码。不要从 `docs/plans/2026-09-13-vgi-rag-rust-zg-aligned-design.md` 开工——那篇已 SUPERSEDED。
 
+**2026-09-16 更新（Batch 通道故障）**：百炼 Batch 对非平凡请求大面积 `ForwardingTransportError`，72,076 条失败窗改走**同步**补齐（`vgi embed --profile qwen-flash`，进行中）；同轮发现本地 Qwen tokenizer 计数不是 API 上界（最高 1.17×），嵌入路径已加超限裁剪重试。本页「当前机器上在跑什么」一节已过期，以 [log](log.md) 2026-09-16 两条为准。
+
 ## 你接手的是什么
 
 VGI-RAG 是 **BrowseComp-Plus 十万篇上的评测工具**，不是云端工作台，也不是 Subtex 目录插件。循环属于 Codex/Claude 宿主；VGI 只给检索。代码在独立仓 **`/home/chuan/vgi-rs`**，规格在本目录 **`docs/vgi/`**。不要把 crate 加进 `avrag-rs` workspace，不要 `docker-compose`，不要 push。

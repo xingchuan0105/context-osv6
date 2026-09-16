@@ -186,6 +186,22 @@ class TokenWindows(unittest.TestCase):
         self.assertTrue(t)
 
 
+def trim_keep_chars(chars: int, max_tokens: int, got_tokens: int) -> int:
+    """docs/vgi/embed.md: keep = max(1, floor(chars * 0.97 * max_tokens / got_tokens))."""
+    return max(1, int(chars * (max_tokens * 0.97) / got_tokens))
+
+
+class EmbedContextOverflow(unittest.TestCase):
+    def test_trim_keep_chars(self):
+        # 96933#0 measured by the API: 300889 chars counted as 140166 tokens, limit 131072.
+        #   300889 * 131072 * 0.97 / 140166 = 272926.2395… -> 272926
+        self.assertEqual(trim_keep_chars(300_889, 131_072, 140_166), 272_926)
+        #   10 * 131072 * 0.97 / 140166 = 9.071… -> 9
+        self.assertEqual(trim_keep_chars(10, 131_072, 140_166), 9)
+        # never zero
+        self.assertEqual(trim_keep_chars(1, 131_072, 140_166), 1)
+
+
 class Rrf(unittest.TestCase):
     def test_rrf_four_docs(self):
         order = rrf_merge([["A", "B", "C"], ["B", "A", "D"]], k=60)

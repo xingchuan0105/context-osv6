@@ -2,7 +2,7 @@
 
 日期：2026-09-15。上一轮配置不重跑。Agent 正确性 ≠ 索引 recall@k。
 
-**qwen-flash 索引不完整，不能当公平对照。** Batch 提交 100,011 窗，成功写入 **29,601**（约 29%）；7 个 shard 全部 `completed` 但 error jsonl 合计约 7.2 万行，多为 `InternalError.Algo.ForwardingTransportError`（百炼 vLLM 转发失败）。bge-m3 是全库 176,818 窗。要公平比 qwen，需把失败窗重提 Batch 后再 eval。
+**qwen-flash 索引不完整，不能当公平对照。** Batch 提交 100,011 窗，成功写入 **29,601**（约 29%）；7 个 shard 全部 `completed` 但 error jsonl 合计约 7.2 万行，多为 `InternalError.Algo.ForwardingTransportError`（百炼 vLLM 转发失败）。bge-m3 是全库 176,818 窗。2026-09-16：Batch 复测仍不可用（探针见 [log](log.md)），72,076 条失败窗改走**同步**补齐（`vgi embed --profile qwen-flash`，进行中，约 10-13 h）；下表 qwen 行待补齐后重算。
 
 ## 索引级 evidence recall（Challenge-20 `evidence_ids`）
 
