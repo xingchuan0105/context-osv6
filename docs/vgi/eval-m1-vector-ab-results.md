@@ -2,7 +2,7 @@
 
 日期：2026-09-15。上一轮配置不重跑。Agent 正确性 ≠ 索引 recall@k。
 
-**qwen-flash 索引不完整，不能当公平对照。** Batch 提交 100,011 窗，成功写入 **29,601**（约 29%）；7 个 shard 全部 `completed` 但 error jsonl 合计约 7.2 万行，多为 `InternalError.Algo.ForwardingTransportError`（百炼 vLLM 转发失败）。bge-m3 是全库 176,818 窗。2026-09-16：Batch 复测仍不可用（探针见 [log](log.md)），72,076 条失败窗改走**同步**补齐（`vgi embed --profile qwen-flash`，进行中，约 10-13 h）；下表 qwen 行待补齐后重算。
+**qwen-flash 索引已补全（2026-09-16 22:34）。** Batch 通道故障导致首轮只写入 29,601/101,677 窗（`InternalError.Algo.ForwardingTransportError`，探针与工单见 [log](log.md)）；09-16 13:17 起改走**同步**补跑 72,076 窗 / 576,645,028 token，22:34 完成 → `window_vectors_qwen_flash` = **101,677 行**、`zvec-docs-qwen-flash` 已重建；途中 16 条超长窗由裁剪守卫自动处理。下表两臂均为完整索引。
 
 ## 索引级 evidence recall（Challenge-20 `evidence_ids`）
 
@@ -10,7 +10,7 @@
 |---|---:|---:|---:|---:|---|---|
 | 文档级 BM25（冻结） | — | 0.1110 | 0.2750 | 20 | 冻结不重跑 | bm25s lucene k1=1.2 b=0.75; whole document; whole question as bag; no agent. @10 headline 2.4% (per-question mean 2.7%). @100 11.1% (9/20 had a hit); @1000 27.5% (14/20). |
 | bge-m3 向量 | 0.0528 | 0.2110 | 0.4712 | 20 | 本轮 | `bge-m3-7372-overlap256-max` |
-| qwen-flash 向量 | 0.0211 | 0.0653 | 0.1233 | 20 | 本轮 | `qwen-flash-128k-overlap256-dim256-max` |
+| qwen-flash 向量 | 0.0396 | 0.2167 | 0.4498 | 20 | 09-16 补全索引后重跑 | `qwen-flash-128k-overlap256-dim256-max` |
 
 官方稠密 Qwen3-0.6B 全库 qrels：@100=0.264 @1000=0.597（**不是这 20 题，不是及格线**）。
 

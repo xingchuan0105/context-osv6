@@ -14,15 +14,11 @@ VGI 是 **BrowseComp-Plus 十万篇上的评测工具**。循环属于宿主（C
 |---|---|
 | 09-14 23:44 → 09-15 03:55 | 用 **Batch File（半价）** 灌库：7 个 shard 全部 `completed`，但 **失败 72,076 / 100,011（72%）**，错误统一 `<5000405> InternalError.Algo.ForwardingTransportError: vLLM Error: `（详情为空） |
 | 09-16 全天 | 排查 Batch 故障（见下「已知坑」）；报工单；18:18 原样复测**仍 0/391、0/20**，未修复 |
-| 09-16 13:17 起 | 改**同步**补跑：`vgi embed --profile qwen-flash`，pending 72,076 窗 / **576,645,028 token**；速率稳定 **≈135 窗/分钟**；预计 **22:15 前后**完成并自动重建 `zvec-docs-qwen-flash` |
+| 09-16 13:17 → **22:34** | 改**同步**补跑：`vgi embed --profile qwen-flash`，pending 72,076 窗 / **576,645,028 token**；速率 ≈135 窗/分钟（尾部降到 ~90）；**已完成**——表内 101,677 行、`zvec-docs-qwen-flash` 已重建（101,677 窗） |
 
-写本文时（21:05）表内 **92,000 / 101,677** 行；429 退避 632 次（1M TPM 边缘，每次只拖慢单路 2-4 s）；**守卫裁剪触发 12/14**（14 条 120k 本地窗被 API 数成 131,221–140,166 token；自动裁剪后实测 126,959 / 126,316 < 131,072，不再中断跑批）。
+补跑代价与观感：约 9.3 小时；429 退避 695 次（1M TPM 边缘，每次只拖慢单路 2-4 s）；**守卫裁剪触发 16 次**（Batch 批只识别出 14 条超长窗；同步扫到 16 条，都被自动裁剪，未中断跑批）。
 
-**跑完后的收尾清单**（按顺序）：
-
-1. `sqlite3 .vgi/corpus.sqlite 'select count(*) from window_vectors_qwen_flash;'` 应为 **101,677**；日志 `/home/chuan/vgi-rs/.vgi/jobs/sync-embed-qwen-flash.log` 末尾应出现 `zvec-docs: inserted … `（embed 结束会自动重建索引）。
-2. `vgi eval --questions docs/vgi/fixtures/challenge20-questions.json --profile qwen-flash --env avrag-rs/.env` → 更新 [eval-m1-vector-ab-results.md](eval-m1-vector-ab-results.md) 的 qwen 行（此前只有 29% 窗时的不可比数字）。
-3. 若给 answer-level 也跑 qwen 臂：同一脚本、同一预算、同一裁判（见下节），加进同一张表。
+**完成后已核对**：`window_vectors_qwen_flash` = **101,677**（= 100,011 + 1,666）；`vgi eval --profile qwen-flash` 已跑 → **@5=0.0396 / @100=0.2167 / @1000=0.4498**（与 bge-m3 的 0.0528 / 0.2110 / 0.4712 基本同档），已写进 [eval-m1-vector-ab-results.md](eval-m1-vector-ab-results.md)。
 
 **不要重跑**：bge-m3 全库向量（176,818 窗已完成）；Batch 通道（当前不可用，重试只会再花半天）。
 
@@ -118,8 +114,8 @@ Windows 原型与 run-9 回执在 `C:/Users/xingc/Documents/Codex/repository-tre
 |---|---|
 | `corpus.sqlite` `documents` | 100,195 行 |
 | `window_vectors` + `zvec-docs/` | bge-m3 完成（176,818 窗） |
-| `window_vectors_qwen_flash` | 92,000 / 101,677（同步补跑中） |
-| `zvec-docs-qwen-flash/` | 仍是 09-15 旧版；跑完自动重建 |
+| `window_vectors_qwen_flash` | **101,677 / 101,677（09-16 22:34 完成）** |
+| `zvec-docs-qwen-flash/` | 09-16 22:30 重建，101,677 窗 |
 | `batch-qwen-flash/` | 旧 Batch 输入/结果，保留作证据；**不再使用** |
 | `batch-qwen-flash-probe/` | 391 条复现批次（含 error 文件） |
 | `jobs/sync-embed-qwen-flash.log` | 本次同步补跑日志 |
@@ -163,6 +159,6 @@ eval --questions docs/vgi/fixtures/challenge20-questions.json --profile bge-m3|q
 | 里程碑 | 状态 |
 |---|---|
 | M0 | **完成**（ingest + token + zvec spike 四门绿） |
-| M1 | 向量路代码完成；bge 索引完成；qwen 索引今晚补齐；索引级 recall 已报；**答题级基线 25%（本次）** |
+| M1 | 完成：向量路代码 / bge 索引（176,818 窗）/ qwen 索引（101,677 窗，09-16 补齐）/ 索引级 recall 两臂同档 / **答题级基线 25%（bge-m3 臂）** |
 | M2 | **未开**（无 BM25 引擎、无 oracle、无 hybrid 工具面） |
 | M3 / M4 | 未开 |
