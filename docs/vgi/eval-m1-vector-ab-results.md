@@ -53,7 +53,8 @@ Oracle 用 bm25s lucene k1=1.2 b=0.75 作官方 Lucene 索引的轻量替身（�
 | vgi bge-m3 向量（09-16） | 0.250 | — | 20 | `challenge20-answer-eval.py`；PASS 486/435/684/380/20；52.3s/题；410k tok |
 | vgi hybrid RRF(60)（09-17） | 0.200 | — | 20 | 同上但 `search --mode hybrid`；PASS 435/503/684/20；44.3s/题；420k tok |
 | vgi hybrid+rr200（09-17） | 0.175 | — | 20 | 同上但 `--mode hybrid --rerank 200`；PASS 435/503/684 + PARTIAL 20；59.1s/题；434k tok |
+| vgi hybrid+rr200 **放宽预算**（09-17） | **0.350** | — | 20 | 20 轮/64 调用/1800s；PASS 435/411/503/89/684/380/20；REFUSAL_WRONG 清零；98.9s/题；3.87M tok |
 
 Gold = `evidence_ids`. 本轮两臂无 BM25/RRF/tree/agent。
 
-**答题级对照**：三臂 25% → 20% → 17.5%（vector → hybrid → hybrid+rr200），n=20 噪声内但方向稳定——**索引级指标（@100: 0.211→0.236→0.268）与答题分解耦**：检索送进 top-100 的证据，agent 在 5 轮预算内读不到/验证不完。瓶颈已移到预算内的综合/验证，不在检索召回。注：results.json 内 `arm` 字段为脚本写死标签 "bge-m3 vector"，以产物目录区分为准（`.eval/challenge20-answer-eval{,-hybrid,-hybrid-rr200}/`）。
+**答题级对照**：三臂 25% → 20% → 17.5%（vector → hybrid → hybrid+rr200 @5轮），但**放宽预算后同臂 hybrid+rr200 达 35%**（7/20，REFUSAL_WRONG 清零，token×9）——瓶颈确认为 agent 预算而非检索；预算放开后检索增益兑现（411/89 为三臂首答对）。注：results.json 内 `arm` 字段为脚本写死标签 "bge-m3 vector"，以产物目录区分为准（`.eval/challenge20-answer-eval{,-hybrid,-hybrid-rr200,-rr200-r20}/`）。预算环境变量：`ANSWER_EVAL_{MAX_ROUNDS,MAX_TOOLS,DEADLINE_S}`。
