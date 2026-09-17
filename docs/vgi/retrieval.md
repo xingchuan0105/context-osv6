@@ -32,6 +32,13 @@ M1 实现向量路 + read + rg；M2 接词法路（段落级 BM25）+ hybrid。�
     rg(pattern, doc_ids: [doc_id], byte_budget) -> [Hit]
     Hit = {doc_id, char_offset, line, text}
 
+    SearchHit = {doc_id, offset, snippet}   # offset/snippet 见「命中定位」（M4）
+    search_hits(query, mode, rerank) -> [SearchHit]
+    # search 的定位版：同序同集，每 doc 附带其最强命中单元的 char 位置与 ~600 字符片段
+
+    related(doc_id, k=10) -> [{doc_id, score, url, snippet}]   # kNN 关联边（M4）
+    # snippet = body 前 ~160 字符；score 越大越相似
+
 评测与融合的身份永远是 `doc_id`。向量窗 `doc_id#batch` 先按文档聚合（默认 **max**），再进入排序或 RRF。
 
 ## Semantics
@@ -53,6 +60,10 @@ M1 实现向量路 + read + rg；M2 接词法路（段落级 BM25）+ hybrid。�
 **rg.** `doc_ids` 必填、非空。对列出的 `body` 做内存正则（等价于 scoped ripgrep）。`char_offset` 是匹配起点的 Unicode 标量下标；`line` 是该行（不含 `\n`）。累计 `line` 字节达到 `byte_budget` 则停。全库扫没有入口。
 
 **紧凑命中.** `doc_id` + 短片段 + `char_offset` + `corpus_fp`，不是整篇 body。
+
+**命中定位（M4）.** `search` 的每个返回 doc 附带 `offset`/`snippet`：offset 是该 doc 最强命中单元在 `body` 里的 Unicode 标量起点，snippet = `read_char_window(body, offset, 600)`。单元粒度各路不同——向量路：命中窗 `doc_id#batch` 的 `batch` 映射到第 `batch*7116` 个 bge-m3 token 的 char 起点（运行时对 body 重新 encode 取 offsets，不预存）；词法路：passage 的 char 起点在建索引时存入 `off` 字段（u64 STORED）。hybrid：每个 doc 的命中单元取**它在两路中排名更靠前那一路**的最佳单元；并列取向量路。排序/集合与 `search` 完全一致——`search` 的 doc_id 序列 = `search_hits` 的 doc_id 序列。
+
+**文档质心与 related（M4）.** `doc_centroid(d)` = 该 doc 全部 bge-m3 窗向量 fp16→f32 的均值，L2 归一化。存 zvec 集合 `zvec-centroids`（pk=doc_id，cosine），`vgi index --centroids` 从 `window_vectors` 派生重建，派生可弃。`related(doc_id, k)`：取该 doc 质心查 `zvec-centroids` top-(k+1)，**剔除自身**，score=−distance；返回 {doc_id, score, url, snippet(前 160 字符)}。语义是**平铺相似度关联边**（1 跳扩展），不做任何路由/层级——oracle 依据：`graph_oracle.py` 实测 top-200 命中的 top-30 邻居能覆盖 44/207 证据文档。
 
 ## Worked example — max_pool
 
@@ -88,6 +99,16 @@ BM25 打分锚（Lucene 公式，k1=1.2、b=0.75，avgdl=13/3≈4.3333）：三�
 
 **顺序 A, B**（同 tf 下短文档赢）。passage→doc 聚合复用 max_pool 规则：A#p0 12.0、A#p1 9.5、B#p0 11.0 → A=12.0、B=11.0 → `A,B`。
 
+## Worked example — 命中定位与 related（M4）
+
+passage char 偏移：body = `"aa "×600`（每个 raw token 3 字符，token i 起点 = 3i）：passage_spans(600)=`[(0,512),(448,600)]` → 两 passage 的 `off` = 0 与 **1344**（448×3）。
+
+向量窗偏移：`batch` 映射 token 下标 `batch×7116`；`offset` = 该 token 重 encode 后的 char 起点。batch=2 → token 14232。
+
+hybrid 命中来源：doc D 向量路 rank=3、词法路 rank=1 → hit 取词法路单元；若两路 rank 相等取向量路。
+
+related：A 的窗向量 `[1,0,0,0]`、`[0,1,0,0]` → centroid = normalize([0.5,0.5,0,0]) = `[0.7071,0.7071,0,0]`；查询结果必剔除 A 自身。
+
 ## Anchor
 
 **Input:** max_pool 上例。 **Expected:** `A,B,C`。  
@@ -96,4 +117,7 @@ BM25 打分锚（Lucene 公式，k1=1.2、b=0.75，avgdl=13/3≈4.3333）：三�
 **Input:** rg 空 `doc_ids`。 **Expected:** error。  
 **Input:** passage 窗 n=600 / n=513。 **Expected:** `[(0,512),(448,600)]` / `[(0,512),(448,513)]`。  
 **Input:** BM25 三文档查询 `learning`。 **Expected:** 顺序 `A,B`，score(A)≈0.48527451、score(B)≈0.44217447。  
-**Enforced by:** `test_anchors.py::test_max_pool_three_docs`, `test_rrf_four_docs`, `test_read_char_window`, `test_rg_requires_doc_ids`, `test_passage_windows`, `test_bm25_lucene_three_docs`
+**Input:** `"aa "×600` 的 passage char_off。 **Expected:** `[0, 1344]`。  
+**Input:** batch=2 的 token 下标。 **Expected:** `14232`。  
+**Input:** A 窗 `[1,0,0,0]`+`[0,1,0,0]` 的 centroid。 **Expected:** `[0.7071,0.7071,0,0]`；related(A) 不含 A。  
+**Enforced by:** `test_anchors.py::test_max_pool_three_docs`, `test_rrf_four_docs`, `test_read_char_window`, `test_rg_requires_doc_ids`, `test_passage_windows`, `test_bm25_lucene_three_docs`, `test_passage_char_offsets`, `test_window_token_offset`, `test_centroid_related`

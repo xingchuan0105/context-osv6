@@ -14,7 +14,7 @@ VGI 是 **BrowseComp-Plus 十万篇上的评测工具**。循环属于宿主（C
 | M1 | **完成**（bge-m3 176,818 窗 + qwen-flash 101,677 窗两套向量索引；索引级 recall 已报；答题级基线 25%） |
 | **M2** | **完成**（tantivy 段落级 BM25 + `rrf_merge` hybrid；索引级门**已过**；答题级对照已跑） |
 | M3 | **门未过，不做**（tree oracle：2 级球面 kmeans 路由逐档劣于 flat，见 results） |
-| M4 | 未开（MCP 工具面，见 [deferred](deferred.md)，默认不做） |
+| **M4** | **进行中**（命中定位 search_hits + 文档质心图 related；依据 [research-non-llm-structures.md](research-non-llm-structures.md)） |
 
 **M2 索引级结果**（Challenge-20 `evidence_ids`，全文见 [eval-m1-vector-ab-results.md](eval-m1-vector-ab-results.md)）：
 
@@ -39,6 +39,8 @@ VGI 是 **BrowseComp-Plus 十万篇上的评测工具**。循环属于宿主（C
 - **lexical**：tantivy 段落索引 `.vgi/tantivy-passage/`（**1,147,822** passages，W=512/重叠64 raw-token 窗；`doc_id` STRING stored、body indexed-not-stored `WithFreqs`；BM25 k1=1.2/b=0.75；默认 `passage_k=20000` → max_pool 到 doc_id）
 - **hybrid**：`rrf_merge([vector, lexical], k=60)`
 - **rerank**：`--rerank N`（默认 0 关）对任意 mode 重排前 N 位
+- **search 命中定位（M4）**：`vgi search` 输出 `[{doc_id, offset, snippet}]`——offset/snippet 是该 doc 最强命中单元（向量窗 batch→`window_offsets` 表查 char 起点；词法 passage 的 `off` 字段在建索引时落盘）的 char 位置与 600 字符片段；hybrid 取排名更靠前一路的单元
+- **related（M4）**：`vgi related --doc-id X --k 10` → 文档质心（窗向量均值 L2 归一化，`zvec-centroids` 集合）ANN top-k 邻居，含 url+snippet 头；**平铺关联图，非树**
 - `vgi read`（char 窗）、`vgi rg`（doc_id 必填）不变
 
 agent 级脚本 `scripts/challenge20-answer-eval.py`：环境变量 `ANSWER_EVAL_MODE=hybrid` 切臂（产物目录 `ANSWER_EVAL_OUT` 另指）。**坑**：results.json 里 `arm` 字段是写死的 `"bge-m3 vector"` 标签，hybrid 臂亦然——看目录/协议别看标签。
@@ -53,6 +55,9 @@ agent 级脚本 `scripts/challenge20-answer-eval.py`：环境变量 `ANSWER_EVAL
 | `.vgi/jobs/bm25s-passage-challenge20.json` | 段落级 oracle + Python 侧 hybrid 预测 |
 | `.vgi/jobs/hybrid-oracle-challenge20.json` | 含每题 `vector_list`（可复用免跑 embed） |
 | `.vgi/jobs/eval-bge-m3{,-lexical,-hybrid}.json` `eval-qwen-flash.json` | 索引级报告 |
+| `.vgi/zvec-centroids/` | M4 文档质心索引（100,195 × 1024d，`vgi index --centroids` 从 window_vectors 派生） |
+| `window_offsets` 表（corpus.sqlite） | M4 向量窗 char 偏移（`vgi index --offsets` 一遍重分词填充） |
+| `scripts/{graph_oracle,doclevel_oracle,failure_attribution}.py` | M4 oracle：图边覆盖 44/207、文档质心 @100=0.211 ≈ 窗口级、逐题导航归因 |
 | `.eval/challenge20-answer-eval{,-hybrid}/` | 答题级两臂 trace/裁判理由 |
 
 Python 环境：`.venv-oracle/`（bm25s 0.3.11）。**磁盘紧张**（~5GB 余量）：bm25s-passage-idx 与 tantivy-passage 可再生，空间不够先删 bm25s 存档。
@@ -107,6 +112,9 @@ tokens --profile bge-m3|qwen-flash
 embed --profile bge-m3|qwen-flash        # 均已完成
 index --profile bge-m3|qwen-flash        # zvec 重建
 index --lexical                          # tantivy 段落索引重建
+index --centroids                        # 文档质心 zvec 索引（M4）
+index --offsets                          # window_offsets char 偏移表（M4）
+related --doc-id X --k 10                # 质心近邻（M4）
 search --query '…' [--mode vector|lexical|hybrid] [--passage-k 20000] [--rerank 200] --profile … --env avrag-rs/.env
 read --doc-id 5412 --offset 0 --limit 80
 rg --pattern Arwa --doc-id 5412          # doc-id 必填

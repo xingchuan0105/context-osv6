@@ -6,6 +6,8 @@ Values were calculated independently of any vgi-rs implementation.
 from __future__ import annotations
 
 import hashlib
+import math
+import re
 import unittest
 from collections import defaultdict
 
@@ -311,6 +313,22 @@ class Bm25Lucene(unittest.TestCase):
         self.assertAlmostEqual(sb, 0.44217447, places=6)
         self.assertEqual(sc, 0.0)
         self.assertGreater(sa, sb)
+
+    def test_passage_char_offsets(self):
+        body = "aa " * 600
+        spans = [m.start() for m in re.finditer(r"\w{2,}", body)]
+        self.assertEqual([spans[0], spans[448]], [0, 1344])
+
+    def test_window_token_offset(self):
+        self.assertEqual(2 * 7116, 14232)
+
+    def test_centroid_related(self):
+        w = [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0]]
+        c = [sum(v[i] for v in w) / len(w) for i in range(4)]
+        n = math.sqrt(sum(x * x for x in c))
+        c = [x / n for x in c]
+        self.assertAlmostEqual(c[0], 0.7071, places=4)
+        self.assertAlmostEqual(c[1], 0.7071, places=4)
 
 
 if __name__ == "__main__":
