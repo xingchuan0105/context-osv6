@@ -132,6 +132,11 @@ def inline_format(text: str, wechat: bool) -> str:
 
 def parse_blocks(md_text: str) -> list[dict]:
     lines = md_text.split("\n")
+    if lines and lines[0].strip() == "---":
+        for j in range(1, len(lines)):
+            if lines[j].strip() == "---":
+                lines = lines[j + 1:]
+                break
     if lines and lines[0].strip().startswith("# "):
         lines = lines[1:]
 
