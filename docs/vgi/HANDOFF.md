@@ -43,7 +43,7 @@ VGI 是 **BrowseComp-Plus 十万篇上的评测工具**。循环属于宿主（C
 - **related（M4）**：`vgi related --doc-id X --k 10` → 文档质心（窗向量均值 L2 归一化，`zvec-centroids` 集合）ANN top-k 邻居，含 url+snippet 头；**平铺关联图，非树**
 - `vgi read`（char 窗）、`vgi rg`（doc_id 必填）不变
 
-agent 级脚本 `scripts/challenge20-answer-eval.py`：环境变量切臂 `ANSWER_EVAL_{MODE,RERANK,THINKING,MAX_ROUNDS,MAX_TOOLS,DEADLINE_S,OUT}`。arm 标签已动态化。思维链落盘 `reasoning-{qid}.txt`（需在进程启动前改代码——Python 不热加载）。
+agent 级脚本 `scripts/challenge20-answer-eval.py`：环境变量切臂 `ANSWER_EVAL_{MODE,RERANK,THINKING,MAX_ROUNDS,MAX_TOOLS,DEADLINE_S,CLOSEOUT_MARGIN_S,OUT}`。第 5 个工具 `vgi_ledger`：查证台账（约束清单 open/verified/refuted + evidence 指针 + hypothesis），不占工具预算、每轮回显到上下文尾部；剩余 < CLOSEOUT_MARGIN_S（默认 120，上限 DEADLINE_S/3）提前触发 closeout（摘工具、关 thinking），deadline 空答案回退到台账 hypothesis——为 thinking 三病理所加。arm 标签已动态化。思维链落盘 `reasoning-{qid}.txt`（需在进程启动前改代码——Python 不热加载）。
 
 **M4 部分结果（4/20 题后暂停）**：thinking=True 的 hybrid+rr200 臂 — bcp:22 **PASS**（此前两臂均 INCORRECT，3min/10调用）、bcp:342 首轮 INCORRECT（llm_error 超时，20次search零read）但重采思维链时 PASS（19min）、bcp:618 INCORRECT（deadline 空答案）、bcp:70 INCORRECT（但 ev_read=5，命中定位让 agent 真读到了证据）。thinking 病理：长链挤占 read、deadline 时空答案、`vgi_related` 0 次使用。思维链样本：`.eval/chains-samples/reasoning-{22,342}.txt`。
 
