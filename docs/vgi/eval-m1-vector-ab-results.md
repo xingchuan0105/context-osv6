@@ -71,3 +71,25 @@ Oracle 用 bm25s lucene k1=1.2 b=0.75 作官方 Lucene 索引的轻量替身（�
 Gold = `evidence_ids`. 本轮两臂无 BM25/RRF/tree/agent。
 
 **答题级对照**：三臂 25% → 20% → 17.5%（vector → hybrid → hybrid+rr200 @5轮），但**放宽预算后同臂 hybrid+rr200 达 35%**（7/20，REFUSAL_WRONG 清零，token×9）——瓶颈确认为 agent 预算而非检索；预算放开后检索增益兑现（411/89 为三臂首答对）。**vector@20轮对照同为 35%**：两臂放宽预算后收敛同分——预算 +10pp 是唯一大杠杆，检索臂间差异在答题级不转化；但两臂通过题集互补（vector 独中 486/422，hybrid+rr 独中 89/20，并集 9/20=45%），臂间 ensemble 是答题级剩余空间。注：results.json 内 `arm` 字段为脚本写死标签 "bge-m3 vector"，以产物目录区分为准（`.eval/challenge20-answer-eval{,-hybrid,-hybrid-rr200,-rr200-r20,-vector-r20}/`）。预算环境变量：`ANSWER_EVAL_{MAX_ROUNDS,MAX_TOOLS,DEADLINE_S}`。
+
+## M4：命中定位 + 关联图 + thinking（进行中）
+
+**索引面新增**（spec：[retrieval.md](retrieval.md)，实现：vgi-rs `f2d4228`）：
+
+- `search` 输出 `[{doc_id, offset, snippet}]`——命中位置直达 `read`；词法 passage 存 char `off` 字段，向量窗经 `window_offsets` 表（176,818 行，`vgi index --offsets` 全库重分词一遍填充）
+- `vgi related --doc-id X --k N`：文档质心（`zvec-centroids`，100,195 docs，`vgi index --centroids` ~40s）ANN 近邻；**平铺关联图**
+- 质心 oracle：`scripts/doclevel_oracle.py` 实测文档级向量 @100=0.211 与窗口级**打平**（@5 0.037 vs 0.053，@1000 0.447 vs 0.471）
+- 关联边 oracle：`scripts/graph_oracle.py` 实测 top-200 命中 → top-30 邻居覆盖 44/207 证据（1164: 1→8、422: 2→8）；散点题无效
+- 逐题导航归因：`scripts/failure_attribution.py` 分 NEVER_RETRIEVED / RETRIEVED_NOT_READ / READ_NOT_SOLVED 三桶
+- 词法池化重构 sanity：@5/@100/@1000 = 0.0567/0.2169/0.4798 与重构前逐位一致
+
+**thinking 答题臂部分结果**（hybrid+rr200、r20 预算、新工具面，4/20 题后暂停，`challenge20-answer-eval-hits-thinking/`）：
+
+| qid | label | 诊断 |
+|---|---|---|
+| bcp:22 | **PASS**（3min/10调） | 正例：17K字符参数化假设穷举（~15个候选运动交叉排除）→ 精准验证 |
+| bcp:342 | INCORRECT→重采 **PASS**（19min/22调） | 首轮 20 search/0 read/TimeoutError；重采链里 read+rg 交叉验证后答对——thinking 方差大 |
+| bcp:618 | INCORRECT（33min/24调） | deadline 空答案；推理链涨到 51K 字符，22 次 search 只 2 次 read |
+| bcp:70 | INCORRECT（22min/32调） | **ev_read=5**（命中定位生效，证据真被读到了），综合错实体 |
+
+**thinking 病理**（正反例抽取自 `.eval/chains-samples/reasoning-*.txt`）：正例=先推理穷举假设空间再碰工具、命中即读、rg 字面验证约束；反例=纯 search 改写循环不 read、deadline 白卷、`related` 0 调用。已把正反例转写成认识论陈述对齐 zvec-rg 描述性风格重写 system prompt（预算移出 prompt，由 closeout 信号负责）；冒烟 bcp:435 PASS 78s/5调。

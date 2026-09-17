@@ -14,7 +14,7 @@ VGI 是 **BrowseComp-Plus 十万篇上的评测工具**。循环属于宿主（C
 | M1 | **完成**（bge-m3 176,818 窗 + qwen-flash 101,677 窗两套向量索引；索引级 recall 已报；答题级基线 25%） |
 | **M2** | **完成**（tantivy 段落级 BM25 + `rrf_merge` hybrid；索引级门**已过**；答题级对照已跑） |
 | M3 | **门未过，不做**（tree oracle：2 级球面 kmeans 路由逐档劣于 flat，见 results） |
-| **M4** | **进行中**（命中定位 search_hits + 文档质心图 related；依据 [research-non-llm-structures.md](research-non-llm-structures.md)） |
+| **M4** | **实现完成，答题臂在验**（命中定位 search_hits + 文档质心图 related + thinking + zvec 式 prompt；依据 [research-non-llm-structures.md](research-non-llm-structures.md)） |
 
 **M2 索引级结果**（Challenge-20 `evidence_ids`，全文见 [eval-m1-vector-ab-results.md](eval-m1-vector-ab-results.md)）：
 
@@ -43,7 +43,11 @@ VGI 是 **BrowseComp-Plus 十万篇上的评测工具**。循环属于宿主（C
 - **related（M4）**：`vgi related --doc-id X --k 10` → 文档质心（窗向量均值 L2 归一化，`zvec-centroids` 集合）ANN top-k 邻居，含 url+snippet 头；**平铺关联图，非树**
 - `vgi read`（char 窗）、`vgi rg`（doc_id 必填）不变
 
-agent 级脚本 `scripts/challenge20-answer-eval.py`：环境变量 `ANSWER_EVAL_MODE=hybrid` 切臂（产物目录 `ANSWER_EVAL_OUT` 另指）。**坑**：results.json 里 `arm` 字段是写死的 `"bge-m3 vector"` 标签，hybrid 臂亦然——看目录/协议别看标签。
+agent 级脚本 `scripts/challenge20-answer-eval.py`：环境变量切臂 `ANSWER_EVAL_{MODE,RERANK,THINKING,MAX_ROUNDS,MAX_TOOLS,DEADLINE_S,OUT}`。arm 标签已动态化。思维链落盘 `reasoning-{qid}.txt`（需在进程启动前改代码——Python 不热加载）。
+
+**M4 部分结果（4/20 题后暂停）**：thinking=True 的 hybrid+rr200 臂 — bcp:22 **PASS**（此前两臂均 INCORRECT，3min/10调用）、bcp:342 首轮 INCORRECT（llm_error 超时，20次search零read）但重采思维链时 PASS（19min）、bcp:618 INCORRECT（deadline 空答案）、bcp:70 INCORRECT（但 ev_read=5，命中定位让 agent 真读到了证据）。thinking 病理：长链挤占 read、deadline 时空答案、`vgi_related` 0 次使用。思维链样本：`.eval/chains-samples/reasoning-{22,342}.txt`。
+
+**Prompt 已对齐 zvec-rg 风格**：描述性语义（候选≠完备、相似≠支持、零命中≠不存在），无指令式规则，预算不嵌 skill（closeout 信号负责）。冒烟 bcp:435 PASS 78s/5调用。
 
 ## 三、oracle 与预测工具（.vgi 数据）
 
@@ -133,7 +137,8 @@ eval --questions docs/vgi/fixtures/challenge20-questions.json [--mode …] --pro
 - HuggingFace 在 WSL 常不通，tokenizer 用 curl。
 - CLI 是 `--uri` / `--fixture`，不是 overnight 旧稿里的 `--corpus-uri`。
 - 检索式以 `-` 开头会被 clap 当 flag——CLI/脚本一律 `--query=<文本>` 形式。
-- `challenge20-answer-eval.py` 的 `arm` 标签是写死字符串，与 `ANSWER_EVAL_MODE` 无关——别拿它当证据。
+- `challenge20-answer-eval.py` 的 `arm` 标签已改动态拼接（mode/rerank/thinking）；旧产物里的写死标签仍不可信。
+- **Python 不热加载**：跑着改 eval 脚本不会影响在跑进程——reasoning 落盘代码若在启动后才写入文件，该次运行不会产出 `reasoning-*.txt`（已踩）。
 
 ## 里程碑对照（避免按旧 PRD 铺 12 crate）
 
