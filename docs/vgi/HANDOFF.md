@@ -13,7 +13,8 @@ VGI 是 **BrowseComp-Plus 十万篇上的评测工具**。循环属于宿主（C
 | M0 | **完成**（ingest + token + zvec spike 四门绿） |
 | M1 | **完成**（bge-m3 176,818 窗 + qwen-flash 101,677 窗两套向量索引；索引级 recall 已报；答题级基线 25%） |
 | **M2** | **完成**（tantivy 段落级 BM25 + `rrf_merge` hybrid；索引级门**已过**；答题级对照已跑） |
-| M3 / M4 | 未开（语义树 / MCP 工具面，见 [deferred](deferred.md)，默认不做） |
+| M3 | **门未过，不做**（tree oracle：2 级球面 kmeans 路由逐档劣于 flat，见 results） |
+| M4 | 未开（MCP 工具面，见 [deferred](deferred.md)，默认不做） |
 
 **M2 索引级结果**（Challenge-20 `evidence_ids`，全文见 [eval-m1-vector-ab-results.md](eval-m1-vector-ab-results.md)）：
 
