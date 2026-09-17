@@ -1,0 +1,271 @@
+{
+  "arm": "bge-m3 vector (vgi search/read/rg)",
+  "model": "qwen3.8-flash",
+  "temperature": 0,
+  "thinking": false,
+  "budget": {
+    "max_rounds": 20,
+    "max_tool_calls": 64,
+    "deadline_s": 1800
+  },
+  "n": 20,
+  "answer_correctness_mean": 0.35,
+  "labels": {
+    "INCORRECT": 11,
+    "PASS": 7,
+    "REFUSAL_WRONG": 2
+  },
+  "pass_rate": 0.35,
+  "mean_elapsed_s": 76.16355,
+  "median_elapsed_s": 81.124,
+  "total_elapsed_s": 1776.1,
+  "mean_tool_calls": 32.1,
+  "tokens": {
+    "prompt": 4134792,
+    "completion": 52429,
+    "total": 4187221
+  },
+  "judge_tokens": null,
+  "per_question": [
+    {
+      "qid": "bcp:618",
+      "label": "INCORRECT",
+      "elapsed_ms": 103535,
+      "tool_calls": 32,
+      "tokens": {
+        "prompt": 192876,
+        "completion": 7236,
+        "total": 200112
+      },
+      "exit_reason": "closeout"
+    },
+    {
+      "qid": "bcp:22",
+      "label": "INCORRECT",
+      "elapsed_ms": 95727,
+      "tool_calls": 38,
+      "tokens": {
+        "prompt": 282167,
+        "completion": 4077,
+        "total": 286244
+      },
+      "exit_reason": "closeout"
+    },
+    {
+      "qid": "bcp:342",
+      "label": "INCORRECT",
+      "elapsed_ms": 99287,
+      "tool_calls": 36,
+      "tokens": {
+        "prompt": 258653,
+        "completion": 4885,
+        "total": 263538
+      },
+      "exit_reason": "closeout"
+    },
+    {
+      "qid": "bcp:70",
+      "label": "INCORRECT",
+      "elapsed_ms": 82021,
+      "tool_calls": 40,
+      "tokens": {
+        "prompt": 166259,
+        "completion": 2895,
+        "total": 169154
+      },
+      "exit_reason": "closeout"
+    },
+    {
+      "qid": "bcp:7",
+      "label": "INCORRECT",
+      "elapsed_ms": 80478,
+      "tool_calls": 39,
+      "tokens": {
+        "prompt": 283490,
+        "completion": 3319,
+        "total": 286809
+      },
+      "exit_reason": "closeout"
+    },
+    {
+      "qid": "bcp:486",
+      "label": "PASS",
+      "elapsed_ms": 69581,
+      "tool_calls": 34,
+      "tokens": {
+        "prompt": 230014,
+        "completion": 2252,
+        "total": 232266
+      },
+      "exit_reason": "closeout"
+    },
+    {
+      "qid": "bcp:732",
+      "label": "REFUSAL_WRONG",
+      "elapsed_ms": 73361,
+      "tool_calls": 36,
+      "tokens": {
+        "prompt": 250747,
+        "completion": 1866,
+        "total": 252613
+      },
+      "exit_reason": "closeout"
+    },
+    {
+      "qid": "bcp:435",
+      "label": "PASS",
+      "elapsed_ms": 50500,
+      "tool_calls": 26,
+      "tokens": {
+        "prompt": 166381,
+        "completion": 1589,
+        "total": 167970
+      },
+      "exit_reason": "closeout"
+    },
+    {
+      "qid": "bcp:1164",
+      "label": "INCORRECT",
+      "elapsed_ms": 104553,
+      "tool_calls": 32,
+      "tokens": {
+        "prompt": 198240,
+        "completion": 2029,
+        "total": 200269
+      },
+      "exit_reason": "closeout"
+    },
+    {
+      "qid": "bcp:411",
+      "label": "PASS",
+      "elapsed_ms": 65309,
+      "tool_calls": 36,
+      "tokens": {
+        "prompt": 287442,
+        "completion": 2272,
+        "total": 289714
+      },
+      "exit_reason": "closeout"
+    },
+    {
+      "qid": "bcp:180",
+      "label": "INCORRECT",
+      "elapsed_ms": 90011,
+      "tool_calls": 32,
+      "tokens": {
+        "prompt": 211044,
+        "completion": 2281,
+        "total": 213325
+      },
+      "exit_reason": "closeout"
+    },
+    {
+      "qid": "bcp:85",
+      "label": "INCORRECT",
+      "elapsed_ms": 95131,
+      "tool_calls": 38,
+      "tokens": {
+        "prompt": 243686,
+        "completion": 1890,
+        "total": 245576
+      },
+      "exit_reason": "closeout"
+    },
+    {
+      "qid": "bcp:503",
+      "label": "PASS",
+      "elapsed_ms": 18979,
+      "tool_calls": 11,
+      "tokens": {
+        "prompt": 32749,
+        "completion": 732,
+        "total": 33481
+      },
+      "exit_reason": "answer"
+    },
+    {
+      "qid": "bcp:449",
+      "label": "INCORRECT",
+      "elapsed_ms": 76586,
+      "tool_calls": 38,
+      "tokens": {
+        "prompt": 232506,
+        "completion": 1814,
+        "total": 234320
+      },
+      "exit_reason": "closeout"
+    },
+    {
+      "qid": "bcp:89",
+      "label": "INCORRECT",
+      "elapsed_ms": 105169,
+      "tool_calls": 35,
+      "tokens": {
+        "prompt": 167503,
+        "completion": 3540,
+        "total": 171043
+      },
+      "exit_reason": "closeout"
+    },
+    {
+      "qid": "bcp:962",
+      "label": "INCORRECT",
+      "elapsed_ms": 81124,
+      "tool_calls": 32,
+      "tokens": {
+        "prompt": 220696,
+        "completion": 2764,
+        "total": 223460
+      },
+      "exit_reason": "closeout"
+    },
+    {
+      "qid": "bcp:684",
+      "label": "PASS",
+      "elapsed_ms": 21033,
+      "tool_calls": 11,
+      "tokens": {
+        "prompt": 49439,
+        "completion": 1106,
+        "total": 50545
+      },
+      "exit_reason": "answer"
+    },
+    {
+      "qid": "bcp:422",
+      "label": "PASS",
+      "elapsed_ms": 94558,
+      "tool_calls": 28,
+      "tokens": {
+        "prompt": 194265,
+        "completion": 1710,
+        "total": 195975
+      },
+      "exit_reason": "closeout"
+    },
+    {
+      "qid": "bcp:380",
+      "label": "PASS",
+      "elapsed_ms": 49926,
+      "tool_calls": 30,
+      "tokens": {
+        "prompt": 186984,
+        "completion": 1633,
+        "total": 188617
+      },
+      "exit_reason": "closeout"
+    },
+    {
+      "qid": "bcp:20",
+      "label": "REFUSAL_WRONG",
+      "elapsed_ms": 66402,
+      "tool_calls": 38,
+      "tokens": {
+        "prompt": 279651,
+        "completion": 2539,
+        "total": 282190
+      },
+      "exit_reason": "closeout"
+    }
+  ]
+}

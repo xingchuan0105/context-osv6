@@ -66,7 +66,8 @@ Oracle 用 bm25s lucene k1=1.2 b=0.75 作官方 Lucene 索引的轻量替身（�
 | vgi hybrid RRF(60)（09-17） | 0.200 | — | 20 | 同上但 `search --mode hybrid`；PASS 435/503/684/20；44.3s/题；420k tok |
 | vgi hybrid+rr200（09-17） | 0.175 | — | 20 | 同上但 `--mode hybrid --rerank 200`；PASS 435/503/684 + PARTIAL 20；59.1s/题；434k tok |
 | vgi hybrid+rr200 **放宽预算**（09-17） | **0.350** | — | 20 | 20 轮/64 调用/1800s；PASS 435/411/503/89/684/380/20；REFUSAL_WRONG 清零；98.9s/题；3.87M tok |
+| vgi vector **放宽预算**（09-17） | **0.350** | — | 20 | 同预算纯向量；PASS 486/435/411/503/684/422/380；76.2s/题；4.19M tok |
 
 Gold = `evidence_ids`. 本轮两臂无 BM25/RRF/tree/agent。
 
-**答题级对照**：三臂 25% → 20% → 17.5%（vector → hybrid → hybrid+rr200 @5轮），但**放宽预算后同臂 hybrid+rr200 达 35%**（7/20，REFUSAL_WRONG 清零，token×9）——瓶颈确认为 agent 预算而非检索；预算放开后检索增益兑现（411/89 为三臂首答对）。注：results.json 内 `arm` 字段为脚本写死标签 "bge-m3 vector"，以产物目录区分为准（`.eval/challenge20-answer-eval{,-hybrid,-hybrid-rr200,-rr200-r20}/`）。预算环境变量：`ANSWER_EVAL_{MAX_ROUNDS,MAX_TOOLS,DEADLINE_S}`。
+**答题级对照**：三臂 25% → 20% → 17.5%（vector → hybrid → hybrid+rr200 @5轮），但**放宽预算后同臂 hybrid+rr200 达 35%**（7/20，REFUSAL_WRONG 清零，token×9）——瓶颈确认为 agent 预算而非检索；预算放开后检索增益兑现（411/89 为三臂首答对）。**vector@20轮对照同为 35%**：两臂放宽预算后收敛同分——预算 +10pp 是唯一大杠杆，检索臂间差异在答题级不转化；但两臂通过题集互补（vector 独中 486/422，hybrid+rr 独中 89/20，并集 9/20=45%），臂间 ensemble 是答题级剩余空间。注：results.json 内 `arm` 字段为脚本写死标签 "bge-m3 vector"，以产物目录区分为准（`.eval/challenge20-answer-eval{,-hybrid,-hybrid-rr200,-rr200-r20,-vector-r20}/`）。预算环境变量：`ANSWER_EVAL_{MAX_ROUNDS,MAX_TOOLS,DEADLINE_S}`。
